@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>WinDock.Providers</RootNamespace>
+    <Description>System data providers. Widgets must not P/Invoke; they go through this hub.</Description>
+  </PropertyGroup>
+    <ItemGroup>
+    <ProjectReference Include="..\WinDock.Core\WinDock.Core.csproj" />
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.0" />
+    <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>WinDock.Widgets</RootNamespace>
+    <Description>Built-in WPF widget views. No DllImport.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WinDock.Core\WinDock.Core.csproj" />
+  </ItemGroup>
+</Project>

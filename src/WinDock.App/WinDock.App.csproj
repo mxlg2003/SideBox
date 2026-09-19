@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>WinDock.App</RootNamespace>
+    <AssemblyName>WinDock</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <EnableDefaultApplicationDefinition>true</EnableDefaultApplicationDefinition>
+    <NoWarn>$(NoWarn);WFAC010;WFO0003</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WinDock.Core\WinDock.Core.csproj" />
+    <ProjectReference Include="..\WinDock.Shell\WinDock.Shell.csproj" />
+    <ProjectReference Include="..\WinDock.Providers\WinDock.Providers.csproj" />
+    <ProjectReference Include="..\WinDock.Widgets\WinDock.Widgets.csproj" />
+    <ProjectReference Include="..\WinDock.Infrastructure\WinDock.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

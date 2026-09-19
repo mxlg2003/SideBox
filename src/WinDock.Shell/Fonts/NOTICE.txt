@@ -1,0 +1,3 @@
+Noto Sans SC Regular (Subset OTF)
+Source: https://github.com/notofonts/noto-cjk
+SIL Open Font License 1.1 — https://openfontlicense.org

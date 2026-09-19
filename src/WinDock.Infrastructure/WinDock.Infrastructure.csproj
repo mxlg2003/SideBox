@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>WinDock.Infrastructure</RootNamespace>
+    <Description>Settings persistence, paths, logging, DPAPI helpers.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WinDock.Core\WinDock.Core.csproj" />
+  </ItemGroup>
+</Project>
