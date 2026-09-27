@@ -2,7 +2,7 @@ namespace WinDock.Core;
 
 public static class DockLayoutCalculator
 {
-    public const double DefaultThickness = DockTokens.TileHeight + (2 * DockTokens.IslandPaddingY) + 2;
+    public const double DefaultThickness = DockLayoutConstants.TileHeight + (2 * DockLayoutConstants.IslandPaddingY) + 2;
 
     public const double SideThickness = DefaultThickness;
 
@@ -31,7 +31,7 @@ public static class DockLayoutCalculator
         double? preferredLength = null)
     {
         var work = monitor.WorkArea;
-        var margin = DockTokens.IslandMargin;
+        var margin = DockLayoutConstants.IslandMargin;
         var thickness = Math.Max(1, thicknessLogical);
         var maxWidth = Math.Max(1, work.Width - (2 * margin));
         var maxHeight = Math.Max(1, work.Height - (2 * margin));
@@ -39,7 +39,7 @@ public static class DockLayoutCalculator
         if (edge is DockEdge.Left or DockEdge.Right)
         {
             var width = Math.Min(Math.Max(thickness, contentWidth), maxWidth);
-            var height = ResolveIslandLength(contentHeight, preferredLength, DockTokens.MinIslandLength, maxHeight);
+            var height = ResolveIslandLength(contentHeight, preferredLength, DockLayoutConstants.MinIslandLength, maxHeight);
             var y = work.Y + Math.Max(margin, (work.Height - height) / 2);
             var x = edge == DockEdge.Left
                 ? work.X + margin
@@ -47,7 +47,7 @@ public static class DockLayoutCalculator
             return new RectLogical(x, y, width, height);
         }
 
-        var islandWidth = ResolveIslandLength(contentWidth, preferredLength, DockTokens.MinIslandLength, maxWidth);
+        var islandWidth = ResolveIslandLength(contentWidth, preferredLength, DockLayoutConstants.MinIslandLength, maxWidth);
         var islandHeight = Math.Min(Math.Max(thickness, contentHeight), maxHeight);
         var xPos = work.X + Math.Max(margin, (work.Width - islandWidth) / 2);
         var yPos = edge == DockEdge.Bottom

@@ -9,7 +9,7 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class StopwatchWidget : UserControl, IWidgetOpenable, IKeepAliveWhileRunning
+public sealed class StopwatchWidget : UserControl, IWidgetOpenable, IKeepAliveWhileRunning, ILocalizable, IWidgetDetachable
 {
     private const uint Accent = 0xFF0078D4;
     private const uint QuietFill = 0x14000000;
@@ -19,6 +19,8 @@ public sealed class StopwatchWidget : UserControl, IWidgetOpenable, IKeepAliveWh
     private readonly TextBlock _panelTime = WidgetCopy.Primary();
     private readonly TextBlock _panelStatus = WidgetCopy.Secondary();
     private readonly TextBlock _primaryLabel = WidgetCopy.Primary();
+    private readonly TextBlock _resetLabel = WidgetCopy.Primary();
+    private TextBlock _flyoutTitle = null!;
     private readonly Border _tile;
     private readonly Popup _popup;
     private readonly DispatcherTimer _timer;
@@ -45,6 +47,10 @@ public sealed class StopwatchWidget : UserControl, IWidgetOpenable, IKeepAliveWh
         _primaryLabel.Foreground = Brushes.White;
         _primaryLabel.HorizontalAlignment = HorizontalAlignment.Center;
         _primaryLabel.VerticalAlignment = VerticalAlignment.Center;
+        _resetLabel.Text = StopwatchFormat.Reset;
+        _resetLabel.FontSize = 14;
+        _resetLabel.HorizontalAlignment = HorizontalAlignment.Center;
+        _resetLabel.VerticalAlignment = VerticalAlignment.Center;
 
         var copy = new StackPanel
         {
@@ -59,10 +65,10 @@ public sealed class StopwatchWidget : UserControl, IWidgetOpenable, IKeepAliveWh
             e.Handled = true;
         };
 
-        var title = WidgetCopy.Secondary();
-        title.Text = BuiltInWidgets.DisplayName(BuiltInWidgets.Stopwatch);
-        title.FontSize = 12;
-        title.VerticalAlignment = VerticalAlignment.Center;
+        _flyoutTitle = WidgetCopy.Secondary();
+        _flyoutTitle.Text = BuiltInWidgets.DisplayName(BuiltInWidgets.Stopwatch);
+        _flyoutTitle.FontSize = 12;
+        _flyoutTitle.VerticalAlignment = VerticalAlignment.Center;
         var close = new TextBlock
         {
             Text = "\u00D7",
@@ -75,12 +81,13 @@ public sealed class StopwatchWidget : UserControl, IWidgetOpenable, IKeepAliveWh
         var header = new Grid();
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        header.Children.Add(title);
+        header.Children.Add(_flyoutTitle);
         Grid.SetColumn(close, 1);
         header.Children.Add(close);
 
         var primary = ActionButton(_primaryLabel, Accent, Toggle);
-        var reset = ActionButton(ResetLabel(), QuietFill, ResetElapsed);
+        var reset = ActionButton(_resetLabel, QuietFill, ResetElapsed);
+        WidgetChrome.MarkQuiet(reset);
         var actions = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -155,6 +162,19 @@ public sealed class StopwatchWidget : UserControl, IWidgetOpenable, IKeepAliveWh
 
     public bool IsAlive => _running;
 
+    public void Detach()
+    {
+        _timer.Stop();
+        _popup.IsOpen = false;
+    }
+
+    public void ApplyLocale()
+    {
+        _flyoutTitle.Text = BuiltInWidgets.DisplayName(BuiltInWidgets.Stopwatch);
+        _resetLabel.Text = StopwatchFormat.Reset;
+        Render();
+    }
+
     public void Open()
     {
         Render();
@@ -209,16 +229,6 @@ public sealed class StopwatchWidget : UserControl, IWidgetOpenable, IKeepAliveWh
         _tileStatus.Text = status;
         _panelStatus.Text = status;
         _primaryLabel.Text = StopwatchFormat.PrimaryAction(_running, elapsed);
-    }
-
-    private static TextBlock ResetLabel()
-    {
-        var label = WidgetCopy.Primary();
-        label.Text = StopwatchFormat.Reset;
-        label.FontSize = 14;
-        label.HorizontalAlignment = HorizontalAlignment.Center;
-        label.VerticalAlignment = VerticalAlignment.Center;
-        return label;
     }
 
     private static Border ActionButton(TextBlock label, uint fill, Action click)

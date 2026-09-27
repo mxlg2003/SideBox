@@ -96,6 +96,9 @@ internal static class SettingsChrome
         Set(resources, "Settings.FocusRing", DockTokens.Settings.FocusRing);
         Set(resources, "Settings.Danger", DockTokens.Danger);
         Set(resources, "Settings.DangerSubtle", DockTokens.Settings.DangerSubtle(isLight));
+        Set(resources, "Settings.ScrollThumb", DockTokens.Settings.ScrollThumb(isLight));
+        Set(resources, "Settings.ScrollThumbHover", DockTokens.Settings.ScrollThumbHover(isLight));
+        Set(resources, "Settings.ScrollThumbPressed", DockTokens.Settings.ScrollThumbPressed(isLight));
     }
 
     private static void Set(ResourceDictionary resources, string key, uint argb) =>

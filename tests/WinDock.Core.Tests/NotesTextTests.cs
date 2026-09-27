@@ -44,4 +44,52 @@ public class NotesTextTests
         Assert.False(NotesText.HasTitle("###   "));
         Assert.False(NotesText.HasTitle("牛奶"));
     }
+
+    [Theory]
+    [InlineData("- [ ] 买咖啡", true, false)]
+    [InlineData("- [x] 买咖啡", true, true)]
+    [InlineData("- [X] 买咖啡", true, true)]
+    [InlineData("* [ ] 买咖啡", true, false)]
+    [InlineData("* [x] 买咖啡", true, true)]
+    [InlineData("[ ] 买咖啡", true, false)]
+    [InlineData("[x] 买咖啡", true, true)]
+    [InlineData("普通的文字", false, false)]
+    public void Todo_line_identification(string line, bool isTodo, bool isChecked)
+    {
+        Assert.Equal(isTodo, NotesText.IsTodoLine(line));
+        Assert.Equal(isChecked, NotesText.IsCheckedTodo(line));
+    }
+
+    [Fact]
+    public void Toggle_todo_line_cycles_state()
+    {
+        var original = "  - [ ] 提交代码";
+        var checkedLine = NotesText.ToggleTodoLine(original);
+        Assert.Equal("  - [x] 提交代码", checkedLine);
+
+        var uncheckedAgain = NotesText.ToggleTodoLine(checkedLine);
+        Assert.Equal("  - [ ] 提交代码", uncheckedAgain);
+
+        var plain = "普通任务";
+        Assert.Equal("- [ ] 普通任务", NotesText.ToggleTodoLine(plain));
+    }
+
+    [Fact]
+    public void Todo_stats_and_dock_preview_format()
+    {
+        var notes = "- [x] 任务一\n- [ ] 任务二\n- [ ] 任务三";
+        var (done, total, firstPending) = NotesText.GetTodoStats(notes);
+        Assert.Equal(1, done);
+        Assert.Equal(3, total);
+        Assert.Equal("任务二", firstPending);
+
+        Assert.Equal("☑ 1/3 · 任务二", NotesText.DockPreview(notes));
+    }
+
+    [Fact]
+    public void Title_takes_precedence_over_todo_preview()
+    {
+        var notes = "### 今日待办\n- [x] 任务一\n- [ ] 任务二";
+        Assert.Equal("今日待办", NotesText.DockPreview(notes));
+    }
 }

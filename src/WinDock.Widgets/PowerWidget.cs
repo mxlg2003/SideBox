@@ -9,7 +9,7 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IPowerWidgetConfigurable, IWidgetThemeAware, IIslandLayoutAware
+public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IPowerWidgetConfigurable, IWidgetThemeAware, IIslandLayoutAware, ILocalizable
 {
     private const uint Accent = 0xFF0078D4;
     private const uint QuietFill = 0x14000000;
@@ -37,6 +37,13 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
     private readonly Grid _editorPage;
     private readonly Grid _customizePage;
     private readonly Popup _popup;
+    private TextBlock _flyoutTitle = null!;
+    private TextBlock _customizeTitle = null!;
+    private TextBlock _backLabel = null!;
+    private TextBlock _layoutCaption = null!;
+    private TextBlock _dockCaption = null!;
+    private TextBlock _showAllLabel = null!;
+    private readonly Dictionary<string, TextBlock> _layoutTitles = new(StringComparer.Ordinal);
     private PowerWidgetSettings _settings = PowerWidgetSettings.Default;
     private IReadOnlyList<PowerDeviceSnapshot> _devices = [];
     private bool _applying;
@@ -89,6 +96,7 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
             Child = _panel
         };
         WidgetFlyout.Attach(_popup);
+        _popup.Closed += (_, _) => ShowEditor();
         _popup.Opened += (_, _) =>
         {
             var scale = (ScaleTransform)_panel.RenderTransform;
@@ -133,6 +141,26 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
     {
         _isLight = isLight;
         Foreground = TokenBrushes.From(isLight ? DockTokens.Light.Text : DockTokens.Dark.Text);
+    }
+
+    public void ApplyLocale()
+    {
+        _flyoutTitle.Text = BuiltInWidgets.DisplayName(BuiltInWidgets.Power);
+        _customizeTitle.Text = UiText.Customize;
+        _backLabel.Text = UiText.Back;
+        _layoutCaption.Text = UiText.Layout;
+        _dockCaption.Text = UiText.ShowOnDock;
+        _showAllLabel.Text = UiText.ShowAllDevices;
+        foreach (var (layout, title) in _layoutTitles)
+        {
+            title.Text = PowerFormat.LayoutTitle(layout);
+        }
+
+        Render(_power.Current);
+        if (_customizePage.Visibility == Visibility.Visible)
+        {
+            PaintCustomize();
+        }
     }
 
     public void ApplySettings(PowerWidgetSettings settings)
@@ -308,10 +336,10 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
 
     private Grid BuildEditor()
     {
-        var title = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.Power));
+        _flyoutTitle = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.Power));
         var customize = HeaderGlyph("\uE8FD", OpenCustomize);
         var close = HeaderGlyph("\u00D7", ClosePopup, 18);
-        var header = HeaderRow(title, customize, close);
+        var header = HeaderRow(_flyoutTitle, customize, close);
         var page = new StackPanel
         {
             Children =
@@ -332,6 +360,7 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
 
     private Grid BuildCustomize()
     {
+        _backLabel = HeaderLabel(UiText.Back);
         var back = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -340,7 +369,7 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
             Children =
             {
                 HeaderGlyph("\uE76B", ShowEditor, 12),
-                HeaderLabel("返回")
+                _backLabel
             }
         };
         back.MouseLeftButtonUp += (_, e) =>
@@ -348,26 +377,26 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
             ShowEditor();
             e.Handled = true;
         };
-        var title = HeaderLabel("自定义");
-        title.Margin = new Thickness(8, 0, 0, 0);
-        title.FontWeight = FontWeights.SemiBold;
+        _customizeTitle = HeaderLabel(UiText.Customize);
+        _customizeTitle.Margin = new Thickness(8, 0, 0, 0);
+        _customizeTitle.FontWeight = FontWeights.SemiBold;
         var close = HeaderGlyph("\u00D7", ClosePopup, 18);
         var header = HeaderRow(new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Children = { back, title }
+            Children = { back, _customizeTitle }
         }, close);
-        var layoutCaption = HeaderLabel("布局");
-        layoutCaption.Opacity = 0.62;
-        layoutCaption.Margin = new Thickness(0, 8, 0, 8);
+        _layoutCaption = HeaderLabel(UiText.Layout);
+        _layoutCaption.Opacity = 0.62;
+        _layoutCaption.Margin = new Thickness(0, 8, 0, 8);
         foreach (var layout in PowerLayouts.All)
         {
             _layoutOptions.Children.Add(LayoutRow(layout));
         }
 
-        var dockCaption = HeaderLabel("在 Dock 上显示");
-        dockCaption.Opacity = 0.62;
-        dockCaption.Margin = new Thickness(0, 16, 0, 8);
+        _dockCaption = HeaderLabel(UiText.ShowOnDock);
+        _dockCaption.Opacity = 0.62;
+        _dockCaption.Margin = new Thickness(0, 16, 0, 8);
         var checks = new ScrollViewer
         {
             MaxHeight = 220,
@@ -381,8 +410,9 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
             Background = TokenBrushes.From(QuietFill),
             Cursor = Cursors.Hand,
             Margin = new Thickness(0, 12, 0, 0),
-            Child = Centered("显示全部设备")
+            Child = _showAllLabel = Centered(UiText.ShowAllDevices)
         };
+        WidgetChrome.MarkQuiet(showAll);
         showAll.MouseLeftButtonUp += (_, e) =>
         {
             ShowAllDevices();
@@ -394,9 +424,9 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
             Children =
             {
                 header,
-                layoutCaption,
+                _layoutCaption,
                 _layoutOptions,
-                dockCaption,
+                _dockCaption,
                 checks,
                 showAll
             }
@@ -429,6 +459,7 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
             Margin = new Thickness(0, 0, 10, 0)
         };
         var title = HeaderLabel(PowerFormat.LayoutTitle(layout));
+        _layoutTitles[layout] = title;
         var content = new Grid();
         content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -576,7 +607,7 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         _empty.Visibility = !noBattery && (noDevices || noneVisible) ? Visibility.Visible : Visibility.Collapsed;
         if (!noBattery)
         {
-            _empty.Text = noDevices ? PowerFormat.NoDevices : "已全部隐藏";
+            _empty.Text = noDevices ? PowerFormat.NoDevices : UiText.AllHidden;
         }
 
         _tile.ToolTip = noBattery ? PowerFormat.NoBattery : null;

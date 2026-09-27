@@ -32,7 +32,7 @@ public static class DockPinCollapse
     public static bool IsFolderPin(DockItem item) => item.Type == DockItemType.Folder;
 
     public static string StackTitle(DockPinStackKind kind, int count) =>
-        kind == DockPinStackKind.Apps ? $"程序 · {count}" : $"文件夹 · {count}";
+        kind == DockPinStackKind.Apps ? UiText.AppsStack(count) : UiText.FoldersStack(count);
 
     public static IReadOnlyList<DockVisibleSlot> Project(
         IReadOnlyList<DockItem> items,

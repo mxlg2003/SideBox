@@ -23,16 +23,21 @@ public static class DockTokens
     public const double ClockFaceSize = 26;
     public const double ClockPanelFaceSize = 84;
     public const double SparklineHeight = 14;
+    public const double SparklineDockWidth = 40;
     public const double ResizeGrip = 8;
     public const double OverflowButtonWidth = 32;
     public const double OverflowButtonHeight = 32;
     public const double OverflowGlyphSize = 12;
     public const double OverflowButtonGap = 4;
+    public const double FlyoutUserCopyMaxWidth = 248;
     public const double ScrollStep = 140;
     public const double AutoHideStrip = 4;
     public const int AutoHideIdleMs = 800;
+    public const int HysteresisDelayMs = 300;
     public const int WakeHoldMs = 2000;
     public const double FlyoutOffset = 8;
+    /// <summary>Extra pixels around the island when testing pointer approach into the hotzone.</summary>
+    public const int TrapezoidBuffer = 8;
     public const int DefaultIslandTransparency = 50;
     public const int FrostedIslandTransparency = 0;
     public const int GlassIslandTransparency = 80;
@@ -126,6 +131,23 @@ public static class DockTokens
         };
     }
 
+    /// <summary>Opaque input well on a flyout. Alpha is always 255 so ClearType/layered popups keep glyphs visible.</summary>
+    public static uint ResolveFieldFill(bool isLight, DockBackdrop backdrop = DockBackdrop.Mica)
+    {
+        var (_, r, g, b) = Split(ResolveMenuFill(isLight, true, backdrop));
+        return isLight
+            ? Pack(255, Scale(r, 0.90), Scale(g, 0.90), Scale(b, 0.90))
+            : Pack(255, Lift(r, 0.16), Lift(g, 0.16), Lift(b, 0.16));
+    }
+
+    /// <summary>Secondary flyout buttons and chips. Same well as <see cref="ResolveFieldFill"/>.</summary>
+    public static uint ResolveQuietFill(bool isLight, DockBackdrop backdrop = DockBackdrop.Mica) =>
+        ResolveFieldFill(isLight, backdrop);
+
+    private static byte Scale(byte c, double factor) => (byte)Math.Clamp(c * factor, 0, 255);
+
+    private static byte Lift(byte c, double amount) => (byte)Math.Clamp(c + (255 - c) * amount, 0, 255);
+
     public const uint Cpu = 0xFFC084FC;
     public const uint Memory = 0xFF3B82F6;
     public const uint Network = 0xFF3B82F6;
@@ -137,6 +159,7 @@ public static class DockTokens
     public const uint NotesDark = 0xE6C4A35A;
     public const uint Focus = 0xFFA78BFA;
     public const uint Bing = 0xFF38BDF8;
+    public const uint Alarm = 0xFFFF9F0A;
     public const uint QuietFill = 0x14000000;
     public const uint Danger = 0xFFE11D48;
 
@@ -149,13 +172,20 @@ public static class DockTokens
         public const uint FocusRing = 0xFF2563EB;
         public const double ControlHeight = 32;
         public const double TabMinWidth = 96;
-        public const double NavWidth = 220;
-        public const double CatalogNavWidth = 200;
+        public const double NavWidth = 168;
+        public const double CatalogNavWidth = 168;
+        public const double NavPad = 12;
+        public const double CatalogCardWidth = 160;
+        public const double CatalogCardGap = 16;
+        public const double CatalogPreviewHeight = 96;
+        public const double CatalogPreviewPad = 12;
         public const double FocusRingThickness = 2;
         public const double FieldGap = 8;
         public const double SectionGap = 24;
         public const double PagePad = 24;
         public const double ControlPad = 12;
+        public const double ScrollThickness = 12;
+        public const double ScrollThumbSize = 6;
 
         public static class Light
         {
@@ -172,6 +202,9 @@ public static class DockTokens
             public const uint Preview = 0xFFF1F2F4;
             public const uint Search = 0xFFE8E8EC;
             public const uint DangerSubtle = 0x14E11D48;
+            public const uint ScrollThumb = 0x59000000;
+            public const uint ScrollThumbHover = 0x8A000000;
+            public const uint ScrollThumbPressed = 0xB3000000;
         }
 
         public static class Dark
@@ -189,6 +222,9 @@ public static class DockTokens
             public const uint Preview = 0xFF3A3A3C;
             public const uint Search = 0xFF3A3A3C;
             public const uint DangerSubtle = 0x33E11D48;
+            public const uint ScrollThumb = 0x66FFFFFF;
+            public const uint ScrollThumbHover = 0x99FFFFFF;
+            public const uint ScrollThumbPressed = 0xCCFFFFFF;
         }
 
         public static uint Page(bool isLight) => isLight ? Light.Page : Dark.Page;
@@ -207,6 +243,9 @@ public static class DockTokens
         public static uint Search(bool isLight) => isLight ? Light.Search : Dark.Search;
         public static uint BgSecondary(bool isLight) => Search(isLight);
         public static uint DangerSubtle(bool isLight) => isLight ? Light.DangerSubtle : Dark.DangerSubtle;
+        public static uint ScrollThumb(bool isLight) => isLight ? Light.ScrollThumb : Dark.ScrollThumb;
+        public static uint ScrollThumbHover(bool isLight) => isLight ? Light.ScrollThumbHover : Dark.ScrollThumbHover;
+        public static uint ScrollThumbPressed(bool isLight) => isLight ? Light.ScrollThumbPressed : Dark.ScrollThumbPressed;
     }
 
     public static (byte A, byte R, byte G, byte B) Split(uint argb) =>

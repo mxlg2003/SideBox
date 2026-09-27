@@ -39,6 +39,65 @@ internal static class Win32WindowSwitch
         return true;
     }
 
+    public static IReadOnlyList<DockWindowEntry> GetWindows(DockItem item)
+    {
+        if (!PinSwitch.PrefersExistingWindow(item))
+        {
+            return [];
+        }
+
+        var pids = MatchProcessIds(item);
+        if (pids.Count == 0)
+        {
+            return [];
+        }
+
+        var ownWindows = ListSwitchWindows(pids);
+        var windows = ownWindows.Count > 0
+            ? ownWindows
+            : ListSwitchWindows(ConsoleHostParents(pids), item);
+        if (windows.Count == 0)
+        {
+            return [];
+        }
+
+        var foreground = NativeMethods.GetForegroundWindow();
+        var list = new List<DockWindowEntry>();
+        foreach (var hwnd in windows)
+        {
+            NativeMethods.TryReadWindowText(hwnd, out var title);
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                title = item.Title ?? Path.GetFileNameWithoutExtension(item.Path) ?? UiText.PinFallback;
+            }
+
+            var isActive = IsSameWindow(hwnd, foreground);
+            list.Add(new DockWindowEntry(hwnd, title, isActive));
+        }
+
+        return list;
+    }
+
+    public static bool ActivateWindow(nint hwnd)
+    {
+        if (hwnd == nint.Zero)
+        {
+            return false;
+        }
+
+        return FocusWindow(hwnd);
+    }
+
+    public static bool CloseWindow(nint hwnd)
+    {
+        if (hwnd == nint.Zero)
+        {
+            return false;
+        }
+
+        return NativeMethods.PostMessage(hwnd, NativeMethods.WmClose, IntPtr.Zero, IntPtr.Zero);
+    }
+
     private static HashSet<uint> MatchProcessIds(DockItem item)
     {
         var names = PinRunning.TrackedProcessNames([item]);
@@ -337,7 +396,11 @@ internal static class Win32WindowSwitch
         var target = FocusTarget(hwnd);
         try
         {
-            NativeMethods.ShowWindow(target, NativeMethods.SwRestore);
+            if (NativeMethods.IsIconic(target))
+            {
+                NativeMethods.ShowWindow(target, NativeMethods.SwRestore);
+            }
+
             NativeMethods.SetWindowPos(
                 target,
                 NativeMethods.HwndTop,

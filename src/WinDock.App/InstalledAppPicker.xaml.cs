@@ -29,6 +29,11 @@ public partial class InstalledAppPicker : Window
     {
         _shell = shell;
         InitializeComponent();
+        Title = UiText.AddAppTitle;
+        PickerTitle.Text = UiText.StartMenuApps;
+        SearchPlaceholder.Text = UiText.SearchApps;
+        CancelButton.Content = UiText.Cancel;
+        AddButton.Content = UiText.Add;
         ApplyTheme(isLight);
         AppList.ItemsSource = _visible;
         Loaded += (_, _) => _ = LoadAppsAsync();

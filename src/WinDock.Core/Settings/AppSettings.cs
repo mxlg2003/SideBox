@@ -31,9 +31,11 @@ public sealed record UiSettings
 {
     public ThemePreference Theme { get; init; } = ThemePreference.System;
 
+    public UiLanguage Language { get; init; } = UiLanguage.System;
+
     public DockBackdrop Backdrop { get; init; } = DockBackdrop.Mica;
 
-    public int IslandTransparency { get; init; } = DockTokens.DefaultIslandTransparency;
+    public int IslandTransparency { get; init; } = DockLayoutConstants.DefaultIslandTransparency;
 
     public DockMode DockMode { get; init; } = DockMode.Overlay;
 }

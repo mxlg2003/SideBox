@@ -1,7 +1,6 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
@@ -27,7 +26,7 @@ public partial class WidgetPicker : UserControl
     private DockSession? _session;
     private string _categoryId = WidgetCatalog.AllId;
     private string _query = string.Empty;
-    private string _profileName = "岛上";
+    private string _profileName = UiText.OnIsland;
     private bool _suppress;
     private bool _catalogActive;
     private readonly List<Action<DateTime>> _clockTicks = [];
@@ -37,6 +36,7 @@ public partial class WidgetPicker : UserControl
     {
         InitializeComponent();
         CatalogNavColumn.Width = new GridLength(DockTokens.Settings.CatalogNavWidth);
+        NavPane.Padding = new Thickness(DockTokens.Settings.NavPad);
         Loaded += (_, _) => SyncClockTimer();
         Unloaded += (_, _) => _clockTimer?.Stop();
         IsVisibleChanged += (_, _) => SyncClockTimer();
@@ -46,7 +46,7 @@ public partial class WidgetPicker : UserControl
 
     public void SetProfileName(string name)
     {
-        _profileName = string.IsNullOrWhiteSpace(name) ? "岛上" : name;
+        _profileName = string.IsNullOrWhiteSpace(name) ? UiText.OnIsland : name;
     }
 
     public void SetCatalogActive(bool active)
@@ -97,6 +97,8 @@ public partial class WidgetPicker : UserControl
         }
 
         SearchPlaceholder.Visibility = string.IsNullOrEmpty(SearchBox.Text) ? Visibility.Visible : Visibility.Collapsed;
+        SearchPlaceholder.Text = UiText.SearchWidgets;
+        System.Windows.Automation.AutomationProperties.SetName(SearchBox, UiText.SearchWidgets);
 
         RebuildNav();
         RebuildCatalog();
@@ -124,36 +126,13 @@ public partial class WidgetPicker : UserControl
             var button = new Border
             {
                 CornerRadius = new CornerRadius(DockTokens.TileCornerRadius),
-                Padding = new Thickness(10, 8, 10, 8),
-                Margin = new Thickness(0, 0, 0, 4),
+                Padding = new Thickness(8, 0, 8, 0),
+                Height = DockTokens.Settings.ControlHeight,
+                Margin = new Thickness(0, 0, 0, 2),
                 Background = selected ? _navSelected : Brushes.Transparent,
                 Cursor = System.Windows.Input.Cursors.Hand,
                 Tag = category.Id,
-                Child = new StackPanel
-                {
-                    Orientation = Orientation.Horizontal,
-                    Children =
-                    {
-                        new TextBlock
-                        {
-                            Text = category.Glyph,
-                            FontFamily = GlyphFont,
-                            FontSize = 14,
-                            Width = 20,
-                            Opacity = 0.78,
-                            VerticalAlignment = VerticalAlignment.Center,
-                            Margin = new Thickness(0, 0, 8, 0)
-                        },
-                        new TextBlock
-                        {
-                            Text = category.Title,
-                            FontSize = 13,
-                            FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal,
-                            VerticalAlignment = VerticalAlignment.Center,
-                            Foreground = _textBrush
-                        }
-                    }
-                }
+                Child = CategoryRow(category.Glyph, category.Title, selected)
             };
             button.MouseLeftButtonUp += (_, _) =>
             {
@@ -170,6 +149,37 @@ public partial class WidgetPicker : UserControl
         }
     }
 
+    private Grid CategoryRow(string glyph, string title, bool selected)
+    {
+        var row = new Grid();
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var icon = new TextBlock
+        {
+            Text = glyph,
+            FontFamily = GlyphFont,
+            FontSize = 14,
+            Width = 16,
+            Opacity = 0.78,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0)
+        };
+        var label = new TextBlock
+        {
+            Text = title,
+            FontSize = 13,
+            FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = _textBrush,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            ToolTip = title
+        };
+        Grid.SetColumn(label, 1);
+        row.Children.Add(icon);
+        row.Children.Add(label);
+        return row;
+    }
+
     private void RebuildCatalog()
     {
         CatalogHost.Children.Clear();
@@ -182,7 +192,7 @@ public partial class WidgetPicker : UserControl
         var groups = WidgetCatalog.VisibleGroups(_categoryId, _query);
         if (groups.Count == 0)
         {
-            CatalogHost.Children.Add(EmptyState("没有匹配的模块", "换个关键词，或选左侧分类。"));
+            CatalogHost.Children.Add(EmptyState(UiText.CatalogEmptyTitle, UiText.CatalogEmptyHint));
             return;
         }
 
@@ -195,7 +205,7 @@ public partial class WidgetPicker : UserControl
                 FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(0, 0, 0, DockTokens.Settings.FieldGap)
             });
-            var grid = new UniformGrid { Columns = 3, Margin = new Thickness(0, 0, 0, DockTokens.Settings.SectionGap) };
+            var grid = new WrapPanel { Margin = new Thickness(0, 0, 0, DockTokens.Settings.SectionGap - DockTokens.Settings.CatalogCardGap) };
             foreach (var id in group.WidgetIds)
             {
                 grid.Children.Add(CreateCard(id));
@@ -247,69 +257,47 @@ public partial class WidgetPicker : UserControl
 
     private UIElement CreateCard(string widgetId)
     {
-        var count = _session?.CurrentDiff.Dock.Items.Count(item =>
-                        item.Type == DockItemType.WidgetChip
-                        && string.Equals(item.WidgetId, widgetId, StringComparison.Ordinal)) ?? 0;
-        var addHint = ProductFeatures.ProfilesEnabled ? $"添加到「{_profileName}」" : "添加到岛上";
-        var removeHint = ProductFeatures.ProfilesEnabled ? "从当前情景拿掉一份" : "从岛上拿掉一份";
+        var addHint = ProductFeatures.ProfilesEnabled ? UiText.AddToProfile(_profileName) : UiText.AddToIsland;
         var add = IconButton("+", addHint, () => _session?.AddWidget(widgetId));
-        var remove = IconButton("−", removeHint, () => _session?.RemoveLastWidget(widgetId));
-        remove.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        var title = BuiltInWidgets.DisplayName(widgetId);
 
         var preview = new Border
         {
-            Height = 96,
+            Width = DockTokens.Settings.CatalogCardWidth,
+            Height = DockTokens.Settings.CatalogPreviewHeight,
             CornerRadius = new CornerRadius(DockTokens.IslandCornerRadius),
             Background = _previewBrush,
-            Padding = new Thickness(16, 12, 16, 12),
+            Padding = new Thickness(DockTokens.Settings.CatalogPreviewPad),
+            ClipToBounds = true,
             ToolTip = BuiltInWidgets.Blurb(widgetId),
             Child = CreatePreview(widgetId)
         };
 
-        var title = BuiltInWidgets.DisplayName(widgetId);
-        if (count > 0)
+        var card = new StackPanel
         {
-            title += $"（已添加 {count}）";
-        }
-
-        var actions = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center,
-            Children = { remove, add }
+            Width = DockTokens.Settings.CatalogCardWidth,
+            Margin = new Thickness(0, 0, DockTokens.Settings.CatalogCardGap, DockTokens.Settings.CatalogCardGap)
         };
-        var card = new StackPanel { Margin = new Thickness(0, 0, 16, 16) };
         card.Children.Add(preview);
         card.Children.Add(new DockPanel
         {
             Margin = new Thickness(4, 8, 4, 0),
             Children =
             {
-                actions,
-                new StackPanel
+                add,
+                new TextBlock
                 {
+                    Text = title,
+                    FontSize = 13,
+                    Foreground = _textBrush,
                     VerticalAlignment = VerticalAlignment.Center,
-                    Children =
-                    {
-                        new TextBlock
-                        {
-                            Text = title,
-                            FontSize = 13,
-                            Foreground = _textBrush
-                        },
-                        new TextBlock
-                        {
-                            Text = BuiltInWidgets.Blurb(widgetId),
-                            FontSize = 11,
-                            Foreground = _mutedBrush,
-                            TextWrapping = TextWrapping.Wrap,
-                            Margin = new Thickness(0, 2, 0, 0)
-                        }
-                    }
+                    TextWrapping = TextWrapping.NoWrap,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    ToolTip = title
                 }
             }
         });
-        DockPanel.SetDock(actions, Dock.Right);
+        DockPanel.SetDock(add, Dock.Right);
         return card;
     }
 
@@ -356,8 +344,11 @@ public partial class WidgetPicker : UserControl
             BuiltInWidgets.BingWallpaper => BingPreview(hub.Bing.Current),
             BuiltInWidgets.Stopwatch => StopwatchPreview(),
             BuiltInWidgets.Countdown => CountdownPreview(),
+            BuiltInWidgets.Alarm => AlarmPreview(),
             BuiltInWidgets.FocusTimer => FocusTimerPreview(),
             BuiltInWidgets.TimeProgress => TimeProgressPreview(hub.Clock.LocalNow),
+            BuiltInWidgets.Weather => WeatherPreview(null),
+            BuiltInWidgets.Schedule => SchedulePreview(),
             _ => Label(BuiltInWidgets.DisplayName(widgetId), 14, FontWeights.SemiBold)
         };
     }
@@ -365,8 +356,10 @@ public partial class WidgetPicker : UserControl
     private UIElement ClockPreview(DateTime now)
     {
         var time = Label(ClockFormat.Time(now), 20, FontWeights.SemiBold);
+        time.TextTrimming = TextTrimming.CharacterEllipsis;
         var date = Label(ClockFormat.ExpandedDate(now), 11, FontWeights.Normal);
         date.Foreground = _mutedBrush;
+        date.TextTrimming = TextTrimming.CharacterEllipsis;
         var face = new AnalogClockFace(40)
         {
             Time = now,
@@ -406,7 +399,7 @@ public partial class WidgetPicker : UserControl
         caption.HorizontalAlignment = HorizontalAlignment.Center;
         var bars = new TimeProgressBars
         {
-            Width = 120,
+            Width = DockTokens.Settings.CatalogCardWidth - (2 * DockTokens.Settings.CatalogPreviewPad),
             Height = 12,
             BarCount = 28,
             Progress = TimeProgressFormat.Fraction(now, TimeProgressPeriods.Year),
@@ -458,11 +451,32 @@ public partial class WidgetPicker : UserControl
         return PreviewRow(glyph, new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { time, status } });
     }
 
+    private UIElement AlarmPreview()
+    {
+        var glyph = new AlarmClockGlyph(22)
+        {
+            Stroke = _textBrush,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(12, 0, 0, 0)
+        };
+        var title = Label(AlarmFormat.IdleTitle, 18, FontWeights.SemiBold);
+        var status = Label(AlarmFormat.IdleHint, 11, FontWeights.Normal);
+        status.Foreground = _mutedBrush;
+        var copy = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { title, status } };
+        return PreviewRow(copy, glyph);
+    }
+
     private UIElement SysActivityPreview(PerfSnapshot snapshot)
     {
-        return PreviewRow(
-            PreviewMeter(SysActivityFormat.Percent(snapshot.CpuPercent, snapshot.CpuAvailable), "CPU", DockTokens.Cpu),
-            PreviewMeter(SysActivityFormat.Percent(snapshot.MemoryPercent, snapshot.MemoryAvailable), "内存", DockTokens.Memory));
+        var row = new Grid { VerticalAlignment = VerticalAlignment.Center };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var cpu = PreviewMeter(SysActivityFormat.Percent(snapshot.CpuPercent, snapshot.CpuAvailable), "CPU", DockTokens.Cpu);
+        var mem = PreviewMeter(SysActivityFormat.Percent(snapshot.MemoryPercent, snapshot.MemoryAvailable), UiText.Memory, DockTokens.Memory);
+        row.Children.Add(cpu);
+        Grid.SetColumn(mem, 1);
+        row.Children.Add(mem);
+        return row;
     }
 
     private UIElement PreviewMeter(string percent, string caption, uint tint)
@@ -489,7 +503,6 @@ public partial class WidgetPicker : UserControl
         {
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(8, 0, 8, 0),
             Children = { value, row }
         };
     }
@@ -498,6 +511,8 @@ public partial class WidgetPicker : UserControl
     {
         var preview = Label(NotesText.DockPreview(text), 13, FontWeights.SemiBold);
         preview.Foreground = Freeze(NotePapers.Ink);
+        preview.TextWrapping = TextWrapping.Wrap;
+        preview.TextTrimming = TextTrimming.CharacterEllipsis;
         return new Border
         {
             CornerRadius = new CornerRadius(DockTokens.TileCornerRadius),
@@ -515,8 +530,10 @@ public partial class WidgetPicker : UserControl
         var upArrow = Label("↑", 13, FontWeights.SemiBold);
         upArrow.Foreground = Freeze(DockTokens.NetworkUp);
         upArrow.Margin = new Thickness(0, 0, 6, 0);
-        var down = Label(snapshot.IsConnected ? ByteRate.Format(snapshot.ReceiveBytesPerSecond) : "未连接", 15, FontWeights.SemiBold);
+        var down = Label(snapshot.IsConnected ? ByteRate.Format(snapshot.ReceiveBytesPerSecond) : UiText.Disconnected, 15, FontWeights.SemiBold);
+        down.TextTrimming = TextTrimming.CharacterEllipsis;
         var up = Label(snapshot.IsConnected ? ByteRate.Format(snapshot.SendBytesPerSecond) : string.Empty, 15, FontWeights.SemiBold);
+        up.TextTrimming = TextTrimming.CharacterEllipsis;
         return new StackPanel
         {
             VerticalAlignment = VerticalAlignment.Center,
@@ -537,7 +554,7 @@ public partial class WidgetPicker : UserControl
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         };
-        foreach (var device in devices.Take(4))
+        foreach (var device in devices.Take(2))
         {
             row.Children.Add(PowerPreviewCell(device));
         }
@@ -550,31 +567,16 @@ public partial class WidgetPicker : UserControl
         new()
         {
             Id = "preview-laptop",
-            Name = "电脑",
+            Name = UiText.Laptop,
             Kind = PowerDeviceKind.Laptop,
             Percent = snapshot.PercentRemaining ?? 76
         },
         new()
         {
             Id = "preview-audio",
-            Name = "耳机",
+            Name = UiText.Headphones,
             Kind = PowerDeviceKind.Headphones,
             Percent = 85
-        },
-        new()
-        {
-            Id = "preview-case",
-            Name = "充电盒",
-            Kind = PowerDeviceKind.Case,
-            Percent = 32,
-            Charging = true
-        },
-        new()
-        {
-            Id = "preview-keyboard",
-            Name = "键盘",
-            Kind = PowerDeviceKind.Keyboard,
-            Percent = 92
         }
     ];
 
@@ -638,10 +640,13 @@ public partial class WidgetPicker : UserControl
                 VerticalAlignment = VerticalAlignment.Center
             }
         };
-        var title = Label(string.IsNullOrWhiteSpace(session?.Title) ? "未在播放" : session!.Title, 14, FontWeights.SemiBold);
+        var title = Label(string.IsNullOrWhiteSpace(session?.Title) ? UiText.NotPlaying : session!.Title, 14, FontWeights.SemiBold);
         title.TextTrimming = TextTrimming.CharacterEllipsis;
+        title.TextWrapping = TextWrapping.NoWrap;
         var artist = Label(session?.Artist ?? string.Empty, 11, FontWeights.Normal);
         artist.Foreground = _mutedBrush;
+        artist.TextTrimming = TextTrimming.CharacterEllipsis;
+        artist.TextWrapping = TextWrapping.NoWrap;
         return PreviewRow(art, new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { title, artist } });
     }
 
@@ -667,17 +672,22 @@ public partial class WidgetPicker : UserControl
             thumb.Background = new ImageBrush(bitmap) { Stretch = Stretch.UniformToFill };
         }
 
-        var title = Label(string.IsNullOrWhiteSpace(snapshot.Selected?.Title) ? "Bing 壁纸" : snapshot.Selected!.Title, 13, FontWeights.SemiBold);
+        var title = Label(string.IsNullOrWhiteSpace(snapshot.Selected?.Title) ? UiText.WidgetBing : snapshot.Selected!.Title, 13, FontWeights.SemiBold);
         title.TextTrimming = TextTrimming.CharacterEllipsis;
+        title.TextWrapping = TextWrapping.NoWrap;
         return PreviewRow(thumb, title);
     }
 
-    private static StackPanel PreviewRow(UIElement left, UIElement right) => new()
+    private static Grid PreviewRow(UIElement left, UIElement right)
     {
-        Orientation = Orientation.Horizontal,
-        VerticalAlignment = VerticalAlignment.Center,
-        Children = { left, right }
-    };
+        var row = new Grid { VerticalAlignment = VerticalAlignment.Center };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.Children.Add(left);
+        Grid.SetColumn(right, 1);
+        row.Children.Add(right);
+        return row;
+    }
 
     private TextBlock Label(string text, double size, FontWeight weight) => new()
     {
@@ -718,6 +728,56 @@ public partial class WidgetPicker : UserControl
         {
             tick(now);
         }
+    }
+
+    private UIElement WeatherPreview(WeatherSnapshot? _)
+    {
+        var tempStr = "--°";
+        var text = UiText.WeatherNeedCity;
+        var glyph = "\u2600";
+
+        var glyphBlock = Label(glyph, 20, FontWeights.Normal);
+        glyphBlock.FontFamily = new FontFamily("Segoe UI Emoji, Segoe UI Symbol, Segoe MDL2 Assets");
+        glyphBlock.Margin = new Thickness(0, 0, 10, 0);
+        glyphBlock.VerticalAlignment = VerticalAlignment.Center;
+
+        var temp = Label(tempStr, 18, FontWeights.SemiBold);
+        var sub = Label(text, 11, FontWeights.Normal);
+        sub.Foreground = _mutedBrush;
+
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children =
+            {
+                glyphBlock,
+                new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { temp, sub } }
+            }
+        };
+    }
+
+    private UIElement SchedulePreview()
+    {
+        var glyphBlock = Label("\uE787", 20, FontWeights.Normal);
+        glyphBlock.FontFamily = new FontFamily("Segoe MDL2 Assets");
+        glyphBlock.Margin = new Thickness(0, 0, 10, 0);
+        glyphBlock.VerticalAlignment = VerticalAlignment.Center;
+
+        var title = Label("14:30 方案评审", 15, FontWeights.SemiBold);
+        var sub = Label("28m 后 · 今日还有 3 项日程", 11, FontWeights.Normal);
+        sub.Foreground = _mutedBrush;
+
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children =
+            {
+                glyphBlock,
+                new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { title, sub } }
+            }
+        };
     }
 
     private static SolidColorBrush Freeze(uint argb)

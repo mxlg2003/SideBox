@@ -32,10 +32,10 @@ public static class ProfileSwitchLog
     public static string Summarize(ProfileSwitchRecord record, IReadOnlyList<Profile>? profiles = null)
     {
         var when = record.Timestamp.ToLocalTime().ToString("MM-dd HH:mm");
-        var result = record.Result == ProfileSwitchResult.Succeeded ? "成功" : "失败";
+        var result = record.Result == ProfileSwitchResult.Succeeded ? UiText.SwitchSucceeded : UiText.SwitchFailed;
         var from = ProfileName(record.FromProfileId, profiles);
         var to = ProfileName(record.ToProfileId, profiles);
-        var line = $"{when}  {from} → {to}  {TriggerReasonText.ToZh(record.Reason)}  {result}";
+        var line = $"{when}  {from} → {to}  {TriggerReasonText.Format(record.Reason)}  {result}";
         return record.Result == ProfileSwitchResult.Failed && !string.IsNullOrWhiteSpace(record.ErrorMessage)
             ? $"{line}  {record.ErrorMessage}"
             : line;
@@ -48,7 +48,8 @@ public static class ProfileSwitchLog
             return "—";
         }
 
-        return profiles?.FirstOrDefault(profile => profile.Id == id)?.Name ?? id;
+        var profile = profiles?.FirstOrDefault(item => item.Id == id);
+        return profile is null ? id : DefaultProfiles.DisplayName(profile);
     }
 }
 

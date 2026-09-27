@@ -5,13 +5,16 @@ public static class SettingsEditor
     public static AppSettings WithTheme(AppSettings settings, ThemePreference theme) =>
         settings with { Ui = settings.Ui with { Theme = theme } };
 
+    public static AppSettings WithLanguage(AppSettings settings, UiLanguage language) =>
+        settings with { Ui = settings.Ui with { Language = language } };
+
     public static AppSettings WithBackdrop(AppSettings settings, DockBackdrop backdrop) =>
         settings with
         {
             Ui = settings.Ui with
             {
                 Backdrop = backdrop,
-                IslandTransparency = DockTokens.TransparencyFor(backdrop)
+                IslandTransparency = DockLayoutConstants.TransparencyFor(backdrop)
             }
         };
 
@@ -224,7 +227,7 @@ public static class SettingsEditor
         var copy = source with
         {
             Id = Guid.NewGuid().ToString("N"),
-            Name = source.Name + " 的副本",
+            Name = source.Name + UiText.CopySuffix,
             Triggers = [],
             Dock = source.Dock with { Items = CloneItems(source.Dock.Items, notes) },
             HiddenWidgets = CloneItems(source.HiddenWidgets ?? [], notes),
@@ -537,6 +540,18 @@ public static class SettingsEditor
         });
     }
 
+    public static AppSettings WithAlarm(AppSettings settings, string profileId, string itemId, AlarmSettings? alarm)
+    {
+        var next = AlarmSettings.Normalize(alarm);
+        return MapProfile(settings, profileId, profile =>
+        {
+            var items = profile.Dock.Items
+                .Select(item => item.Id == itemId ? item with { Alarm = next } : item)
+                .ToArray();
+            return profile with { Dock = profile.Dock with { Items = items } };
+        });
+    }
+
     public static AppSettings WithPowerWidget(AppSettings settings, string profileId, string itemId, PowerWidgetSettings? power)
     {
         var next = PowerWidgetSettings.Normalize(power);
@@ -592,6 +607,30 @@ public static class SettingsEditor
         {
             var items = profile.Dock.Items
                 .Select(item => item.Id == itemId ? item with { PaperColor = paper } : item)
+                .ToArray();
+            return profile with { Dock = profile.Dock with { Items = items } };
+        });
+    }
+
+    public static AppSettings WithWeather(AppSettings settings, string profileId, string itemId, WeatherSettings? weather)
+    {
+        var next = WeatherSettings.Normalize(weather);
+        return MapProfile(settings, profileId, profile =>
+        {
+            var items = profile.Dock.Items
+                .Select(item => item.Id == itemId ? item with { Weather = next } : item)
+                .ToArray();
+            return profile with { Dock = profile.Dock with { Items = items } };
+        });
+    }
+
+    public static AppSettings WithSchedule(AppSettings settings, string profileId, string itemId, ScheduleSettings? schedule)
+    {
+        var next = ScheduleSettings.Normalize(schedule);
+        return MapProfile(settings, profileId, profile =>
+        {
+            var items = profile.Dock.Items
+                .Select(item => item.Id == itemId ? item with { Schedule = next } : item)
                 .ToArray();
             return profile with { Dock = profile.Dock with { Items = items } };
         });
@@ -770,14 +809,16 @@ public static class PerfHistory
 
 public static class TriggerReasonText
 {
-    public static string ToZh(TriggerReason reason) => reason switch
+    public static string Format(TriggerReason reason) => reason switch
     {
-        TriggerReason.Manual => "手动",
-        TriggerReason.Focus => "系统专注",
-        TriggerReason.DisplayTopology => "显示器",
-        TriggerReason.Schedule => "时间段",
-        TriggerReason.Fallback => "回退",
-        TriggerReason.SafeMode => "安全模式",
+        TriggerReason.Manual => UiText.ReasonManual,
+        TriggerReason.Focus => UiText.ReasonFocus,
+        TriggerReason.DisplayTopology => UiText.ReasonDisplay,
+        TriggerReason.Schedule => UiText.ReasonSchedule,
+        TriggerReason.Fallback => UiText.ReasonFallback,
+        TriggerReason.SafeMode => UiText.ReasonSafeMode,
         _ => reason.ToString()
     };
+
+    public static string ToZh(TriggerReason reason) => Format(reason);
 }

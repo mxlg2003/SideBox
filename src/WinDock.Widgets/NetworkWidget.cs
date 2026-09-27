@@ -10,10 +10,8 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IWidgetModeAware, INetworkConfigurable, IWidgetThemeAware
+public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IWidgetModeAware, INetworkConfigurable, IWidgetThemeAware, ILocalizable
 {
-    private const uint QuietFill = 0x14000000;
-    private const double DockChartWidth = 72;
     private const double DockChartHeight = 28;
     private const string DockValueSample = "000.00";
     private const string DockUnitSample = "MB/s";
@@ -50,10 +48,15 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
     private readonly Grid _editorPage;
     private readonly Grid _customizePage;
     private readonly Popup _popup;
+    private TextBlock _flyoutTitle = null!;
+    private TextBlock _customizeTitle = null!;
+    private TextBlock _backLabel = null!;
+    private TextBlock _showCaption = null!;
     private NetworkWidgetSettings _settings = NetworkWidgetSettings.Default;
     private WidgetDensity _density = WidgetDensity.Expanded;
     private double _copyWidth;
     private bool _applying;
+    private bool _isLight = true;
 
     public NetworkWidget(INetworkProvider network)
     {
@@ -64,11 +67,11 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
         StyleRate(_panelDownValue, _panelDownUnit);
         StyleRate(_panelUpValue, _panelUpUnit);
         _status.FontSize = 13;
-        _panelDownName.Text = "下载";
-        _panelUpName.Text = "上传";
+        _panelDownName.Text = UiText.Download;
+        _panelUpName.Text = UiText.Upload;
         _footer.Text = NetworkFormat.Footer;
         _footer.Margin = new Thickness(0, 10, 0, 0);
-        _dockChart.Width = DockChartWidth;
+        _dockChart.Width = DockTokens.SparklineDockWidth;
         _dockChart.Height = DockChartHeight;
         _dockChart.Margin = new Thickness(4, 0, 0, 0);
         _dockChart.VerticalAlignment = VerticalAlignment.Center;
@@ -113,6 +116,7 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
             Child = _panel
         };
         WidgetFlyout.Attach(_popup);
+        _popup.Closed += (_, _) => ShowEditor();
         _popup.Opened += (_, _) =>
         {
             var scale = (ScaleTransform)_panel.RenderTransform;
@@ -158,6 +162,7 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
 
     public void ApplyTheme(bool isLight)
     {
+        _isLight = isLight;
         Foreground = TokenBrushes.From(isLight ? DockTokens.Light.Text : DockTokens.Dark.Text);
         _downArrow.Foreground = TokenBrushes.From(DockTokens.Network);
         _upArrow.Foreground = TokenBrushes.From(DockTokens.NetworkUp);
@@ -167,6 +172,35 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
         _dockChart.SendStroke = TokenBrushes.From(DockTokens.NetworkUp);
         _panelChart.ReceiveStroke = TokenBrushes.From(DockTokens.Network);
         _panelChart.SendStroke = TokenBrushes.From(DockTokens.NetworkUp);
+    }
+
+    public void ApplyLocale()
+    {
+        _applying = true;
+        _panelDownName.Text = UiText.Download;
+        _panelUpName.Text = UiText.Upload;
+        _footer.Text = NetworkFormat.Footer;
+        _flyoutTitle.Text = BuiltInWidgets.DisplayName(BuiltInWidgets.Network);
+        _customizeTitle.Text = UiText.Customize;
+        _backLabel.Text = UiText.Back;
+        _showCaption.Text = UiText.Display;
+        _dockChartBox.Content = UiText.DockChart;
+        _popupChartBox.Content = UiText.PopupChart;
+        FillShowBox();
+        _applying = false;
+        Render(_network.Current);
+    }
+
+    private void FillShowBox()
+    {
+        var selected = _showBox.SelectedItem is ComboChoice choice ? choice.Id : _settings.Show;
+        _showBox.Items.Clear();
+        foreach (var show in NetworkShows.All)
+        {
+            _showBox.Items.Add(new ComboChoice(show, NetworkFormat.ShowTitle(show)));
+        }
+
+        WidgetChrome.SelectChoice(_showBox, selected);
     }
 
     public void ApplyDensity(WidgetDensity density)
@@ -216,7 +250,7 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
         _dockBody.Children.Clear();
         var compact = _density != WidgetDensity.Expanded;
         var chart = !compact && _settings.ChartInDock;
-        var width = chart ? _copyWidth + 4 + DockChartWidth : _copyWidth;
+        var width = chart ? _copyWidth + 4 + DockTokens.SparklineDockWidth : _copyWidth;
         _dockBody.HorizontalAlignment = HorizontalAlignment.Center;
         _copy.HorizontalAlignment = HorizontalAlignment.Left;
         _copy.Width = _copyWidth;
@@ -244,6 +278,7 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
 
         _dockBody.Width = width;
         _dockBody.MinWidth = width;
+        WidgetChrome.ApplyTheme(_tile, _isLight);
         _tile.InvalidateMeasure();
         InvalidateMeasure();
     }
@@ -338,13 +373,13 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
         var showUp = _settings.ShowsUpload;
         if (!snapshot.IsConnected)
         {
-            _status.Text = "未连接";
+            _status.Text = UiText.Disconnected;
             _status.Visibility = Visibility.Visible;
             HideRates();
         }
         else if (!details)
         {
-            _status.Text = "已连接（详情已关）";
+            _status.Text = UiText.ConnectedDetailsOff;
             _status.Visibility = Visibility.Visible;
             HideRates();
         }
@@ -399,10 +434,10 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
 
     private Grid BuildEditor()
     {
-        var title = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.Network));
+        _flyoutTitle = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.Network));
         var customize = HeaderGlyph("\uE8FD", OpenCustomize);
         var close = HeaderGlyph("\u00D7", ClosePopup, 18);
-        var header = HeaderRow(title, customize, close);
+        var header = HeaderRow(_flyoutTitle, customize, close);
         _panelChart.HorizontalAlignment = HorizontalAlignment.Stretch;
         var page = new StackPanel
         {
@@ -415,6 +450,7 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
 
     private Grid BuildCustomize()
     {
+        _backLabel = HeaderLabel(UiText.Back);
         var back = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -423,7 +459,7 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
             Children =
             {
                 HeaderGlyph("\uE76B", ShowEditor, 12),
-                HeaderLabel("返回")
+                _backLabel
             }
         };
         back.MouseLeftButtonUp += (_, e) =>
@@ -431,67 +467,48 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
             ShowEditor();
             e.Handled = true;
         };
-        var title = HeaderLabel("自定义");
-        title.Margin = new Thickness(8, 0, 0, 0);
-        title.FontWeight = FontWeights.SemiBold;
+        _customizeTitle = HeaderLabel(UiText.Customize);
+        _customizeTitle.Margin = new Thickness(8, 0, 0, 0);
+        _customizeTitle.FontWeight = FontWeights.SemiBold;
         var close = HeaderGlyph("\u00D7", ClosePopup, 18);
         var header = HeaderRow(new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Children = { back, title }
+            Children = { back, _customizeTitle }
         }, close);
 
-        var showCaption = HeaderLabel("显示");
-        showCaption.Opacity = 0.62;
-        showCaption.Margin = new Thickness(0, 8, 0, 8);
-        foreach (var show in NetworkShows.All)
-        {
-            _showBox.Items.Add(new ComboBoxItem
-            {
-                Content = NetworkFormat.ShowTitle(show),
-                Tag = show
-            });
-        }
+        _showCaption = HeaderLabel(UiText.Display);
+        _showCaption.Opacity = 0.62;
+        _showCaption.Margin = new Thickness(0, 8, 0, 8);
+        WidgetChrome.PaintCombo(_showBox, true);
+        FillShowBox();
 
-        _showBox.FontFamily = WidgetFonts.Ui;
-        _showBox.FontSize = 14;
-        _showBox.BorderThickness = new Thickness(0);
-        _showBox.Padding = new Thickness(10, 6, 8, 6);
-        _showBox.Background = Brushes.Transparent;
-        _showBox.HorizontalAlignment = HorizontalAlignment.Stretch;
         _showBox.SelectedIndex = 0;
         _showBox.SelectionChanged += (_, _) =>
         {
-            if (_applying || _showBox.SelectedItem is not ComboBoxItem item || item.Tag is not string show)
+            if (_applying || _showBox.SelectedItem is not ComboChoice choice)
             {
                 return;
             }
 
-            _settings = _settings with { Show = NetworkShows.Normalize(show) };
+            _settings = _settings with { Show = NetworkShows.Normalize(choice.Id) };
             Persist();
             RebuildTile();
             Render(_network.Current);
         };
-        var showWrap = new Border
-        {
-            CornerRadius = new CornerRadius(DockTokens.IslandCornerRadius),
-            Background = TokenBrushes.From(QuietFill),
-            Padding = new Thickness(4, 2, 4, 2),
-            Child = _showBox
-        };
 
-        _dockChartBox.Content = "岛上显示图表";
+        _dockChartBox.Content = UiText.DockChart;
         _dockChartBox.Margin = new Thickness(0, 14, 0, 4);
         _dockChartBox.Checked += (_, _) => SetChart(dock: true, on: true);
         _dockChartBox.Unchecked += (_, _) => SetChart(dock: true, on: false);
-        _popupChartBox.Content = "面板显示图表";
+        _popupChartBox.Content = UiText.PopupChart;
         _popupChartBox.Margin = new Thickness(0, 4, 0, 4);
         _popupChartBox.Checked += (_, _) => SetChart(dock: false, on: true);
         _popupChartBox.Unchecked += (_, _) => SetChart(dock: false, on: false);
 
         var page = new StackPanel
         {
-            Children = { header, showCaption, showWrap, _dockChartBox, _popupChartBox }
+            Children = { header, _showCaption, _showBox, _dockChartBox, _popupChartBox }
         };
         var grid = new Grid();
         grid.Children.Add(page);
@@ -515,14 +532,7 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
 
     private void PaintCustomize()
     {
-        foreach (var item in _showBox.Items.OfType<ComboBoxItem>())
-        {
-            if (item.Tag is string show && string.Equals(show, _settings.Show, StringComparison.Ordinal))
-            {
-                _showBox.SelectedItem = item;
-                break;
-            }
-        }
+        WidgetChrome.SelectChoice(_showBox, _settings.Show);
 
         _dockChartBox.IsChecked = _settings.ChartInDock;
         _popupChartBox.IsChecked = _settings.ChartInPopup;
@@ -607,6 +617,9 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
                 break;
             case ContentControl content when ReferenceEquals(content.Content, element):
                 content.Content = null;
+                break;
+            case ContentPresenter presenter when ReferenceEquals(presenter.Content, element):
+                presenter.Content = null;
                 break;
         }
     }

@@ -8,6 +8,7 @@ public sealed class ProviderHub : IProviderHub
     private readonly GsmtcMediaProvider _media;
     private readonly NetworkInterfaceSampler _network;
     private readonly BingWallpaperProvider _bing;
+    private readonly WeatherProvider _weather;
 
     public ProviderHub(IPermissionGate permissions, INotesStore notes, string? bingCacheDirectory = null, string? iconCacheDirectory = null)
     {
@@ -23,6 +24,7 @@ public sealed class ProviderHub : IProviderHub
         Notes = notes;
         Bing = _bing = new BingWallpaperProvider(bingCacheDirectory
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WinDock", "bing-wallpaper"));
+        Weather = _weather = new WeatherProvider();
         Shell = new Win32ShellLaunch(iconCacheDirectory
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WinDock", "icon-cache"));
     }
@@ -44,6 +46,8 @@ public sealed class ProviderHub : IProviderHub
     public INotesStore Notes { get; }
 
     public IBingWallpaperProvider Bing { get; }
+
+    public IWeatherProvider Weather { get; }
 
     public IShellLaunch Shell { get; }
 
@@ -67,6 +71,7 @@ public sealed class ProviderHub : IProviderHub
         _media.Dispose();
         _network.Dispose();
         _bing.Dispose();
+        _weather.Dispose();
     }
 }
 

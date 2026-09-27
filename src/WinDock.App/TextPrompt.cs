@@ -37,8 +37,8 @@ internal static class TextPrompt
             Margin = new Thickness(0, 16, 0, 0)
         };
         DockPanel.SetDock(buttons, Dock.Bottom);
-        var cancel = new Button { Content = "取消", MinWidth = 80, Margin = new Thickness(0, 0, DockTokens.Settings.FieldGap, 0), IsCancel = true };
-        var confirm = new Button { Content = "确定", MinWidth = 80, IsDefault = true };
+        var cancel = new Button { Content = UiText.Cancel, MinWidth = 80, Margin = new Thickness(0, 0, DockTokens.Settings.FieldGap, 0), IsCancel = true };
+        var confirm = new Button { Content = UiText.Confirm, MinWidth = 80, IsDefault = true };
         if (SettingsChrome.Style(window, "Settings.Button") is { } secondary)
         {
             cancel.Style = secondary;

@@ -62,6 +62,7 @@ public sealed class DockWindow : Window, IDockSurface
     private int _pinNameToken;
     private Border? _emptyHint;
     private bool _islandDragArmed;
+    private readonly Border _insertionCaret;
 
     public DockWindow()
     {
@@ -72,6 +73,15 @@ public sealed class DockWindow : Window, IDockSurface
         ShowInTaskbar = false;
         ShowActivated = false;
         Topmost = true;
+        Closing += (_, e) =>
+        {
+            if (Application.Current is null || Application.Current.Dispatcher.HasShutdownStarted)
+            {
+                return;
+            }
+
+            e.Cancel = true;
+        };
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
         Background = Brushes.Transparent;
@@ -99,8 +109,8 @@ public sealed class DockWindow : Window, IDockSurface
         _scroll.ScrollChanged += (_, _) => UpdateOverflowChrome();
         _itemsHost.PreviewMouseLeftButtonDown += OnTileMouseDown;
 
-        _overflowBack = OverflowGlyph("\uE76B", "向左", () => ScrollBy(-DockTokens.ScrollStep));
-        _overflowForward = OverflowGlyph("\uE76C", "向右", () => ScrollBy(DockTokens.ScrollStep));
+        _overflowBack = OverflowGlyph("\uE76B", UiText.ScrollLeft, () => ScrollBy(-DockTokens.ScrollStep));
+        _overflowForward = OverflowGlyph("\uE76C", UiText.ScrollRight, () => ScrollBy(DockTokens.ScrollStep));
         _overflow = new Border
         {
             Margin = new Thickness(2, 0, DockTokens.ResizeGrip, 0),
@@ -120,19 +130,39 @@ public sealed class DockWindow : Window, IDockSurface
         _startGrip = CreateGrip(fromStart: true);
         _endGrip = CreateGrip(fromStart: false);
 
-        _chrome = new Grid { Background = Brushes.Transparent };
-        _chrome.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        _chrome.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        _chrome = new Grid();
+        Grid.SetRow(_scroll, 0);
         Grid.SetColumn(_scroll, 0);
+        Grid.SetColumnSpan(_scroll, 1);
+        Grid.SetRowSpan(_scroll, 1);
+        Grid.SetRow(_overflow, 0);
         Grid.SetColumn(_overflow, 1);
+        Grid.SetColumnSpan(_overflow, 1);
+        Grid.SetRowSpan(_overflow, 1);
+        Grid.SetRow(_startGrip, 0);
         Grid.SetColumn(_startGrip, 0);
         Grid.SetColumnSpan(_startGrip, 2);
+        Grid.SetRow(_endGrip, 0);
         Grid.SetColumn(_endGrip, 0);
         Grid.SetColumnSpan(_endGrip, 2);
         _chrome.Children.Add(_scroll);
         _chrome.Children.Add(_overflow);
         _chrome.Children.Add(_startGrip);
         _chrome.Children.Add(_endGrip);
+
+        _insertionCaret = new Border
+        {
+            Width = 3,
+            CornerRadius = new CornerRadius(1.5),
+            Background = SystemColors.HighlightBrush,
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = false,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            Height = DockTokens.TileHeight - 12
+        };
+        Panel.SetZIndex(_insertionCaret, 99);
+        _chrome.Children.Add(_insertionCaret);
 
         _island = new HitIsland
         {
@@ -174,12 +204,19 @@ public sealed class DockWindow : Window, IDockSurface
                 EndIslandMonitorDrag();
             }
         };
-        ContextMenuOpening += OnDockMenuOpening;
         MouseRightButtonUp += OnDockRightClick;
         AllowDrop = true;
         DragOver += OnFileDragOver;
+        DragLeave += OnFileDragLeave;
         Drop += OnFileDrop;
+        ApplyProfileMenu([], "");
     }
+
+    public Func<DockItem, IReadOnlyList<DockWindowEntry>>? WindowEnumerator { get; set; }
+
+    public event EventHandler<nint>? WindowActivateRequested;
+
+    public event EventHandler<nint>? WindowCloseRequested;
 
     public event EventHandler? SettingsRequested;
 
@@ -198,6 +235,8 @@ public sealed class DockWindow : Window, IDockSurface
     public event EventHandler<string>? WidgetRemoveRequested;
 
     public event EventHandler<WidgetDensityRequest>? WidgetDensityRequested;
+
+    public event EventHandler<WidgetCreateFailedEventArgs>? WidgetCreateFailed;
 
     public event EventHandler<string>? PinLaunchRequested;
 
@@ -417,14 +456,19 @@ public sealed class DockWindow : Window, IDockSurface
             VerticalAlignment = VerticalAlignment.Center,
             Child = new TextBlock
             {
-                Text = "右键添加程序，或从资源管理器拖入。模块请打开设置 → 模块",
+                Text = UiText.EmptyDock,
                 FontSize = 12,
                 Opacity = 0.7,
                 VerticalAlignment = VerticalAlignment.Center,
                 TextWrapping = TextWrapping.Wrap
             }
         };
-        AutomationProperties.SetName(_emptyHint, "空 Dock，右键或拖入程序，模块请打开设置");
+        if (_emptyHint.Child is TextBlock hint)
+        {
+            hint.Text = UiText.EmptyDock;
+        }
+
+        AutomationProperties.SetName(_emptyHint, UiText.EmptyDockName);
         if (!ReferenceEquals(_emptyHint.Parent, _itemsHost))
         {
             _itemsHost.Children.Add(_emptyHint);
@@ -532,8 +576,9 @@ public sealed class DockWindow : Window, IDockSurface
                 Detach(widget);
                 return WrapSlot(view, widget);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                WidgetCreateFailed?.Invoke(this, new WidgetCreateFailedEventArgs(widgetId, ex));
                 return WrapSlot(view, CreatePlaceholder(widgetId, item.Title));
             }
         }
@@ -573,7 +618,8 @@ public sealed class DockWindow : Window, IDockSurface
         var item = view.Item;
         if (item.Type == DockItemType.WidgetChip)
         {
-            return string.Equals(tagged.Item.WidgetId, item.WidgetId, StringComparison.Ordinal);
+            return !IsPlaceholderFace(slot.Child)
+                && string.Equals(tagged.Item.WidgetId, item.WidgetId, StringComparison.Ordinal);
         }
 
         if (DockPins.IsPin(item.Type))
@@ -590,6 +636,9 @@ public sealed class DockWindow : Window, IDockSurface
         && string.Equals(tagged.Url, item.Url, StringComparison.OrdinalIgnoreCase)
         && string.Equals(tagged.Title, item.Title, StringComparison.Ordinal)
         && string.Equals(tagged.ShortcutPath, item.ShortcutPath, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPlaceholderFace(UIElement? face) =>
+        face is FrameworkElement { Tag: BuiltInWidgets.PlaceholderTag };
 
     public void ApplyWidgetDensity(string itemId, WidgetDensity density)
     {
@@ -647,41 +696,25 @@ public sealed class DockWindow : Window, IDockSurface
         }
 
         PaintPinName();
+        if (_emptyHint?.Child is TextBlock hint)
+        {
+            hint.Text = UiText.EmptyDock;
+            AutomationProperties.SetName(_emptyHint, UiText.EmptyDockName);
+        }
     }
 
     public void ApplyProfileMenu(IReadOnlyList<Profile> profiles, string activeProfileId)
     {
-        var menu = NewDockMenu();
-        var addApp = DockMenu.Item("添加程序…");
-        addApp.Click += (_, _) => PinAddRequested?.Invoke(this, PinPickKind.InstalledApp);
-        menu.Items.Add(addApp);
-        var addShortcut = DockMenu.Item("添加快捷方式…");
-        addShortcut.Click += (_, _) => PinAddRequested?.Invoke(this, PinPickKind.File);
-        menu.Items.Add(addShortcut);
-        var addFolder = DockMenu.Item("添加文件夹…");
-        addFolder.Click += (_, _) => PinAddRequested?.Invoke(this, PinPickKind.Folder);
-        menu.Items.Add(addFolder);
-        menu.Items.Add(DockMenu.Divider(_isLight));
-        var settingsItem = DockMenu.Item("设置");
-        settingsItem.Click += (_, _) => SettingsRequested?.Invoke(this, EventArgs.Empty);
-        menu.Items.Add(settingsItem);
-        if (profiles.Count > 0)
-        {
-            menu.Items.Add(DockMenu.Divider(_isLight));
-            foreach (var profile in profiles)
-            {
-                var item = DockMenu.Item(profile.Name, isChecked: profile.Id == activeProfileId);
-                var id = profile.Id;
-                item.Click += (_, _) => ProfileSwitchRequested?.Invoke(this, id);
-                menu.Items.Add(item);
-            }
-        }
-
-        menu.Items.Add(DockMenu.Divider(_isLight));
-        var exitItem = DockMenu.Item("退出");
-        exitItem.Click += (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty);
-        menu.Items.Add(exitItem);
-        ContextMenu = menu;
+        ContextMenu = DockContextMenuBuilder.BuildProfileMenu(
+            profiles,
+            activeProfileId,
+            _isLight,
+            _backdrop,
+            _backdropOk,
+            kind => PinAddRequested?.Invoke(this, kind),
+            () => SettingsRequested?.Invoke(this, EventArgs.Empty),
+            id => ProfileSwitchRequested?.Invoke(this, id),
+            () => ExitRequested?.Invoke(this, EventArgs.Empty));
     }
 
     private void OnDockMenuOpening(object sender, ContextMenuEventArgs e)
@@ -710,16 +743,26 @@ public sealed class DockWindow : Window, IDockSurface
         if (e.Data.GetDataPresent(DataFormats.FileDrop))
         {
             e.Effects = DragDropEffects.Copy;
+            var pos = e.GetPosition(_itemsHost);
+            var insert = HitInsertIndex(pos);
+            ShowInsertionCaret(insert);
             e.Handled = true;
             return;
         }
 
+        HideInsertionCaret();
         e.Effects = DragDropEffects.None;
         e.Handled = true;
     }
 
+    private void OnFileDragLeave(object sender, DragEventArgs e)
+    {
+        HideInsertionCaret();
+    }
+
     private void OnFileDrop(object sender, DragEventArgs e)
     {
+        HideInsertionCaret();
         if (!e.Data.GetDataPresent(DataFormats.FileDrop)
             || e.Data.GetData(DataFormats.FileDrop) is not string[] paths
             || paths.Length == 0)
@@ -732,6 +775,63 @@ public sealed class DockWindow : Window, IDockSurface
         e.Handled = true;
     }
 
+    private void ShowInsertionCaret(int insert)
+    {
+        var count = _itemsHost.Children.Count;
+        if (count == 0)
+        {
+            _insertionCaret.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        double targetX = 0;
+        double targetY = 0;
+
+        if (insert < count && _itemsHost.Children[insert] is FrameworkElement child)
+        {
+            var pt = child.TranslatePoint(new Point(0, 0), _chrome);
+            targetX = pt.X - 2;
+            targetY = pt.Y;
+        }
+        else if (_itemsHost.Children[count - 1] is FrameworkElement last)
+        {
+            var pt = last.TranslatePoint(new Point(last.ActualWidth, 0), _chrome);
+            targetX = pt.X + 2;
+            targetY = pt.Y;
+        }
+        else
+        {
+            HideInsertionCaret();
+            return;
+        }
+
+        _insertionCaret.Margin = Horizontal
+            ? new Thickness(Math.Max(0, targetX), 0, 0, 0)
+            : new Thickness(0, Math.Max(0, targetY), 0, 0);
+        _insertionCaret.Visibility = Visibility.Visible;
+
+        for (var i = 0; i < count; i++)
+        {
+            if (_itemsHost.Children[i] is FrameworkElement el)
+            {
+                if (i >= insert)
+                {
+                    el.RenderTransform = new TranslateTransform(Horizontal ? 12 : 0, Horizontal ? 0 : 12);
+                }
+                else
+                {
+                    el.RenderTransform = Transform.Identity;
+                }
+            }
+        }
+    }
+
+    private void HideInsertionCaret()
+    {
+        _insertionCaret.Visibility = Visibility.Collapsed;
+        ClearTileShifts();
+    }
+
     private void ShowWidgetMenu(Border slot, DockItem item)
     {
         if (string.IsNullOrWhiteSpace(item.WidgetId))
@@ -739,62 +839,18 @@ public sealed class DockWindow : Window, IDockSurface
             return;
         }
 
-        var widgetId = item.WidgetId;
-        var menu = NewDockMenu();
-        menu.Placement = PlacementMode.MousePoint;
+        var menu = DockContextMenuBuilder.BuildWidgetMenu(
+            item,
+            _isLight,
+            _backdrop,
+            _backdropOk,
+            id => WidgetOpenRequested?.Invoke(this, id),
+            id => WidgetCustomizeRequested?.Invoke(this, id),
+            req => WidgetDensityRequested?.Invoke(this, req),
+            id => WidgetRemoveRequested?.Invoke(this, id),
+            () => SettingsRequested?.Invoke(this, EventArgs.Empty),
+            () => ExitRequested?.Invoke(this, EventArgs.Empty));
 
-        if (BuiltInWidgets.CanOpen(widgetId))
-        {
-            var open = DockMenu.Item("打开模块");
-            open.Click += (_, _) => WidgetOpenRequested?.Invoke(this, item.Id);
-            menu.Items.Add(open);
-        }
-
-        if (BuiltInWidgets.CanCustomize(widgetId))
-        {
-            var customize = DockMenu.Item("自定义");
-            customize.Click += (_, _) => WidgetCustomizeRequested?.Invoke(this, item.Id);
-            menu.Items.Add(customize);
-        }
-
-        if (BuiltInWidgets.HasDensityModes(widgetId))
-        {
-            var compactOn = item.Density != WidgetDensity.Expanded;
-            var compact = DockMenu.Item("紧凑", isChecked: compactOn);
-            var expanded = DockMenu.Item("展开", isChecked: !compactOn);
-            compact.Click += (_, _) =>
-            {
-                compact.IsChecked = true;
-                expanded.IsChecked = false;
-                WidgetDensityRequested?.Invoke(this, new WidgetDensityRequest
-                {
-                    ItemId = item.Id,
-                    Density = WidgetDensity.Compact
-                });
-            };
-            expanded.Click += (_, _) =>
-            {
-                expanded.IsChecked = true;
-                compact.IsChecked = false;
-                WidgetDensityRequested?.Invoke(this, new WidgetDensityRequest
-                {
-                    ItemId = item.Id,
-                    Density = WidgetDensity.Expanded
-                });
-            };
-            menu.Items.Add(compact);
-            menu.Items.Add(expanded);
-        }
-
-        if (menu.Items.Count > 0)
-        {
-            menu.Items.Add(DockMenu.Divider(_isLight));
-        }
-
-        var remove = DockMenu.DangerItem(
-            string.Equals(widgetId, BuiltInWidgets.Notes, StringComparison.Ordinal) ? "隐藏便笺" : "从 Dock 移除");
-        remove.Click += (_, _) => WidgetRemoveRequested?.Invoke(this, item.Id);
-        menu.Items.Add(remove);
         slot.ContextMenu = menu;
         menu.IsOpen = true;
     }
@@ -802,18 +858,20 @@ public sealed class DockWindow : Window, IDockSurface
     private void ShowPinMenu(Border slot, DockItem item)
     {
         HidePinName(immediate: true);
-        var menu = NewDockMenu();
-        menu.Placement = PlacementMode.MousePoint;
-        var open = DockMenu.Item("打开（新开一份）");
-        open.Click += (_, _) => PinLaunchRequested?.Invoke(this, item.Id);
-        menu.Items.Add(open);
-        var hint = DockMenu.Item("左键切换已有窗口");
-        hint.IsEnabled = false;
-        menu.Items.Add(hint);
-        menu.Items.Add(DockMenu.Divider(_isLight));
-        var remove = DockMenu.DangerItem("从 Dock 移除");
-        remove.Click += (_, _) => WidgetRemoveRequested?.Invoke(this, item.Id);
-        menu.Items.Add(remove);
+        var windows = WindowEnumerator?.Invoke(item) ?? [];
+        var menu = DockContextMenuBuilder.BuildPinMenu(
+            item,
+            _isLight,
+            _backdrop,
+            _backdropOk,
+            id => PinLaunchRequested?.Invoke(this, id),
+            id => WidgetRemoveRequested?.Invoke(this, id),
+            () => SettingsRequested?.Invoke(this, EventArgs.Empty),
+            () => ExitRequested?.Invoke(this, EventArgs.Empty),
+            windows,
+            hwnd => WindowActivateRequested?.Invoke(this, hwnd),
+            hwnd => WindowCloseRequested?.Invoke(this, hwnd));
+
         slot.ContextMenu = menu;
         menu.IsOpen = true;
     }
@@ -849,8 +907,8 @@ public sealed class DockWindow : Window, IDockSurface
             : new Thickness(0, DockTokens.OverflowButtonGap, 0, 0);
         _overflowBack.Content = OverflowGlyphText(horizontal ? "\uE76B" : "\uE70E");
         _overflowForward.Content = OverflowGlyphText(horizontal ? "\uE76C" : "\uE70D");
-        _overflowBack.ToolTip = horizontal ? "向左" : "向上";
-        _overflowForward.ToolTip = horizontal ? "向右" : "向下";
+        _overflowBack.ToolTip = horizontal ? UiText.ScrollLeft : UiText.ScrollUp;
+        _overflowForward.ToolTip = horizontal ? UiText.ScrollRight : UiText.ScrollDown;
 
         _chrome.ColumnDefinitions.Clear();
         _chrome.RowDefinitions.Clear();
@@ -860,8 +918,12 @@ public sealed class DockWindow : Window, IDockSurface
             _chrome.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             Grid.SetColumn(_scroll, 0);
             Grid.SetRow(_scroll, 0);
+            Grid.SetColumnSpan(_scroll, 1);
+            Grid.SetRowSpan(_scroll, 1);
             Grid.SetColumn(_overflow, 1);
             Grid.SetRow(_overflow, 0);
+            Grid.SetColumnSpan(_overflow, 1);
+            Grid.SetRowSpan(_overflow, 1);
             PlaceGrip(_startGrip, HorizontalAlignment.Left, VerticalAlignment.Stretch, DockTokens.ResizeGrip, double.NaN, Cursors.SizeWE);
             PlaceGrip(_endGrip, HorizontalAlignment.Right, VerticalAlignment.Stretch, DockTokens.ResizeGrip, double.NaN, Cursors.SizeWE);
             Grid.SetColumnSpan(_startGrip, 2);
@@ -875,8 +937,12 @@ public sealed class DockWindow : Window, IDockSurface
             _chrome.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             Grid.SetColumn(_scroll, 0);
             Grid.SetRow(_scroll, 0);
+            Grid.SetColumnSpan(_scroll, 1);
+            Grid.SetRowSpan(_scroll, 1);
             Grid.SetColumn(_overflow, 0);
             Grid.SetRow(_overflow, 1);
+            Grid.SetColumnSpan(_overflow, 1);
+            Grid.SetRowSpan(_overflow, 1);
             PlaceGrip(_startGrip, HorizontalAlignment.Stretch, VerticalAlignment.Top, double.NaN, DockTokens.ResizeGrip, Cursors.SizeNS);
             PlaceGrip(_endGrip, HorizontalAlignment.Stretch, VerticalAlignment.Bottom, double.NaN, DockTokens.ResizeGrip, Cursors.SizeNS);
             Grid.SetColumnSpan(_startGrip, 1);
@@ -1134,11 +1200,7 @@ public sealed class DockWindow : Window, IDockSurface
         }
 
         _islandDragArmed = false;
-        var point = System.Windows.Forms.Control.MousePosition;
-        var screen = System.Windows.Forms.Screen.FromPoint(point);
-        var id = screen.Primary
-            ? "primary"
-            : DisplayConfig.DevicePathFor(screen.DeviceName) ?? screen.DeviceName;
+        var id = NativeMonitors.GetCurrentCursorMonitorId();
         IslandMonitorRequested?.Invoke(this, id);
     }
 
@@ -1183,8 +1245,8 @@ public sealed class DockWindow : Window, IDockSurface
     {
         var chip = new Button
         {
-            Content = (title ?? BuiltInWidgets.DisplayName(widgetId)) + "（稍后）",
-            Tag = widgetId,
+            Content = (title ?? BuiltInWidgets.DisplayName(widgetId)) + UiText.LaterSuffix,
+            Tag = BuiltInWidgets.PlaceholderTag,
             Margin = new Thickness(0),
             Padding = new Thickness(DockTokens.TilePaddingX, DockTokens.TilePaddingY, DockTokens.TilePaddingX, DockTokens.TilePaddingY),
             FontSize = 12,
@@ -1580,7 +1642,7 @@ public sealed class DockWindow : Window, IDockSurface
     {
         _pinNameText.FontFamily = new FontFamily("Segoe UI Variable, Segoe UI");
         _pinNameText.FontSize = 12;
-        _pinNameText.TextWrapping = TextWrapping.NoWrap;
+        _pinNameText.TextWrapping = TextWrapping.Wrap;
         _pinNameText.TextTrimming = TextTrimming.CharacterEllipsis;
         _pinNameText.MaxWidth = 220;
         _pinNameHost.CornerRadius = new CornerRadius(DockTokens.TileCornerRadius);
@@ -1616,7 +1678,7 @@ public sealed class DockWindow : Window, IDockSurface
     }
 
     private static string PinTitle(DockItem item) =>
-        string.IsNullOrWhiteSpace(item.Title) ? item.Path ?? "快捷方式" : item.Title;
+        string.IsNullOrWhiteSpace(item.Title) ? item.Path ?? UiText.ShortcutFallback : item.Title;
 
     private void ShowPinName(FrameworkElement slot, string title)
     {
@@ -1765,6 +1827,27 @@ public sealed class DockWindow : Window, IDockSurface
             Cursor = interactive ? Cursors.Hand : Cursors.Arrow,
             Child = face
         };
+        if (interactive)
+        {
+            var pressScale = new ScaleTransform(1, 1);
+            slot.RenderTransform = pressScale;
+            slot.RenderTransformOrigin = new Point(0.5, 0.5);
+            slot.PreviewMouseLeftButtonDown += (_, _) =>
+            {
+                pressScale.ScaleX = 0.93;
+                pressScale.ScaleY = 0.93;
+            };
+            slot.PreviewMouseLeftButtonUp += (_, _) =>
+            {
+                pressScale.ScaleX = 1.0;
+                pressScale.ScaleY = 1.0;
+            };
+            slot.MouseLeave += (_, _) =>
+            {
+                pressScale.ScaleX = 1.0;
+                pressScale.ScaleY = 1.0;
+            };
+        }
         AutomationProperties.SetName(slot, SlotName(view));
         if (view.IsStack || (view.Item is { } pinItem && DockPins.IsPin(pinItem.Type)))
         {
@@ -1865,7 +1948,7 @@ public sealed class DockWindow : Window, IDockSurface
             return DockPinCollapse.StackTitle(kind, view.Members.Count);
         }
 
-        return view.Item is { } item ? SlotName(item) : "钉选";
+        return view.Item is { } item ? SlotName(item) : UiText.PinFallback;
     }
 
     private static string SlotTitle(DockVisibleSlot view)
@@ -1890,7 +1973,7 @@ public sealed class DockWindow : Window, IDockSurface
             return BuiltInWidgets.DisplayName(item.WidgetId ?? string.Empty);
         }
 
-        return item.Path ?? "钉选";
+        return item.Path ?? UiText.PinFallback;
     }
 
     private void SyncSlotGaps()

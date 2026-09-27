@@ -145,7 +145,7 @@ internal static class MediaTransportFallback
             CanSkipNext = true,
             CanSkipPrevious = true,
             Title = hasTitle ? windowTitle : player.DisplayName,
-            Artist = hasTitle ? player.DisplayName : "未接入系统媒体，可用按钮控制",
+            Artist = hasTitle ? player.DisplayName : UiText.MediaFallbackHint,
             UsesFallbackTransport = true
         };
     }

@@ -23,6 +23,7 @@
   "schemaVersion": 1,
   "ui": {
     "theme": "system",
+    "language": "system",
     "backdrop": "mica",
     "islandTransparency": 50,
     "dockMode": "overlay"
@@ -54,6 +55,10 @@
 ### `ui.theme`
 
 `system` | `light` | `dark`
+
+### `ui.language`
+
+`system` | `chinese` | `english`。默认 `system`。跟随系统时，Windows UI 语言以 `zh` 开头用中文，否则英文。缺省字段按 `system` 读入，不升 `schemaVersion`。界面文案走 `UiText` / `UiLocale.T`；设置、托盘、Dock 菜单和模块在切换后即时刷新，不重建正在走的计时器。
 
 ### `ui.backdrop`
 
@@ -150,13 +155,13 @@
 
 旧配置里的 `url`、`separator` 加载时丢弃；产品暂不提供网址钉和分隔符。
 
-可选：`id`、`title`、`iconPath`、`shortcutPath`（原 `.lnk`，启动时优先 ShellExecute 该快捷方式以保留参数；圆点仍看 `path` 解析出的 exe）、`density`（`expanded` 默认 / `compact`）、`paperColor`（便笺纸色：`yellow` 默认 / `orange` / `pink` / `magenta` / `blue` / `green`）、`timeZoneId`（时钟第二时区，Windows 或 IANA id；缺省仅本地）、`focusTimer`（专注计时器：颜色、专注/短休息/长休息分钟、每几段长休息、结束通知）、`countdown`（倒计时：上次时/分/秒、名称、最多 12 条命名预设）、`power`（电源：`layout` 为 `status` / `percentageRing` / `iconOnly`，`hiddenDeviceIds` 为岛上隐藏的设备）、`timeProgress`（时间进度：`period` 为 `year` / `month` / `day`，`layout` 为 `bars` / `percentage` / `ring`）、`sysActivity`（系统状态：`layout` 为 `numbers` / `rings` / `bars`）、`network`（网络：`show` 为 `both` / `download` / `upload`，`chartInDock` / `chartInPopup`）。`density` 只对有两种内容模式的模块生效（时钟紧凑为短日期、展开带表盘与星期；正在播放紧凑为播放键、展开为封面与进度；时间进度紧凑为百分比在上、展开为周期与百分比左右排列；网络紧凑为速率、展开带折线；Bing 壁纸紧凑为圆角方形缩略图加前后/应用按钮，展开带较窄标题与日期），不是改卡片高度。`paperColor` 只对便笺生效。`timeZoneId` 只对时钟生效；未知 id 忽略。`focusTimer` 只对专注计时器生效。`countdown` 只对倒计时生效。`power` 只对电源模块生效。`timeProgress` 只对时间进度生效。`sysActivity` 只对系统状态生效。`network` 只对网络模块生效。`id` 缺省时由 store 生成稳定 GUID；同一 `widgetId` 可出现多份，用 `id` 区分。右键：有点击动作才出现「打开模块」；有自定义才出现「自定义」；有双模式才出现「紧凑 / 展开」；均可从 Dock 移除。设置目录点预览或 + 始终追加一份，不切换成移除。文件夹徽标显示标题而不是条目数。
+可选：`id`、`title`、`iconPath`、`shortcutPath`（原 `.lnk`，启动时优先 ShellExecute 该快捷方式以保留参数；圆点仍看 `path` 解析出的 exe）、`density`（`expanded` 默认 / `compact`）、`paperColor`（便笺纸色：`yellow` 默认 / `orange` / `pink` / `magenta` / `blue` / `green`）、`timeZoneId`（时钟第二时区，Windows 或 IANA id；缺省仅本地）、`focusTimer`（专注计时器：颜色、专注/短休息/长休息分钟、每几段长休息、结束通知）、`countdown`（倒计时：上次时/分/秒、名称、最多 12 条命名预设）、`alarm`（闹钟：时/分、标签、是否已设定、`ringsAt` UTC 响铃时刻）、`power`（电源：`layout` 为 `status` / `percentageRing` / `iconOnly`，`hiddenDeviceIds` 为岛上隐藏的设备）、`timeProgress`（时间进度：`period` 为 `year` / `month` / `day`，`layout` 为 `bars` / `percentage` / `ring`）、`sysActivity`（系统状态：`layout` 为 `numbers` / `rings` / `bars`）、`network`（网络：`show` 为 `both` / `download` / `upload`，`chartInDock` / `chartInPopup`）。`density` 只对有两种内容模式的模块生效（时钟紧凑为短日期、展开带表盘与星期；正在播放紧凑为播放键、展开为封面与进度；时间进度紧凑为百分比在上、展开为周期与百分比左右排列；网络紧凑为速率、展开带折线；Bing 壁纸紧凑为圆角方形缩略图加前后/应用按钮，展开带较窄标题与日期），不是改卡片高度。`paperColor` 只对便笺生效。`timeZoneId` 只对时钟生效；未知 id 忽略。`focusTimer` 只对专注计时器生效。`countdown` 只对倒计时生效。`alarm` 只对闹钟生效。`power` 只对电源模块生效。`timeProgress` 只对时间进度生效。`sysActivity` 只对系统状态生效。`network` 只对网络模块生效。`id` 缺省时由 store 生成稳定 GUID；同一 `widgetId` 可出现多份，用 `id` 区分。右键：有点击动作才出现「打开模块」；有自定义才出现「自定义」；有双模式才出现「紧凑 / 展开」；均可从 Dock 移除。设置目录点预览或 + 始终追加一份，不切换成移除。文件夹徽标显示标题而不是条目数。
 
 `dock.islandLength`：可选，岛沿长边的逻辑像素长度。缺省（`null`）按内容自适应；用户拖动两端后写入。双击边缘恢复自适应。长度小于内容时，岛内滚动，右侧（左右条则底部）出现箭头平移模块。
 
 ### Widget 布局
 
-`id` 必须是内置 ID 之一：`clock` `notes` `sysactivity` `network` `power` `nowplaying` `bing` `stopwatch` `countdown` `focustimer` `timeprogress`。旧配置里的 `battery` 在加载时改为 `power`（若该 profile 还没有电源）或删除。旧的 `cpu` / `memory` 卡片合并为一份 `sysactivity`。
+`id` 必须是内置 ID 之一：`clock` `notes` `sysactivity` `network` `power` `nowplaying` `bing` `stopwatch` `countdown` `alarm` `focustimer` `timeprogress`。旧配置里的 `battery` 在加载时改为 `power`（若该 profile 还没有电源）或删除。旧的 `cpu` / `memory` 卡片合并为一份 `sysactivity`。
 
 `visible` 表示该类型至少有一份在当前 profile 的 Dock 上（与 `dock.items` 里对应的 `widgetChip` 同步）。同一 `widgetId` 可以有多份卡片。`monitor` / `x` / `y` 保留兼容，模块本身不再使用独立窗口坐标。
 

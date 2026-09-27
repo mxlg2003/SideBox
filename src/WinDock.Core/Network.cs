@@ -41,12 +41,12 @@ public static class NetworkFormat
 {
     public static string ShowTitle(string show) => NetworkShows.Normalize(show) switch
     {
-        NetworkShows.Download => "下载",
-        NetworkShows.Upload => "上传",
-        _ => "全部"
+        NetworkShows.Download => UiText.Download,
+        NetworkShows.Upload => UiText.Upload,
+        _ => UiLocale.T("全部", "Both")
     };
 
-    public static string Footer { get; } = "最近 60 秒 · 每秒更新";
+    public static string Footer => UiLocale.T("最近 60 秒 · 每秒更新", "Last 60 seconds · updates every second");
 }
 
 public static class NetworkHistory

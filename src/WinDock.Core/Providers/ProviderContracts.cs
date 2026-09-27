@@ -22,6 +22,8 @@ public interface IProviderHub : IDisposable
 
     IBingWallpaperProvider Bing { get; }
 
+    IWeatherProvider Weather { get; }
+
     IShellLaunch Shell { get; }
 }
 
@@ -221,6 +223,10 @@ public interface IBingWallpaperProvider
     Task<bool> TryApplyCurrentAsync(CancellationToken cancellationToken = default);
 
     Task<bool> TryApplyTodayAsync(CancellationToken cancellationToken = default);
+
+    bool CanRestorePreviousWallpaper { get; }
+
+    Task<bool> TryRestorePreviousAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class BingWallpaperImage
@@ -256,6 +262,8 @@ public sealed record BingWallpaperSnapshot
         SelectedIndex >= 0 && SelectedIndex < Images.Count ? Images[SelectedIndex] : null;
 }
 
+public sealed record DockWindowEntry(nint Hwnd, string Title, bool IsActive);
+
 public interface IShellLaunch
 {
     DockItem CreatePin(string pathOrUrl);
@@ -266,6 +274,12 @@ public interface IShellLaunch
 
     bool TryActivate(DockItem item);
 
+    IReadOnlyList<DockWindowEntry> GetWindows(DockItem item);
+
+    bool ActivateWindow(nint hwnd);
+
+    bool CloseWindow(nint hwnd);
+
     string? GetIconFile(DockItem item);
 
     string? GetStockIconFile(DockPinStackKind kind);
@@ -273,4 +287,21 @@ public interface IShellLaunch
     IReadOnlySet<string> GetRunningImagePaths(IReadOnlySet<string> processNames);
 
     IReadOnlyList<StartMenuApp> ListStartMenuApps();
+}
+
+public interface IWeatherProvider
+{
+    WeatherSnapshot? Current { get; }
+
+    event EventHandler? Changed;
+
+    bool AllowAutoLocate { get; set; }
+
+    void Start();
+
+    void Stop();
+
+    Task<WeatherSnapshot?> RefreshAsync(WeatherSettings settings, bool force = false, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<WeatherCityItem>> SearchCitiesAsync(string query, CancellationToken cancellationToken = default);
 }

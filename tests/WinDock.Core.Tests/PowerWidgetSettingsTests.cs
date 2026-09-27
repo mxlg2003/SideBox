@@ -53,7 +53,7 @@ public class PowerWidgetSettingsTests
         Assert.Equal("76%", PowerFormat.Percent(76));
         Assert.Equal("—", PowerFormat.Percent(null));
         Assert.Equal("未检测到电池或已连接的蓝牙设备", PowerFormat.NoDevices);
-        Assert.Equal("这台电脑没有电池", PowerFormat.NoBattery);
+        Assert.Equal("未检测到本机电池", PowerFormat.NoBattery);
         var unknown = new PowerDeviceSnapshot
         {
             Id = "system",

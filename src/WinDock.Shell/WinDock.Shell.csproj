@@ -1,13 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <UseWPF>true</UseWPF>
-    <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>WinDock.Shell</RootNamespace>
     <Description>Dock window host, display topology, AppBar, and z-order.</Description>
   </PropertyGroup>
-  <ItemGroup>
-    <Using Remove="System.Windows.Forms" />
-  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\WinDock.Core\WinDock.Core.csproj" />
   </ItemGroup>

@@ -128,6 +128,12 @@ public sealed class Win32ShellLaunch : IShellLaunch
 
     public bool TryActivate(DockItem item) => Win32WindowSwitch.TryActivate(item);
 
+    public IReadOnlyList<DockWindowEntry> GetWindows(DockItem item) => Win32WindowSwitch.GetWindows(item);
+
+    public bool ActivateWindow(nint hwnd) => Win32WindowSwitch.ActivateWindow(hwnd);
+
+    public bool CloseWindow(nint hwnd) => Win32WindowSwitch.CloseWindow(hwnd);
+
     public string? GetIconFile(DockItem item)
     {
         if (!DockPins.IsPin(item.Type))
@@ -174,26 +180,26 @@ public sealed class Win32ShellLaunch : IShellLaunch
     public IReadOnlySet<string> GetRunningImagePaths(IReadOnlySet<string> processNames)
     {
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var name in processNames)
+        if (processNames.Count == 0)
         {
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                continue;
-            }
+            return paths;
+        }
 
-            Process[] processes;
+        Process[] processes;
+        try
+        {
+            processes = Process.GetProcesses();
+        }
+        catch (Exception)
+        {
+            return paths;
+        }
+
+        foreach (var process in processes)
+        {
             try
             {
-                processes = Process.GetProcessesByName(name);
-            }
-            catch (Exception)
-            {
-                continue;
-            }
-
-            foreach (var process in processes)
-            {
-                try
+                if (processNames.Contains(process.ProcessName))
                 {
                     var image = NativeMethods.QueryProcessImage(process.Id);
                     if (!string.IsNullOrWhiteSpace(image))
@@ -201,10 +207,13 @@ public sealed class Win32ShellLaunch : IShellLaunch
                         paths.Add(DockPins.NormalizePath(image));
                     }
                 }
-                finally
-                {
-                    process.Dispose();
-                }
+            }
+            catch (Exception)
+            {
+            }
+            finally
+            {
+                process.Dispose();
             }
         }
 

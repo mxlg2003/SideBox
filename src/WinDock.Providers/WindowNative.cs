@@ -23,7 +23,12 @@ internal static partial class NativeMethods
     internal const int SwShowMinimized = 2;
     internal const int SwMinimize = 6;
     internal const int SwShowMinNoActive = 7;
+    internal const uint WmClose = 0x0010;
     internal static readonly IntPtr HwndTop = new(0);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll")]
     internal static extern IntPtr GetForegroundWindow();

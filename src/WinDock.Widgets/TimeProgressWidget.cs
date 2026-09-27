@@ -9,7 +9,7 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IWidgetModeAware, ITimeProgressConfigurable, IWidgetThemeAware
+public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IWidgetModeAware, ITimeProgressConfigurable, IWidgetThemeAware, ILocalizable
 {
     private const uint Accent = 0xFF0078D4;
     private const uint QuietFill = 0x14000000;
@@ -35,6 +35,12 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
     private readonly Grid _customizePage;
     private readonly Popup _popup;
     private readonly ComboBox _periodBox = new();
+    private TextBlock _flyoutTitle = null!;
+    private TextBlock _customizeTitle = null!;
+    private TextBlock _backLabel = null!;
+    private TextBlock _periodCaption = null!;
+    private TextBlock _layoutCaption = null!;
+    private readonly Dictionary<string, TextBlock> _layoutTitles = new(StringComparer.Ordinal);
     private readonly List<(string Layout, Border Row, TextBlock Check)> _layoutMarks = [];
     private readonly DispatcherTimer _timer;
     private readonly StackPanel _panelVisual = new();
@@ -93,6 +99,7 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
             Child = _panel
         };
         WidgetFlyout.Attach(_popup);
+        _popup.Closed += (_, _) => ShowEditor();
         _popup.Opened += (_, _) =>
         {
             var scale = (ScaleTransform)_panel.RenderTransform;
@@ -152,6 +159,25 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
         _dockRing.Track = track;
         _panelRing.Fill = fill;
         _panelRing.Track = track;
+        WidgetChrome.PaintCombo(_periodBox, isLight);
+    }
+
+    public void ApplyLocale()
+    {
+        _applying = true;
+        _flyoutTitle.Text = BuiltInWidgets.DisplayName(BuiltInWidgets.TimeProgress);
+        _customizeTitle.Text = UiText.Customize;
+        _backLabel.Text = UiText.Back;
+        _periodCaption.Text = UiText.Period;
+        _layoutCaption.Text = UiText.Layout;
+        foreach (var (layout, title) in _layoutTitles)
+        {
+            title.Text = TimeProgressFormat.LayoutTitle(layout);
+        }
+
+        FillPeriodBox();
+        _applying = false;
+        Tick();
     }
 
     public void ApplyDensity(WidgetDensity density)
@@ -234,6 +260,7 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
 
         _dockBody.Width = compact ? double.NaN : ExpandedWidth;
         _dockBody.MinWidth = compact ? 0 : ExpandedWidth;
+        WidgetChrome.ApplyTheme(_tile, _isLight);
         _tile.InvalidateMeasure();
         InvalidateMeasure();
     }
@@ -385,15 +412,18 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
             case ContentControl content when ReferenceEquals(content.Content, element):
                 content.Content = null;
                 break;
+            case ContentPresenter presenter when ReferenceEquals(presenter.Content, element):
+                presenter.Content = null;
+                break;
         }
     }
 
     private Grid BuildEditor()
     {
-        var title = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.TimeProgress));
+        _flyoutTitle = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.TimeProgress));
         var customize = HeaderGlyph("\uE8FD", OpenCustomize);
         var close = HeaderGlyph("\u00D7", ClosePopup, 18);
-        var header = HeaderRow(title, customize, close);
+        var header = HeaderRow(_flyoutTitle, customize, close);
         var names = new Grid { Margin = new Thickness(0, 8, 0, 0) };
         names.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         names.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -408,6 +438,7 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
 
     private Grid BuildCustomize()
     {
+        _backLabel = HeaderLabel(UiText.Back);
         var back = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -416,7 +447,7 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
             Children =
             {
                 HeaderGlyph("\uE76B", ShowEditor, 12),
-                HeaderLabel("返回")
+                _backLabel
             }
         };
         back.MouseLeftButtonUp += (_, e) =>
@@ -424,58 +455,39 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
             ShowEditor();
             e.Handled = true;
         };
-        var title = HeaderLabel("自定义");
-        title.Margin = new Thickness(8, 0, 0, 0);
-        title.FontWeight = FontWeights.SemiBold;
+        _customizeTitle = HeaderLabel(UiText.Customize);
+        _customizeTitle.Margin = new Thickness(8, 0, 0, 0);
+        _customizeTitle.FontWeight = FontWeights.SemiBold;
         var close = HeaderGlyph("\u00D7", ClosePopup, 18);
         var header = HeaderRow(new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Children = { back, title }
+            Children = { back, _customizeTitle }
         }, close);
 
-        var periodCaption = HeaderLabel("周期");
-        periodCaption.Opacity = 0.62;
-        periodCaption.Margin = new Thickness(0, 8, 0, 8);
-        foreach (var period in TimeProgressPeriods.All)
-        {
-            _periodBox.Items.Add(new ComboBoxItem
-            {
-                Content = TimeProgressFormat.PeriodTitle(period),
-                Tag = period
-            });
-        }
+        _periodCaption = HeaderLabel(UiText.Period);
+        _periodCaption.Opacity = 0.62;
+        _periodCaption.Margin = new Thickness(0, 8, 0, 8);
+        WidgetChrome.PaintCombo(_periodBox, _isLight);
+        FillPeriodBox();
 
-        _periodBox.FontFamily = WidgetFonts.Ui;
-        _periodBox.FontSize = 14;
-        _periodBox.BorderThickness = new Thickness(0);
-        _periodBox.Padding = new Thickness(10, 6, 8, 6);
-        _periodBox.Background = Brushes.Transparent;
-        _periodBox.HorizontalAlignment = HorizontalAlignment.Stretch;
         _periodBox.SelectedIndex = 0;
         _periodBox.SelectionChanged += (_, _) =>
         {
-            if (_applying || _periodBox.SelectedItem is not ComboBoxItem item || item.Tag is not string period)
+            if (_applying || _periodBox.SelectedItem is not ComboChoice choice)
             {
                 return;
             }
 
-            _settings = _settings with { Period = TimeProgressPeriods.Normalize(period) };
+            _settings = _settings with { Period = TimeProgressPeriods.Normalize(choice.Id) };
             Persist();
             RebuildTile();
             Tick();
         };
-        var periodWrap = new Border
-        {
-            CornerRadius = new CornerRadius(DockTokens.IslandCornerRadius),
-            Background = TokenBrushes.From(QuietFill),
-            Padding = new Thickness(4, 2, 4, 2),
-            Child = _periodBox
-        };
 
-        var layoutCaption = HeaderLabel("布局");
-        layoutCaption.Opacity = 0.62;
-        layoutCaption.Margin = new Thickness(0, 16, 0, 8);
+        _layoutCaption = HeaderLabel(UiText.Layout);
+        _layoutCaption.Opacity = 0.62;
+        _layoutCaption.Margin = new Thickness(0, 16, 0, 8);
         var layouts = new StackPanel();
         foreach (var layout in TimeProgressLayouts.All)
         {
@@ -484,11 +496,23 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
 
         var page = new StackPanel
         {
-            Children = { header, periodCaption, periodWrap, layoutCaption, layouts }
+            Children = { header, _periodCaption, _periodBox, _layoutCaption, layouts }
         };
         var grid = new Grid();
         grid.Children.Add(page);
         return grid;
+    }
+
+    private void FillPeriodBox()
+    {
+        var selected = _periodBox.SelectedItem is ComboChoice choice ? choice.Id : _settings.Period;
+        _periodBox.Items.Clear();
+        foreach (var period in TimeProgressPeriods.All)
+        {
+            _periodBox.Items.Add(new ComboChoice(period, TimeProgressFormat.PeriodTitle(period)));
+        }
+
+        WidgetChrome.SelectChoice(_periodBox, selected);
     }
 
     private Border LayoutRow(string layout)
@@ -514,6 +538,7 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
             Margin = new Thickness(0, 0, 10, 0)
         };
         var title = HeaderLabel(TimeProgressFormat.LayoutTitle(layout));
+        _layoutTitles[layout] = title;
         var content = new Grid();
         content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -562,14 +587,7 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
             check.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        foreach (var item in _periodBox.Items.OfType<ComboBoxItem>())
-        {
-            if (item.Tag is string period && string.Equals(period, _settings.Period, StringComparison.Ordinal))
-            {
-                _periodBox.SelectedItem = item;
-                break;
-            }
-        }
+        WidgetChrome.SelectChoice(_periodBox, _settings.Period);
     }
 
     private void ShowEditor()

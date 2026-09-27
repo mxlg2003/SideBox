@@ -41,7 +41,7 @@ public static class DockHostGeometry
             return InEdgeHotzone(x, y, pixelWorkArea, edge, thickness);
         }
 
-        const int slack = 8;
+        const int slack = DockTokens.TrapezoidBuffer;
         return edge switch
         {
             DockEdge.Left =>

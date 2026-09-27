@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Win32;
 using WinDock.Core;
 
@@ -10,6 +12,7 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
 {
     private readonly HttpClient _http;
     private readonly string _cacheDirectory;
+    private readonly string _backupFile;
     private readonly SemaphoreSlim _mutex = new(1, 1);
     private readonly object _gate = new();
     private BingWallpaperSnapshot _current = new();
@@ -19,6 +22,9 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
     public BingWallpaperProvider(string cacheDirectory)
     {
         _cacheDirectory = cacheDirectory;
+        _backupFile = Path.Combine(
+            Path.GetDirectoryName(cacheDirectory) ?? cacheDirectory,
+            "wallpaper-backup.json");
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
         _http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "WinDock/1.0 (Windows; Bing wallpaper)");
     }
@@ -47,6 +53,11 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
 
     public Task<bool> TryApplyTodayAsync(CancellationToken cancellationToken = default) =>
         WithLock(() => ApplyCore(today: true, cancellationToken), cancellationToken);
+
+    public bool CanRestorePreviousWallpaper => TryReadBackup(out var backup) && File.Exists(backup.Wallpaper);
+
+    public Task<bool> TryRestorePreviousAsync(CancellationToken cancellationToken = default) =>
+        WithLock(RestoreCore, cancellationToken);
 
     public void Dispose()
     {
@@ -103,7 +114,7 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
             var images = BingWallpaperArchive.Parse(json);
             if (images.Count == 0)
             {
-                Publish(new BingWallpaperSnapshot { Error = "暂无图片", AppliedKey = snapshot.AppliedKey });
+                Publish(new BingWallpaperSnapshot { Error = UiText.NoBingImage, AppliedKey = snapshot.AppliedKey });
                 return;
             }
 
@@ -130,7 +141,7 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
                 SelectedIndex = snapshot.SelectedIndex,
                 LocalPath = snapshot.LocalPath,
                 AppliedKey = snapshot.AppliedKey,
-                Error = "无法加载"
+                Error = UiText.BingLoadFailed
             });
         }
     }
@@ -190,15 +201,18 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
             snapshot = Current;
             if (string.IsNullOrWhiteSpace(local) || snapshot.Selected is null)
             {
-                Publish(Failed(snapshot, "下载失败"));
+                Publish(Failed(snapshot, UiText.DownloadFailed));
                 return false;
             }
 
+            Win32DesktopWallpaper.TryCapture(out var previous);
             if (!Win32DesktopWallpaper.TrySet(local))
             {
-                Publish(Failed(snapshot with { LocalPath = local }, "未能应用"));
+                Publish(Failed(snapshot with { LocalPath = local }, UiText.ApplyFailed));
                 return false;
             }
+
+            TryWriteBackup(previous);
 
             Publish(new BingWallpaperSnapshot
             {
@@ -215,7 +229,7 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
         }
         catch (Exception)
         {
-            Publish(Failed(Current, "未能应用"));
+            Publish(Failed(Current, UiText.ApplyFailed));
             return false;
         }
     }
@@ -241,7 +255,7 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
                 Images = snapshot.Images,
                 SelectedIndex = snapshot.SelectedIndex,
                 AppliedKey = snapshot.AppliedKey,
-                Error = "下载失败"
+                Error = UiText.DownloadFailed
             });
             return null;
         }
@@ -281,6 +295,7 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
             }
 
             File.Move(temp, path, overwrite: true);
+            TrimCache(path);
             return path;
         }
         catch (OperationCanceledException)
@@ -303,6 +318,85 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
         catch (Exception)
         {
             return false;
+        }
+    }
+
+    private Task<bool> RestoreCore()
+    {
+        if (!TryReadBackup(out var backup) || !Win32DesktopWallpaper.TryRestore(backup))
+        {
+            return Task.FromResult(false);
+        }
+
+        TryDelete(_backupFile);
+        return Task.FromResult(true);
+    }
+
+    private bool TryReadBackup(out WallpaperBackup backup)
+    {
+        backup = new WallpaperBackup("", "10", "0");
+        try
+        {
+            if (!File.Exists(_backupFile))
+            {
+                return false;
+            }
+
+            var parsed = JsonSerializer.Deserialize<WallpaperBackup>(File.ReadAllText(_backupFile));
+            if (parsed is null || string.IsNullOrWhiteSpace(parsed.Wallpaper))
+            {
+                return false;
+            }
+
+            backup = parsed;
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private void TryWriteBackup(WallpaperBackup backup)
+    {
+        if (string.IsNullOrWhiteSpace(backup.Wallpaper))
+        {
+            return;
+        }
+
+        try
+        {
+            var dir = Path.GetDirectoryName(_backupFile);
+            if (!string.IsNullOrWhiteSpace(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            File.WriteAllText(_backupFile, JsonSerializer.Serialize(backup));
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private void TrimCache(string keepPath)
+    {
+        try
+        {
+            var files = new DirectoryInfo(_cacheDirectory)
+                .GetFiles("*.jpg")
+                .OrderByDescending(file => file.LastWriteTimeUtc)
+                .ToList();
+            foreach (var extra in files.Skip(8))
+            {
+                if (!string.Equals(extra.FullName, keepPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    TryDelete(extra.FullName);
+                }
+            }
+        }
+        catch (Exception)
+        {
         }
     }
 
@@ -349,11 +443,58 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
     }
 }
 
+internal sealed record WallpaperBackup(string Wallpaper, string Style, string Tile);
+
 internal static class Win32DesktopWallpaper
 {
     private const int SpiSetDeskWallpaper = 20;
+    private const int SpiGetDeskWallpaper = 0x0073;
     private const int SpifUpdateIniFile = 0x01;
     private const int SpifSendChange = 0x02;
+
+    public static bool TryCapture(out WallpaperBackup backup)
+    {
+        backup = new WallpaperBackup("", "10", "0");
+        try
+        {
+            var buffer = new StringBuilder(520);
+            SystemParametersInfo(SpiGetDeskWallpaper, buffer.Capacity, buffer, 0);
+            var path = buffer.ToString();
+            using var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop");
+            var style = key?.GetValue("WallpaperStyle")?.ToString() ?? "10";
+            var tile = key?.GetValue("TileWallpaper")?.ToString() ?? "0";
+            backup = new WallpaperBackup(path, style, tile);
+            return !string.IsNullOrWhiteSpace(path);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryRestore(WallpaperBackup backup)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(backup.Wallpaper) || !File.Exists(backup.Wallpaper))
+            {
+                return false;
+            }
+
+            var full = Path.GetFullPath(backup.Wallpaper);
+            using (var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop", writable: true))
+            {
+                key?.SetValue("WallpaperStyle", string.IsNullOrWhiteSpace(backup.Style) ? "10" : backup.Style);
+                key?.SetValue("TileWallpaper", string.IsNullOrWhiteSpace(backup.Tile) ? "0" : backup.Tile);
+            }
+
+            return SystemParametersInfo(SpiSetDeskWallpaper, 0, full, SpifUpdateIniFile | SpifSendChange);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
 
     public static bool TrySet(string path)
     {
@@ -381,4 +522,7 @@ internal static class Win32DesktopWallpaper
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool SystemParametersInfo(int uiAction, int uiParam, string pvParam, int fWinIni);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool SystemParametersInfo(int uiAction, int uiParam, StringBuilder pvParam, int fWinIni);
 }

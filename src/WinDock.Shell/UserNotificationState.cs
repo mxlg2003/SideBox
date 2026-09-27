@@ -10,7 +10,23 @@ public static class UserNotificationState
     private const int GwlStyle = -16;
     private const uint WsMaximize = 0x01000000;
 
+    private static (bool Result, DateTimeOffset ExpiresAt, nint ForegroundHwnd) _fullscreenCache;
+
     public static bool IsPresentationOrFullscreen(nint selfHwnd = 0)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var foreground = GetForegroundWindow();
+        if (now < _fullscreenCache.ExpiresAt && _fullscreenCache.ForegroundHwnd == foreground)
+        {
+            return _fullscreenCache.Result;
+        }
+
+        var result = EvaluatePresentationOrFullscreen(selfHwnd, foreground);
+        _fullscreenCache = (result, now.AddMilliseconds(400), foreground);
+        return result;
+    }
+
+    private static bool EvaluatePresentationOrFullscreen(nint selfHwnd, nint foreground)
     {
         try
         {
@@ -20,22 +36,19 @@ public static class UserNotificationState
                 {
                     return true;
                 }
-
-                return false;
             }
         }
         catch (Exception)
         {
         }
 
-        return IsForegroundCoveringMonitor(selfHwnd);
+        return IsForegroundCoveringMonitor(selfHwnd, foreground);
     }
 
-    private static bool IsForegroundCoveringMonitor(nint selfHwnd)
+    private static bool IsForegroundCoveringMonitor(nint selfHwnd, nint hwnd)
     {
         try
         {
-            var hwnd = GetForegroundWindow();
             if (hwnd == nint.Zero || hwnd == selfHwnd)
             {
                 return false;
@@ -47,6 +60,16 @@ public static class UserNotificationState
             if (name is "Progman" or "WorkerW" or "Shell_TrayWnd" or "NotifyIconOverflowWindow")
             {
                 return false;
+            }
+
+            if (selfHwnd != nint.Zero)
+            {
+                var dockMonitor = MonitorFromWindow(selfHwnd, 2);
+                var windowMonitor = MonitorFromWindow(hwnd, 2);
+                if (dockMonitor != nint.Zero && windowMonitor != nint.Zero && dockMonitor != windowMonitor)
+                {
+                    return false;
+                }
             }
 
             if (!GetWindowRect(hwnd, out var window) || !GetMonitorInfoFor(hwnd, out var monitor))

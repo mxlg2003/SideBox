@@ -97,7 +97,7 @@ public static class BingWallpaperArchive
 
         if (string.IsNullOrWhiteSpace(copyright))
         {
-            return "Bing 壁纸";
+            return UiText.WidgetBing;
         }
 
         var cut = copyright.IndexOf(" (", StringComparison.Ordinal);
@@ -115,10 +115,12 @@ public static class BingWallpaperArchive
                 DateTimeStyles.None,
                 out var date))
         {
-            return $"{date.Month}月{date.Day}日";
+            return UiLocale.IsChinese
+                ? $"{date.Month}月{date.Day}日"
+                : date.ToString("MMM d", UiLocale.Culture);
         }
 
-        return "今日";
+        return UiLocale.T("今日", "Today");
     }
 
     public static int WrapIndex(int index, int count)

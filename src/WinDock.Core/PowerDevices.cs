@@ -85,11 +85,11 @@ public static class PowerFormat
     public const string SystemId = "system";
 
     public static string Status(PowerDeviceSnapshot device) =>
-        device.Charging ? "充电中" : "使用电池";
+        device.Charging ? UiLocale.T("充电中", "Charging") : UiLocale.T("使用电池", "On battery");
 
-    public const string NoDevices = "未检测到电池或已连接的蓝牙设备";
+    public static string NoDevices => UiLocale.T("未检测到电池或已连接的蓝牙设备", "No battery or connected Bluetooth devices");
 
-    public const string NoBattery = "这台电脑没有电池";
+    public static string NoBattery => UiLocale.T("未检测到本机电池", "No internal battery detected");
 
     public static string Percent(int? percent) => percent is int value ? $"{value}%" : "—";
 
@@ -101,9 +101,9 @@ public static class PowerFormat
 
     public static string LayoutTitle(string layout) => PowerLayouts.Normalize(layout) switch
     {
-        PowerLayouts.PercentageRing => "百分比圆环",
-        PowerLayouts.IconOnly => "仅图标",
-        _ => "状态"
+        PowerLayouts.PercentageRing => UiLocale.T("百分比圆环", "Percentage ring"),
+        PowerLayouts.IconOnly => UiLocale.T("仅图标", "Icon only"),
+        _ => UiLocale.T("状态", "Status")
     };
 
     public static string? NormalizeBluetoothAddress(string? value)

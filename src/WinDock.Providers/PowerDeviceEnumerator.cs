@@ -229,5 +229,5 @@ internal static class PowerDeviceEnumerator
         parts.Any(part => text.Contains(part, StringComparison.OrdinalIgnoreCase));
 
     private static string DisplayName(string name) =>
-        string.IsNullOrWhiteSpace(name) ? "设备" : PowerFormat.CleanDeviceName(name);
+        string.IsNullOrWhiteSpace(name) ? UiText.Device : PowerFormat.CleanDeviceName(name);
 }

@@ -7,37 +7,51 @@ public static class ClockFormat
 {
     public static readonly IReadOnlyDictionary<string, string> Places = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
-        ["China Standard Time"] = "上海",
-        ["Asia/Shanghai"] = "上海",
-        ["Taipei Standard Time"] = "台北",
-        ["Tokyo Standard Time"] = "东京",
-        ["Asia/Tokyo"] = "东京",
-        ["Korea Standard Time"] = "首尔",
-        ["Singapore Standard Time"] = "新加坡",
-        ["GMT Standard Time"] = "伦敦",
-        ["GMT"] = "伦敦",
-        ["Pacific Standard Time"] = "洛杉矶",
-        ["Eastern Standard Time"] = "纽约",
-        ["UTC"] = "UTC"
+        ["China Standard Time"] = "shanghai",
+        ["Asia/Shanghai"] = "shanghai",
+        ["Taipei Standard Time"] = "taipei",
+        ["Tokyo Standard Time"] = "tokyo",
+        ["Asia/Tokyo"] = "tokyo",
+        ["Korea Standard Time"] = "seoul",
+        ["Singapore Standard Time"] = "singapore",
+        ["GMT Standard Time"] = "london",
+        ["GMT"] = "london",
+        ["Pacific Standard Time"] = "losangeles",
+        ["Eastern Standard Time"] = "newyork",
+        ["UTC"] = "utc"
     };
 
-    public static IReadOnlyList<ClockZoneChoice> ZoneChoices { get; } = Places
+    public static IReadOnlyList<ClockZoneChoice> ZoneChoices => Places
         .GroupBy(pair => pair.Value, StringComparer.Ordinal)
-        .Select(group => new ClockZoneChoice(group.First().Key, group.Key))
+        .Select(group => new ClockZoneChoice(group.First().Key, CityName(group.Key)))
         .ToArray();
+
+    public static string CityName(string key) => key switch
+    {
+        "shanghai" => UiText.CityShanghai,
+        "taipei" => UiText.CityTaipei,
+        "tokyo" => UiText.CityTokyo,
+        "seoul" => UiText.CitySeoul,
+        "singapore" => UiText.CitySingapore,
+        "london" => UiText.CityLondon,
+        "losangeles" => UiText.CityLosAngeles,
+        "newyork" => UiText.CityNewYork,
+        "utc" => "UTC",
+        _ => key
+    };
 
     public static string Time(DateTime now) => now.ToString("HH:mm");
 
     public static string TimeWithSeconds(DateTime now) => now.ToString("HH:mm:ss");
 
     public static string CompactDate(DateTime now, CultureInfo? culture = null) =>
-        now.ToString("MMM d", culture ?? CultureInfo.CurrentCulture);
+        now.ToString("MMM d", culture ?? UiLocale.Culture);
 
     public static string ExpandedDate(DateTime now, CultureInfo? culture = null) =>
-        now.ToString("ddd, MMM d", culture ?? CultureInfo.CurrentCulture);
+        now.ToString("ddd, MMM d", culture ?? UiLocale.Culture);
 
     public static string FullDate(DateTime now, CultureInfo? culture = null) =>
-        now.ToString("dddd, MMMM d", culture ?? CultureInfo.CurrentCulture);
+        now.ToString("dddd, MMMM d", culture ?? UiLocale.Culture);
 
     public static string ZoneLine(TimeZoneInfo zone, DateTime now)
     {
@@ -51,9 +65,9 @@ public static class ClockFormat
 
     public static string PlaceName(TimeZoneInfo zone)
     {
-        if (Places.TryGetValue(zone.Id, out var place))
+        if (Places.TryGetValue(zone.Id, out var key))
         {
-            return place;
+            return CityName(key);
         }
 
         var name = zone.DisplayName;

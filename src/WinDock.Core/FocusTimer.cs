@@ -112,18 +112,20 @@ public static class FocusTimerFormat
 
     public static string Phase(FocusTimerPhase phase) => phase switch
     {
-        FocusTimerPhase.ShortBreak => "休息",
-        FocusTimerPhase.LongBreak => "长休息",
-        _ => "专注"
+        FocusTimerPhase.ShortBreak => UiLocale.T("休息", "Break"),
+        FocusTimerPhase.LongBreak => UiLocale.T("长休息", "Long break"),
+        _ => UiLocale.T("专注", "Focus")
     };
 
     public static string SessionLine(FocusTimerPhase phase, int session, int every) =>
-        $"{Phase(phase)} · 第 {Math.Max(1, session)} / {Math.Max(1, every)} 段";
+        UiLocale.IsChinese
+            ? $"{Phase(phase)} · 第 {Math.Max(1, session)} / {Math.Max(1, every)} 轮"
+            : $"{Phase(phase)} · {Math.Max(1, session)} / {Math.Max(1, every)}";
 
     public static string TileStatus(bool running, bool paused, FocusTimerPhase phase) =>
-        paused && !running ? "已暂停" : Phase(phase);
+        paused && !running ? StopwatchFormat.Paused : Phase(phase);
 
-    public static string Preset(int minutes) => $"{minutes} 分";
+    public static string Preset(int minutes) => $"{minutes} {UiText.MinutesUnit}";
 
     public static string StepValue(int value, string unit) => $"{value} {unit}";
 }

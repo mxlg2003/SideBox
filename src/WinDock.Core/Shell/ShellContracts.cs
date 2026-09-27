@@ -9,6 +9,9 @@ public interface ISettingsStore
     /// <summary>True when the on-disk file is a newer schema; Save must not overwrite it.</summary>
     bool IsImmutable { get; }
 
+    /// <summary>True when Load fell back to factory or a newer schema; do not sweep notes files.</summary>
+    bool SkipNotesSweep { get; }
+
     void Save(AppSettings settings);
 }
 
@@ -48,6 +51,19 @@ public sealed class WidgetDensityRequest
     public required string ItemId { get; init; }
 
     public required WidgetDensity Density { get; init; }
+}
+
+public sealed class WidgetCreateFailedEventArgs : EventArgs
+{
+    public WidgetCreateFailedEventArgs(string widgetId, Exception exception)
+    {
+        WidgetId = widgetId;
+        Exception = exception;
+    }
+
+    public string WidgetId { get; }
+
+    public Exception Exception { get; }
 }
 
 public interface IWidgetSurface : IDisposable

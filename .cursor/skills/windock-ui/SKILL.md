@@ -30,6 +30,8 @@ description: >-
 5. **字体固定。** UI `Segoe UI Variable, Segoe UI`；图标 `Segoe MDL2 Assets`；便笺 `Candara, Microsoft YaHei UI, Segoe UI`。文件夹徽标才用 Tahoma + 内嵌 Noto Sans SC。
 6. **托盘例外。** `NotifyIcon` + WinForms `ContextMenuStrip` 走系统菜单，不套 WPF token。
 7. **不碰产品边界。** 不上主屏底部任务栏、不做 AppBar、不替换 Explorer / 任务栏、不把 Dock 画成 macOS 逐像素复刻。
+8. **用户文案。** 岛上不铺自定义名称/标签，只留时间或短状态。打开模块后自动换行看全文，不要截断、不要把整段塞进 Tooltip。便笺继续换行+滚动。设置列表和钉名仍可截断+悬停全文。详见 [user-text-overflow](../../rules/user-text-overflow.mdc)。
+9. **滚动条一致性。** 模块内任何滚动视图/下拉列表（如天气城市建议、便笺历史、设置列表等）必须统一使用 WinDock 现代滚动条样式（12px 宽透明槽、6px 宽圆角胶囊滑块、无上下箭头按键、主题色滑块 `DockTokens.Settings.ScrollThumb*`），禁止出现 Windows 原生灰底方块滚动条或传统上下箭头按钮。通过 `WidgetChrome.PaintScrollViewer` 或在 `WidgetChrome.ApplyTree` 中统一附着样式，外观与设置-模块（`Settings.ScrollBarVertical`）完全一致。
 
 ## 组合层（不要绕开）
 
@@ -37,6 +39,10 @@ description: >-
 |---|---|
 | 岛上药丸 | `WidgetChrome.Wrap` |
 | 贴岛弹出层 | `WidgetChrome.Flyout` + `WidgetFlyout.Attach` |
+| 模块输入井 | `WidgetChrome.Field`（`ResolveFieldFill`，禁止 `Background=Transparent` 的 TextBox） |
+| 模块下拉 | `WidgetChrome.PaintCombo`（岛面 token，外形同设置 ComboBox；`ApplyTree` 会扫到） |
+| 模块滚动条 / 列表滚动 | `WidgetChrome.PaintScrollViewer`（12px 槽、6px 圆角胶囊滑块、无上下箭头，同设置-模块 `Settings.ScrollBarVertical`；`ApplyTree` 会自动扫到） |
+| 次要按钮 / 芯片 | `WidgetChrome.MarkQuiet`（`ResolveQuietFill`，禁止用 `QuietFill` 画深色按钮） |
 | 主/次文字 | `WidgetCopy.Primary` / `Secondary` |
 | 图标字形 | `WidgetChrome.Glyph` 或 Segoe MDL2 |
 | Dock 右键菜单 | `DockMenu.Create` / `Item` / `DangerItem` |
@@ -49,9 +55,11 @@ description: >-
 
 - [ ] 读过 tokens / 对应 surface 或 widget 页
 - [ ] 没有新增裸 `#RRGGBB` / `0xAARRGGBB`（先加常量）
+- [ ] 模块内凡出现滚动条（列表、下拉联想、多行文本）均使用 `WidgetChrome.PaintScrollViewer`，禁止 Windows 原生灰底带箭头滚动条
 - [ ] 药丸高度、圆角、间距来自 `DockTokens`
 - [ ] 浅色 / 深色都能看；岛面三种材质不把字洗掉
 - [ ] 模块需要输入或详情时用 flyout，不新开 Window
+- [ ] 岛上不铺长的用户名称；打开模块后换行看全文，不截断
 - [ ] `Tag = "tint"` / `"ink"` 的文字不会被 `ApplyTheme` 刷成正文色
 - [ ] 改完运行时 UI 后已重启 WinDock
 

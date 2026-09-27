@@ -16,5 +16,7 @@
     <ProjectReference Include="..\..\src\WinDock.Core\WinDock.Core.csproj" />
     <ProjectReference Include="..\..\src\WinDock.Infrastructure\WinDock.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\WinDock.Providers\WinDock.Providers.csproj" />
+    <ProjectReference Include="..\..\src\WinDock.Shell\WinDock.Shell.csproj" />
+    <ProjectReference Include="..\..\src\WinDock.Widgets\WinDock.Widgets.csproj" />
   </ItemGroup>
 </Project>

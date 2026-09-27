@@ -22,6 +22,9 @@
     <SolidColorBrush x:Key="Settings.FocusRing" Color="#FF2563EB"/>
     <SolidColorBrush x:Key="Settings.Danger" Color="#FFE11D48"/>
     <SolidColorBrush x:Key="Settings.DangerSubtle" Color="#14E11D48"/>
+    <SolidColorBrush x:Key="Settings.ScrollThumb" Color="#59000000"/>
+    <SolidColorBrush x:Key="Settings.ScrollThumbHover" Color="#8A000000"/>
+    <SolidColorBrush x:Key="Settings.ScrollThumbPressed" Color="#B3000000"/>
     <Thickness x:Key="Settings.PageInset">24,24,24,24</Thickness>
     <Thickness x:Key="Settings.LabelGap">0,0,0,8</Thickness>
     <Thickness x:Key="Settings.SectionLabel">0,24,0,8</Thickness>
@@ -683,5 +686,123 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <Style x:Key="Settings.ScrollPage" TargetType="RepeatButton">
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="IsTabStop" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RepeatButton">
+                    <Border Background="Transparent"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="Settings.ScrollThumbVertical" TargetType="Thumb">
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="IsTabStop" Value="False"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                    <Border Background="Transparent" Padding="0,2">
+                        <Border x:Name="Pill"
+                                Width="{x:Static core:DockTokens+Settings.ScrollThumbSize}"
+                                HorizontalAlignment="Center"
+                                Background="{DynamicResource Settings.ScrollThumb}"
+                                CornerRadius="4"
+                                SnapsToDevicePixels="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Settings.ScrollThumbHover}"/>
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Settings.ScrollThumbPressed}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="Settings.ScrollThumbHorizontal" TargetType="Thumb">
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="IsTabStop" Value="False"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                    <Border Background="Transparent" Padding="2,0">
+                        <Border x:Name="Pill"
+                                Height="{x:Static core:DockTokens+Settings.ScrollThumbSize}"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource Settings.ScrollThumb}"
+                                CornerRadius="4"
+                                SnapsToDevicePixels="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Settings.ScrollThumbHover}"/>
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Settings.ScrollThumbPressed}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <ControlTemplate x:Key="Settings.ScrollBarVertical" TargetType="ScrollBar">
+        <Grid Background="Transparent" SnapsToDevicePixels="True">
+            <Track x:Name="PART_Track" IsDirectionReversed="True" Focusable="False">
+                <Track.DecreaseRepeatButton>
+                    <RepeatButton Command="ScrollBar.PageUpCommand" Style="{StaticResource Settings.ScrollPage}"/>
+                </Track.DecreaseRepeatButton>
+                <Track.IncreaseRepeatButton>
+                    <RepeatButton Command="ScrollBar.PageDownCommand" Style="{StaticResource Settings.ScrollPage}"/>
+                </Track.IncreaseRepeatButton>
+                <Track.Thumb>
+                    <Thumb Style="{StaticResource Settings.ScrollThumbVertical}"/>
+                </Track.Thumb>
+            </Track>
+        </Grid>
+    </ControlTemplate>
+    <ControlTemplate x:Key="Settings.ScrollBarHorizontal" TargetType="ScrollBar">
+        <Grid Background="Transparent" SnapsToDevicePixels="True">
+            <Track x:Name="PART_Track" Focusable="False">
+                <Track.DecreaseRepeatButton>
+                    <RepeatButton Command="ScrollBar.PageLeftCommand" Style="{StaticResource Settings.ScrollPage}"/>
+                </Track.DecreaseRepeatButton>
+                <Track.IncreaseRepeatButton>
+                    <RepeatButton Command="ScrollBar.PageRightCommand" Style="{StaticResource Settings.ScrollPage}"/>
+                </Track.IncreaseRepeatButton>
+                <Track.Thumb>
+                    <Thumb Style="{StaticResource Settings.ScrollThumbHorizontal}"/>
+                </Track.Thumb>
+            </Track>
+        </Grid>
+    </ControlTemplate>
+    <Style TargetType="ScrollBar">
+        <Setter Property="Stylus.IsPressAndHoldEnabled" Value="False"/>
+        <Setter Property="Stylus.IsFlicksEnabled" Value="False"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Width" Value="{x:Static core:DockTokens+Settings.ScrollThickness}"/>
+        <Setter Property="MinWidth" Value="{x:Static core:DockTokens+Settings.ScrollThickness}"/>
+        <Setter Property="Template" Value="{StaticResource Settings.ScrollBarVertical}"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Style.Triggers>
+            <Trigger Property="Orientation" Value="Horizontal">
+                <Setter Property="Width" Value="Auto"/>
+                <Setter Property="MinWidth" Value="0"/>
+                <Setter Property="Height" Value="{x:Static core:DockTokens+Settings.ScrollThickness}"/>
+                <Setter Property="MinHeight" Value="{x:Static core:DockTokens+Settings.ScrollThickness}"/>
+                <Setter Property="Template" Value="{StaticResource Settings.ScrollBarHorizontal}"/>
+            </Trigger>
+        </Style.Triggers>
     </Style>
 </ResourceDictionary>

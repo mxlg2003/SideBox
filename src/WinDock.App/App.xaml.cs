@@ -1,15 +1,17 @@
 using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using WinDock.Core;
 using WinDock.Infrastructure;
-using WinForms = System.Windows.Forms;
 
 namespace WinDock.App;
 
 public partial class App : Application
 {
     private DockSession? _session;
-    private WinForms.NotifyIcon? _tray;
+    private NativeTrayIcon? _tray;
+    private ContextMenu? _trayMenu;
     private Mutex? _mutex;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -18,28 +20,47 @@ public partial class App : Application
         _mutex = new Mutex(true, @"Local\WinDock.SingleInstance", out var created);
         if (!created)
         {
-            MessageBox.Show("WinDock 已经在运行。", "WinDock", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(UiText.AlreadyRunning, "WinDock", MessageBoxButton.OK, MessageBoxImage.Information);
             Shutdown();
             return;
         }
 
-        DispatcherUnhandledException += (_, args) =>
+        try
         {
-            AppLog.Write("Unhandled exception.", args.Exception);
-            args.Handled = true;
-            _tray?.ShowBalloonTip(4000, "WinDock", "已记录到日志。", WinForms.ToolTipIcon.Warning);
-        };
-        UserAlerts.Raised += OnAlert;
-        _session = new DockSession(StartupOptions.Parse(e.Args));
-        _session.Changed += (_, _) => Dispatcher.Invoke(RefreshTray);
-        _session.TaskbarCreated += (_, _) => Dispatcher.Invoke(InitTray);
-        _session.Start();
-        InitTray();
-        RefreshTray();
+            AppLog.Write("App.OnStartup starting...");
+            AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+                AppLog.Write($"AppDomain unhandled exception: {args.ExceptionObject}");
+
+            DispatcherUnhandledException += (_, args) =>
+            {
+                AppLog.Write("Dispatcher unhandled exception.", args.Exception);
+                args.Handled = true;
+                _tray?.ShowBalloon("WinDock", UiText.LoggedToFile, isWarning: true);
+            };
+            UserAlerts.Raised += OnAlert;
+            AppLog.Write("Initializing DockSession...");
+            _session = new DockSession(StartupOptions.Parse(e.Args));
+            _session.Changed += (_, _) => Dispatcher.Invoke(RefreshTray);
+            _session.TaskbarCreated += (_, _) => Dispatcher.Invoke(InitTray);
+            AppLog.Write("Starting DockSession...");
+            _session.Start();
+            AppLog.Write("Initializing Tray...");
+            InitTray();
+            AppLog.Write("Refreshing Tray...");
+            RefreshTray();
+            AppLog.Write("OnStartup completed successfully.");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write("Fatal startup exception.", ex);
+            MessageBox.Show(ex.ToString(), "WinDock Startup Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown();
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        AppLog.Write($"App.OnExit called with exit code {e.ApplicationExitCode}.");
         UserAlerts.Raised -= OnAlert;
         _tray?.Dispose();
         _session?.Dispose();
@@ -62,20 +83,17 @@ public partial class App : Application
     private void InitTray()
     {
         _tray?.Dispose();
-        _tray = new WinForms.NotifyIcon
-        {
-            Icon = System.Drawing.SystemIcons.Application,
-            Visible = true,
-            Text = "WinDock"
-        };
-        _tray.MouseClick += (_, e) =>
-        {
-            if (e.Button == WinForms.MouseButtons.Left)
-            {
-                _session?.ShowSettings();
-            }
-        };
+        _tray = new NativeTrayIcon { Text = "WinDock" };
+        _tray.LeftClick += (_, _) => _session?.ShowSettings();
         _tray.DoubleClick += (_, _) => _session?.ShowSettings();
+        _tray.RightClick += (_, _) => Dispatcher.Invoke(() =>
+        {
+            if (_trayMenu is not null)
+            {
+                _trayMenu.Placement = PlacementMode.MousePoint;
+                _trayMenu.IsOpen = true;
+            }
+        });
         RefreshTray();
     }
 
@@ -87,37 +105,50 @@ public partial class App : Application
         }
 
         var diff = _session.CurrentDiff;
+        var profile = _session.Settings.Profiles.FirstOrDefault(item => item.Id == diff.ProfileId);
+        var profileName = profile is null ? diff.ProfileName : DefaultProfiles.DisplayName(profile);
         var text = _session.IsSafeMode
-            ? "WinDock — 安全模式"
+            ? UiText.SafeModeTray
             : ProductFeatures.ProfilesEnabled
-                ? $"WinDock — {diff.ProfileName}"
+                ? $"WinDock — {profileName}"
                 : "WinDock";
-        _tray.Text = text.Length <= 63 ? text : text[..63];
+        _tray.Text = text;
 
-        var menu = new WinForms.ContextMenuStrip();
-        menu.Items.Add("设置", null, (_, _) => _session.ShowSettings());
+        var menu = new ContextMenu();
+        var settingsItem = new MenuItem { Header = UiText.Settings };
+        settingsItem.Click += (_, _) => _session.ShowSettings();
+        menu.Items.Add(settingsItem);
+
         if (ProductFeatures.ProfilesEnabled)
         {
-            menu.Items.Add("撤销上一次情景", null, (_, _) => _session.UndoProfile());
-            menu.Items.Add(new WinForms.ToolStripSeparator());
-            foreach (var profile in _session.Settings.Profiles)
+            var undoItem = new MenuItem { Header = UiText.UndoLastProfile };
+            undoItem.Click += (_, _) => _session.UndoProfile();
+            menu.Items.Add(undoItem);
+            menu.Items.Add(new Separator());
+            foreach (var item in _session.Settings.Profiles)
             {
-                var id = profile.Id;
-                var item = new WinForms.ToolStripMenuItem(profile.Name)
+                var id = item.Id;
+                var entry = new MenuItem
                 {
-                    Checked = profile.Id == diff.ProfileId
+                    Header = DefaultProfiles.DisplayName(item),
+                    IsChecked = item.Id == diff.ProfileId
                 };
-                item.Click += (_, _) => _session.SwitchProfile(id);
-                menu.Items.Add(item);
+                entry.Click += (_, _) => _session.SwitchProfile(id);
+                menu.Items.Add(entry);
             }
         }
 
-        menu.Items.Add(new WinForms.ToolStripSeparator());
-        menu.Items.Add("退出", null, (_, _) => Shutdown());
-        _tray.ContextMenuStrip?.Dispose();
-        _tray.ContextMenuStrip = menu;
+        menu.Items.Add(new Separator());
+        var exitItem = new MenuItem { Header = UiText.Exit };
+        exitItem.Click += (_, _) => Shutdown();
+        menu.Items.Add(exitItem);
+
+        _trayMenu = menu;
     }
 
+    public void ShowTrayBalloon(string title, string text, bool isWarning = false) =>
+        Dispatcher.Invoke(() => _tray?.ShowBalloon(title, text, isWarning));
+
     private void OnAlert(string title, string message) =>
-        Dispatcher.Invoke(() => _tray?.ShowBalloonTip(4000, title, message, WinForms.ToolTipIcon.Info));
+        Dispatcher.Invoke(() => _tray?.ShowBalloon(title, message, isWarning: false));
 }

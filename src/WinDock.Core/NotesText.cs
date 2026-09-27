@@ -35,8 +35,9 @@ public static class NotesText
     public static bool HasTitle(string? text) =>
         TryTitle(text, out var title) && !string.IsNullOrEmpty(title);
 
-    public static string DockPreview(string? text, string empty = "写点什么…")
+    public static string DockPreview(string? text, string? empty = null)
     {
+        empty ??= UiText.NotesWriteSomething;
         if (IsBlank(text))
         {
             return empty;
@@ -48,12 +49,112 @@ public static class NotesText
             return title;
         }
 
+        var (done, total, firstPending) = GetTodoStats(text);
+        if (total > 0)
+        {
+            var summary = $"☑ {done}/{total}";
+            if (!string.IsNullOrWhiteSpace(firstPending))
+            {
+                summary += $" · {firstPending}";
+            }
+            return summary;
+        }
+
         var preview = TakeLines(Body(text), 2);
         return string.IsNullOrEmpty(preview) ? empty : preview;
     }
 
-    public static string ListPreview(string? text, string empty = "便笺")
+    public static bool IsTodoLine(string line)
     {
+        var trimmed = line.TrimStart();
+        return trimmed.StartsWith("- [ ] ", StringComparison.Ordinal)
+            || trimmed.StartsWith("- [x] ", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("* [ ] ", StringComparison.Ordinal)
+            || trimmed.StartsWith("* [x] ", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("[ ] ", StringComparison.Ordinal)
+            || trimmed.StartsWith("[x] ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool IsCheckedTodo(string line)
+    {
+        var trimmed = line.TrimStart();
+        return trimmed.StartsWith("- [x] ", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("* [x] ", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("[x] ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static string ToggleTodoLine(string line)
+    {
+        var leadingSpaces = line.Length - line.TrimStart().Length;
+        var indent = line[..leadingSpaces];
+        var trimmed = line.TrimStart();
+
+        if (trimmed.StartsWith("- [ ] ", StringComparison.Ordinal))
+        {
+            return indent + "- [x] " + trimmed[6..];
+        }
+        if (trimmed.StartsWith("- [x] ", StringComparison.OrdinalIgnoreCase))
+        {
+            return indent + "- [ ] " + trimmed[6..];
+        }
+        if (trimmed.StartsWith("* [ ] ", StringComparison.Ordinal))
+        {
+            return indent + "* [x] " + trimmed[6..];
+        }
+        if (trimmed.StartsWith("* [x] ", StringComparison.OrdinalIgnoreCase))
+        {
+            return indent + "* [ ] " + trimmed[6..];
+        }
+        if (trimmed.StartsWith("[ ] ", StringComparison.Ordinal))
+        {
+            return indent + "[x] " + trimmed[4..];
+        }
+        if (trimmed.StartsWith("[x] ", StringComparison.OrdinalIgnoreCase))
+        {
+            return indent + "[ ] " + trimmed[4..];
+        }
+
+        return indent + "- [ ] " + trimmed;
+    }
+
+    public static (int Done, int Total, string? FirstPending) GetTodoStats(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return (0, 0, null);
+        }
+
+        var lines = text.Replace("\r", "", StringComparison.Ordinal).Split('\n');
+        var done = 0;
+        var total = 0;
+        string? firstPending = null;
+
+        foreach (var raw in lines)
+        {
+            if (!IsTodoLine(raw))
+            {
+                continue;
+            }
+
+            total++;
+            if (IsCheckedTodo(raw))
+            {
+                done++;
+            }
+            else if (firstPending is null)
+            {
+                var content = raw.TrimStart();
+                var prefixLen = content.StartsWith("- [ ] ", StringComparison.Ordinal) || content.StartsWith("* [ ] ", StringComparison.Ordinal) ? 6 : 4;
+                firstPending = content[prefixLen..].Trim();
+            }
+        }
+
+        return (done, total, firstPending);
+    }
+
+    public static string ListPreview(string? text, string? empty = null)
+    {
+        empty ??= UiText.WidgetNotes;
         if (HasTitle(text))
         {
             TryTitle(text, out var title);

@@ -35,9 +35,9 @@ public static class SysActivityFormat
 
     public static string LayoutTitle(string layout) => SysActivityLayouts.Normalize(layout) switch
     {
-        SysActivityLayouts.Rings => "圆环",
-        SysActivityLayouts.Bars => "条形",
-        _ => "数字"
+        SysActivityLayouts.Rings => UiLocale.T("圆环", "Rings"),
+        SysActivityLayouts.Bars => UiLocale.T("条形", "Bars"),
+        _ => UiLocale.T("数字", "Numbers")
     };
 
     public static string Percent(double percent, bool available) =>

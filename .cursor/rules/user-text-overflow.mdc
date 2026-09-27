@@ -1,0 +1,27 @@
+---
+description: 岛上少显示用户文字；打开模块后自动换行，不要截断。
+globs:
+  - src/WinDock.Widgets/**/*.cs
+  - src/WinDock.Shell/**/*.cs
+  - src/WinDock.App/**/*.cs
+  - src/WinDock.App/**/*.xaml
+alwaysApply: false
+---
+
+# 用户输入文本：岛上精简，弹出层换行
+
+倒计时名称、闹钟标签、预设名等用户短输入：
+
+- **岛上**倒计时只留时间/短状态，不要把预设名铺在药丸上。闹钟已设定时第二行显示标签，宽度对齐「时刻 + 今天/明天」，超出省略号（没有标签则不占行）。
+- **打开模块后**（flyout）自动换行看全文，不要省略号截断，也不要把整段塞进 `ToolTip`。
+- **输入井**（`TextBox` / `WidgetChrome.Field`）显示全文，不要加省略号。
+- **便笺**继续换行+滚动，正文不截断、不进 Tooltip。
+- **设置列表 / 钉名称**仍可省略号截断，悬停看全文（不是模块弹出层）。
+
+```csharp
+// ❌ 弹出层截断
+name.TextTrimming = TextTrimming.CharacterEllipsis;
+
+// ✅ 弹出层换行
+WidgetCopy.WrapUserText(name, preset.Name, DockTokens.FlyoutUserCopyMaxWidth);
+```

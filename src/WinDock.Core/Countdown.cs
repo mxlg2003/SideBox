@@ -146,27 +146,20 @@ public sealed record CountdownSettings
 
 public static class CountdownFormat
 {
-    public const string Ready = "倒计时";
-    public const string Paused = "已暂停";
-    public const string Finished = "时间到";
-    public const string Presets = "预设";
-    public const string TimerName = "计时器名称";
-    public const string Hours = "小时";
-    public const string Minutes = "分钟";
-    public const string Seconds = "秒";
-    public const string PresetSaved = "已保存预设";
+    public static string Ready => UiText.WidgetCountdown;
+    public static string Paused => StopwatchFormat.Paused;
+    public static string Finished => UiLocale.T("时间到", "Time’s up");
+    public static string Presets => UiLocale.T("预设", "Presets");
+    public static string TimerName => UiLocale.T("计时器名称", "Timer name");
+    public static string Hours => UiLocale.T("小时", "Hours");
+    public static string Minutes => UiLocale.T("分钟", "Minutes");
+    public static string Seconds => UiLocale.T("秒", "Seconds");
+    public static string PresetSaved => UiLocale.T("已保存预设", "Preset saved");
 
     public static string Time(TimeSpan remaining) => StopwatchFormat.Time(remaining);
 
-    public static string TileStatus(bool running, bool paused, string? name)
-    {
-        if (paused && !running)
-        {
-            return Paused;
-        }
-
-        return string.IsNullOrWhiteSpace(name) ? Ready : name.Trim();
-    }
+    public static string TileStatus(bool running, bool paused) =>
+        paused && !running ? Paused : Ready;
 
     public static string FinishedMessage(string? name) =>
         string.IsNullOrWhiteSpace(name) ? Finished : name.Trim();

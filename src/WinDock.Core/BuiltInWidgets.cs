@@ -12,8 +12,12 @@ public static class BuiltInWidgets
     public const string BingWallpaper = "bing";
     public const string Stopwatch = "stopwatch";
     public const string Countdown = "countdown";
+    public const string Alarm = "alarm";
     public const string FocusTimer = "focustimer";
     public const string TimeProgress = "timeprogress";
+    public const string Weather = "weather";
+    public const string Schedule = "schedule";
+    public const string PlaceholderTag = "wd-placeholder";
 
     public static readonly IReadOnlyList<string> All =
     [
@@ -26,8 +30,11 @@ public static class BuiltInWidgets
         BingWallpaper,
         Stopwatch,
         Countdown,
+        Alarm,
         FocusTimer,
-        TimeProgress
+        TimeProgress,
+        Weather,
+        Schedule
     ];
 
     public static bool IsKnown(string? widgetId) =>
@@ -39,48 +46,84 @@ public static class BuiltInWidgets
         widgetId is not null && Implemented.Contains(widgetId, StringComparer.Ordinal);
 
     public static bool CanOpen(string? widgetId) =>
-        widgetId is Notes or Clock or Stopwatch or Countdown or FocusTimer or Power or TimeProgress or SysActivity or Network;
+        widgetId is Notes or Clock or Stopwatch or Countdown or Alarm or FocusTimer or Power or TimeProgress or SysActivity or Network or Weather or Schedule;
 
     public static bool CanCustomize(string? widgetId) =>
         widgetId is Notes or Clock or FocusTimer or Power or TimeProgress or SysActivity or Network;
 
     public static bool HasDensityModes(string? widgetId) => widgetId is
-        Clock or Network or NowPlaying or BingWallpaper or TimeProgress;
+        Clock or Network or NowPlaying or BingWallpaper or TimeProgress or Weather;
 
     public static string DisplayName(string widgetId) => widgetId switch
     {
-        Clock => "时钟",
-        Notes => "便笺",
-        SysActivity => "系统状态",
-        Network => "网络",
-        Power => "电源",
-        NowPlaying => "正在播放",
-        BingWallpaper => "Bing 壁纸",
-        Stopwatch => "秒表",
-        Countdown => "倒计时",
-        FocusTimer => "专注计时器",
-        TimeProgress => "时间进度",
+        Clock => UiText.WidgetClock,
+        Notes => UiText.WidgetNotes,
+        SysActivity => UiText.WidgetSysActivity,
+        Network => UiText.WidgetNetwork,
+        Power => UiText.WidgetPower,
+        NowPlaying => UiText.WidgetNowPlaying,
+        BingWallpaper => UiText.WidgetBing,
+        Stopwatch => UiText.WidgetStopwatch,
+        Countdown => UiText.WidgetCountdown,
+        Alarm => UiText.WidgetAlarm,
+        FocusTimer => UiText.WidgetFocusTimer,
+        TimeProgress => UiText.WidgetTimeProgress,
+        Weather => UiText.WidgetWeather,
+        Schedule => UiText.WidgetSchedule,
         _ => widgetId
     };
 
     public static string Blurb(string widgetId) => widgetId switch
     {
-        Clock => "本地时间，点开看大钟。",
-        Notes => "贴在岛上的便笺，点开即改。",
-        SysActivity => "CPU 和内存占用。",
-        Network => "上下行速率。添加时会征求显示适配器名。",
-        Power => "笔记本和蓝牙外设电量。",
-        NowPlaying => "当前歌曲。添加时会征求读取标题和封面。",
-        BingWallpaper => "每日壁纸。添加时会访问 bing.com。",
-        Stopwatch => "独立秒表。",
-        Countdown => "按名称保存预设，倒数到零通知。",
-        FocusTimer => "本地番茄钟，不会打开系统专注。",
-        TimeProgress => "今年、本月或今天过了多少。",
+        Clock => UiText.BlurbClock,
+        Notes => UiText.BlurbNotes,
+        SysActivity => UiText.BlurbSysActivity,
+        Network => UiText.BlurbNetwork,
+        Power => UiText.BlurbPower,
+        NowPlaying => UiText.BlurbNowPlaying,
+        BingWallpaper => UiText.BlurbBing,
+        Stopwatch => UiText.BlurbStopwatch,
+        Countdown => UiText.BlurbCountdown,
+        Alarm => UiText.BlurbAlarm,
+        FocusTimer => UiText.BlurbFocusTimer,
+        TimeProgress => UiText.BlurbTimeProgress,
+        Weather => UiText.BlurbWeather,
+        Schedule => UiText.BlurbSchedule,
         _ => widgetId
     };
 
+    public static bool MatchesSearch(string widgetId, string term)
+    {
+        if (string.IsNullOrWhiteSpace(term))
+        {
+            return true;
+        }
+
+        using (UiLocale.Push(UiLanguage.Chinese))
+        {
+            if (Contains(widgetId, term))
+            {
+                return true;
+            }
+        }
+
+        using (UiLocale.Push(UiLanguage.English))
+        {
+            if (Contains(widgetId, term))
+            {
+                return true;
+            }
+        }
+
+        return widgetId.Contains(term, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool Contains(string widgetId, string term) =>
+        DisplayName(widgetId).Contains(term, StringComparison.OrdinalIgnoreCase)
+        || Blurb(widgetId).Contains(term, StringComparison.OrdinalIgnoreCase);
+
     public static bool AllowsMultiple(string widgetId) =>
-        widgetId is Notes or Stopwatch or Countdown or FocusTimer;
+        widgetId is Notes or Stopwatch or Countdown or Alarm or FocusTimer or Schedule;
 
     public static WidgetPlacement DefaultPlacement(string widgetId) => widgetId switch
     {
@@ -93,8 +136,11 @@ public static class BuiltInWidgets
         BingWallpaper => new WidgetPlacement { Id = BingWallpaper, Monitor = "primary", X = 520, Y = 200 },
         Stopwatch => new WidgetPlacement { Id = Stopwatch, Monitor = "primary", X = 520, Y = 320 },
         Countdown => new WidgetPlacement { Id = Countdown, Monitor = "primary", X = 760, Y = 320 },
+        Alarm => new WidgetPlacement { Id = Alarm, Monitor = "primary", X = 760, Y = 200 },
         FocusTimer => new WidgetPlacement { Id = FocusTimer, Monitor = "primary", X = 520, Y = 440 },
         TimeProgress => new WidgetPlacement { Id = TimeProgress, Monitor = "primary", X = 520, Y = 560 },
+        Weather => new WidgetPlacement { Id = Weather, Monitor = "primary", X = 760, Y = 440 },
+        Schedule => new WidgetPlacement { Id = Schedule, Monitor = "primary", X = 760, Y = 560 },
         _ => new WidgetPlacement { Id = widgetId, Monitor = "primary", X = 40, Y = 80 }
     };
 }

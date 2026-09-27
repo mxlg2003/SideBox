@@ -21,6 +21,7 @@ public sealed class DockSession : IDisposable
     private readonly IDisplayService _display;
     private readonly IDockLayoutService _layout = new CoreDockLayoutService();
     private readonly IZorderPolicy _zorder = new DefaultZorderPolicy();
+    private readonly IAppBarService _appBar = new Win32AppBarService();
     private readonly ProfileEngine _engine = new();
     private readonly WidgetViewRegistry _views = new();
     private readonly DockWindow _dock = new();
@@ -54,6 +55,7 @@ public sealed class DockSession : IDisposable
         _store = new JsonSettingsStore();
         var loaded = _store.Load();
         Settings = SettingsEditor.ClearSessionOverride(loaded);
+        UiLocale.Apply(Settings.Ui.Language);
         _loadMessage = _store.LastLoadMessage;
         if (loaded.ManualOverride.Until == ManualOverrideUntil.Session
             && !string.IsNullOrWhiteSpace(loaded.ManualOverrideProfileId))
@@ -70,7 +72,7 @@ public sealed class DockSession : IDisposable
         _gate = new PermissionGate(Settings.Privacy);
         Hub = new ProviderHub(_gate, new FileNotesStore(), AppPaths.BingWallpaperDirectory, AppPaths.IconCacheDirectory);
         Hub.Media.CaptureMetadata = _gate.Allows(PermissionIds.MediaRead);
-        _display = new WinFormsDisplayService();
+        _display = new Win32DisplayService();
         _shell = new ShellHost();
         _runningPins = new System.Threading.Timer(_ => SampleRunning(), null, Timeout.Infinite, Timeout.Infinite);
         _transparencyDebounce.Tick += (_, _) => FlushTransparency();
@@ -90,10 +92,26 @@ public sealed class DockSession : IDisposable
 
     public event EventHandler? TaskbarCreated;
 
+    public void RequestExit() => Application.Current.Shutdown();
+
+    private bool _notifiedBackground;
+    public void NotifyBackgroundRunning()
+    {
+        if (_notifiedBackground) return;
+        _notifiedBackground = true;
+        if (Application.Current is App app)
+        {
+            app.ShowTrayBalloon("WinDock", UiText.BackgroundRunningNotice);
+        }
+    }
+
     public void Start()
     {
+        _dock.WindowEnumerator = item => Hub.Shell.GetWindows(item);
+        _dock.WindowActivateRequested += (_, hwnd) => Hub.Shell.ActivateWindow(hwnd);
+        _dock.WindowCloseRequested += (_, hwnd) => Hub.Shell.CloseWindow(hwnd);
         _dock.SettingsRequested += (_, _) => ShowSettings();
-        _dock.ExitRequested += (_, _) => Application.Current.Shutdown();
+        _dock.ExitRequested += (_, _) => RequestExit();
         _dock.ProfileSwitchRequested += (_, profileId) => SwitchProfile(profileId);
         _dock.IslandLengthChanged += (_, length) =>
         {
@@ -154,9 +172,19 @@ public sealed class DockSession : IDisposable
         _shell.TaskbarCreated += (_, _) => Dispatch(() => TaskbarCreated?.Invoke(this, EventArgs.Empty));
         WidgetFlyout.Elevate = PopupTopmost.TryElevate;
         WidgetFlyout.OpenStateChanged += OnFlyoutOpenStateChanged;
+        _dock.WidgetCreateFailed += (_, failure) =>
+            AppLog.Write($"Failed to create widget slot '{failure.WidgetId}'.", failure.Exception);
         _stackFlyout.PinActivateRequested += (_, itemId) => ActivatePin(itemId);
         _stackFlyout.PinLaunchRequested += (_, itemId) => LaunchPin(itemId);
         _stackFlyout.PinRemoveRequested += (_, itemId) => OnWidgetRemove(itemId);
+        _dock.MouseEnter += (_, _) => Dispatch(PulseZorder);
+        _dock.MouseMove += (_, _) =>
+        {
+            if (_hostPulse.Interval > TimeSpan.FromMilliseconds(100))
+            {
+                _hostPulse.Interval = TimeSpan.FromMilliseconds(100);
+            }
+        };
         Apply(Settings);
         _hostPulse.Start();
         if (ProductFeatures.AutoProfileTriggersEnabled)
@@ -176,7 +204,7 @@ public sealed class DockSession : IDisposable
     {
         if (_options.SafeMode)
         {
-            MessageBox.Show("当前是安全模式：已停用模块、设置和拖放。退出后以正常方式启动即可恢复。", "WinDock", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(UiText.SafeModeBlock, "WinDock", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
@@ -200,6 +228,16 @@ public sealed class DockSession : IDisposable
         }
 
         Commit(SettingsEditor.WithTheme(Settings, theme));
+    }
+
+    public void SetLanguage(UiLanguage language)
+    {
+        if (Settings.Ui.Language == language)
+        {
+            return;
+        }
+
+        Commit(SettingsEditor.WithLanguage(Settings, language));
     }
 
     public void SetBackdrop(DockBackdrop backdrop)
@@ -296,7 +334,7 @@ public sealed class DockSession : IDisposable
 
         if (enabled && !TryBindReveal(Settings, CurrentDiff.Dock with { AutoHide = true, RevealHotkey = true }))
         {
-            RevealHotkeyBindError = "快捷键已被占用，请改成别的组合";
+            RevealHotkeyBindError = UiText.HotkeyTaken;
             _shell.BindHotkeys(EffectiveHotkeys(Settings, CurrentDiff.Dock));
             return false;
         }
@@ -326,7 +364,7 @@ public sealed class DockSession : IDisposable
         var probe = CurrentDiff.Dock with { AutoHide = true, RevealHotkey = true };
         if (!TryBindReveal(next, probe))
         {
-            RevealHotkeyBindError = "快捷键已被占用，请改成别的组合";
+            RevealHotkeyBindError = UiText.HotkeyTaken;
             _shell.BindHotkeys(EffectiveHotkeys(Settings, CurrentDiff.Dock));
             return false;
         }
@@ -396,24 +434,6 @@ public sealed class DockSession : IDisposable
         }
 
         Commit(SettingsEditor.AddWidget(next, CurrentDiff.ProfileId, widgetId));
-    }
-
-    public void RemoveLastWidget(string widgetId)
-    {
-        if (CurrentDiff is null || string.IsNullOrWhiteSpace(widgetId))
-        {
-            return;
-        }
-
-        var item = CurrentDiff.Dock.Items.LastOrDefault(entry =>
-            entry.Type == DockItemType.WidgetChip
-            && string.Equals(entry.WidgetId, widgetId, StringComparison.Ordinal));
-        if (item is null)
-        {
-            return;
-        }
-
-        OnWidgetRemove(item.Id);
     }
 
     public void ShowHiddenNote(string itemId)
@@ -507,9 +527,10 @@ public sealed class DockSession : IDisposable
         settings = Settings;
         var message = widgetId switch
         {
-            BuiltInWidgets.NowPlaying => "将读取正在播放的歌曲名、封面和播放器名称。可以在设置的隐私页随时关闭。",
-            BuiltInWidgets.Network => "将显示网络适配器名称和上下行速率。数据只留在本机，不会上传。",
-            BuiltInWidgets.BingWallpaper => "将访问 bing.com 下载壁纸图。设为桌面时会再确认一次。",
+            BuiltInWidgets.NowPlaying => UiText.ConsentNowPlaying,
+            BuiltInWidgets.Network => UiText.ConsentNetwork,
+            BuiltInWidgets.BingWallpaper => UiText.ConsentBing,
+            BuiltInWidgets.Weather => UiText.ConsentWeather,
             _ => null
         };
         if (message is null)
@@ -533,7 +554,7 @@ public sealed class DockSession : IDisposable
             return true;
         }
 
-        var result = AskConsent(message, "添加" + BuiltInWidgets.DisplayName(widgetId));
+        var result = AskConsent(message, UiText.AddWidgetTitle(BuiltInWidgets.DisplayName(widgetId)));
         if (result != MessageBoxResult.OK)
         {
             return false;
@@ -599,6 +620,7 @@ public sealed class DockSession : IDisposable
             : SettingsEditor.RevokePermission(next, PermissionIds.MediaRead);
         _gate.UpdatePrivacy(privacy);
         Hub.Media.CaptureMetadata = _gate.Allows(PermissionIds.MediaRead);
+        Hub.Weather.AllowAutoLocate = privacy.PreciseLocation;
         Commit(next);
     }
 
@@ -679,6 +701,7 @@ public sealed class DockSession : IDisposable
         WidgetFlyout.OpenStateChanged -= OnFlyoutOpenStateChanged;
         _dock.IslandMouseWheel -= OnIslandMouseWheel;
         _dock.Dispose();
+        _appBar.Remove();
         _display.Dispose();
         _shell.Dispose();
         Hub.Dispose();
@@ -708,7 +731,7 @@ public sealed class DockSession : IDisposable
         catch (Exception ex)
         {
             AppLog.Write("Failed to save settings.", ex);
-            UserAlerts.Show("WinDock", "未能保存设置，已记入日志。");
+            UserAlerts.Show("WinDock", UiText.SaveFailed);
             Apply(Settings);
         }
     }
@@ -718,6 +741,7 @@ public sealed class DockSession : IDisposable
         try
         {
             Settings = SettingsValidator.EnsureInvariants(settings);
+            UiLocale.Apply(Settings.Ui.Language);
             var snapshot = ContextAssembler.Create(_options, Settings, Hub, _display.Current);
             CurrentDiff = _engine.Evaluate(Settings, snapshot);
             var switched = ProductFeatures.ProfilesEnabled && _appliedProfileId != CurrentDiff.ProfileId;
@@ -796,6 +820,11 @@ public sealed class DockSession : IDisposable
                         countdown.ApplySettings(item.Countdown ?? CountdownSettings.Default);
                     }
 
+                    if (view is IAlarmConfigurable alarm)
+                    {
+                        alarm.ApplySettings(item.Alarm ?? AlarmSettings.Default);
+                    }
+
                     if (view is IPowerWidgetConfigurable power)
                     {
                         power.ApplySettings(item.Power ?? PowerWidgetSettings.Default);
@@ -814,6 +843,16 @@ public sealed class DockSession : IDisposable
                     if (view is INetworkConfigurable net)
                     {
                         net.ApplySettings(item.Network ?? NetworkWidgetSettings.Default);
+                    }
+
+                    if (view is IWeatherConfigurable weather)
+                    {
+                        weather.ApplySettings(item.Weather ?? WeatherSettings.Default);
+                    }
+
+                    if (view is IScheduleConfigurable schedule)
+                    {
+                        schedule.ApplySettings(item.Schedule ?? ScheduleSettings.Default);
                     }
 
                     if (view is INotesHistory history)
@@ -838,7 +877,7 @@ public sealed class DockSession : IDisposable
                 CurrentDiff.ProfileId);
             RevealHotkeyBindError = _shell.BindHotkeys(EffectiveHotkeys(Settings, CurrentDiff.Dock))
                 ? null
-                : "快捷键已被占用，请改成别的组合";
+                : UiText.HotkeyTaken;
             ThreadPool.QueueUserWorkItem(_ => SampleRunning());
             PulseZorder();
 
@@ -855,13 +894,13 @@ public sealed class DockSession : IDisposable
         catch (Exception ex)
         {
             AppLog.Write("Failed to apply settings.", ex);
-            UserAlerts.Show("WinDock", "未能更新 Dock，已记入日志。");
+            UserAlerts.Show("WinDock", UiText.DockUpdateFailed);
         }
     }
 
     private UIElement GetOrCreateWidget(DockItem item)
     {
-        if (_widgetViews.TryGetValue(item.Id, out var view))
+        if (_widgetViews.TryGetValue(item.Id, out var view) && view is not PlaceholderWidget)
         {
             return view;
         }
@@ -875,14 +914,20 @@ public sealed class DockSession : IDisposable
                 Hub.Notes.TryAdoptLegacy(item.Id);
             }
 
-            view = _views.Create(item, Hub);
+            view = _views.Create(item, Hub, ApplyBingWallpaperAsync);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            view = new PlaceholderWidget(BuiltInWidgets.DisplayName(widgetId));
+            AppLog.Write($"Failed to create widget '{widgetId}'.", ex);
+            view = new PlaceholderWidget(widgetId);
         }
 
         _widgetViews[item.Id] = view;
+        if (view is PlaceholderWidget)
+        {
+            return view;
+        }
+
         if (view is IIslandLayoutAware layout)
         {
             layout.IslandLayoutChanged += OnIslandLayoutChanged;
@@ -900,6 +945,11 @@ public sealed class DockSession : IDisposable
         if (view is ICountdownConfigurable countdown)
         {
             countdown.SettingsChanged += OnCountdownChanged;
+        }
+
+        if (view is IAlarmConfigurable alarm)
+        {
+            alarm.SettingsChanged += OnAlarmChanged;
         }
 
         if (view is IPowerWidgetConfigurable power)
@@ -920,6 +970,16 @@ public sealed class DockSession : IDisposable
         if (view is INetworkConfigurable net)
         {
             net.SettingsChanged += OnNetworkWidgetChanged;
+        }
+
+        if (view is IWeatherConfigurable weather)
+        {
+            weather.SettingsChanged += OnWeatherChanged;
+        }
+
+        if (view is IScheduleConfigurable schedule)
+        {
+            schedule.SettingsChanged += OnScheduleChanged;
         }
 
         if (view is IClockConfigurable clock)
@@ -962,7 +1022,7 @@ public sealed class DockSession : IDisposable
 
         if (kind == PinPickKind.Folder)
         {
-            var dialog = new OpenFolderDialog { Title = "添加文件夹" };
+            var dialog = new OpenFolderDialog { Title = UiText.AddFolderTitle };
             if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.FolderName))
             {
                 return;
@@ -974,8 +1034,8 @@ public sealed class DockSession : IDisposable
 
         var files = new OpenFileDialog
         {
-            Title = "添加快捷方式",
-            Filter = "快捷方式与程序|*.lnk;*.exe|所有文件|*.*",
+            Title = UiText.AddShortcutTitle,
+            Filter = UiText.FileFilter,
             Multiselect = true
         };
         if (files.ShowDialog() != true || files.FileNames.Length == 0)
@@ -1004,11 +1064,11 @@ public sealed class DockSession : IDisposable
     {
         if (result.Skipped > 0 && result.Added == 0)
         {
-            UserAlerts.Show("WinDock", "已在 Dock 上。");
+            UserAlerts.Show("WinDock", UiText.AlreadyOnDock);
         }
         else if (result.Skipped > 0)
         {
-            UserAlerts.Show("WinDock", $"已在 Dock 上（跳过 {result.Skipped} 项）。");
+            UserAlerts.Show("WinDock", UiText.AlreadyOnDockSkipped(result.Skipped));
         }
 
         if (result.Added > 0)
@@ -1030,12 +1090,15 @@ public sealed class DockSession : IDisposable
             return;
         }
 
-        if (!Hub.Shell.TryActivate(item))
+        Task.Run(() =>
         {
-            Hub.Shell.TryLaunch(item);
-        }
+            if (!Hub.Shell.TryActivate(item))
+            {
+                Dispatch(() => Hub.Shell.TryLaunch(item));
+            }
 
-        ThreadPool.QueueUserWorkItem(_ => SampleRunning());
+            SampleRunning();
+        });
     }
 
     private void LaunchPin(string itemId)
@@ -1177,7 +1240,8 @@ public sealed class DockSession : IDisposable
             PointerInDock = inDock,
             PointerInHotzone = pointerInHot,
             KeepVisible = keepVisible,
-            IsIdle = idle
+            IsIdle = idle,
+            AppBarHealthy = _appBar.IsRegistered
         });
         if (state != _zorderState)
         {
@@ -1185,9 +1249,17 @@ public sealed class DockSession : IDisposable
             _dock.ApplyZorder(state);
         }
 
-        _hostPulse.Interval = CurrentDiff.Dock.AutoHide
-            ? TimeSpan.FromMilliseconds(100)
-            : TimeSpan.FromSeconds(2);
+        if (!CurrentDiff.Dock.AutoHide)
+        {
+            _hostPulse.Interval = TimeSpan.FromSeconds(2);
+        }
+        else
+        {
+            var isIdleHidden = _zorderState == DockZorderState.AutoHidden && !pointerInHot && !inDock && !keepVisible;
+            _hostPulse.Interval = isIdleHidden
+                ? TimeSpan.FromMilliseconds(1000)
+                : TimeSpan.FromMilliseconds(100);
+        }
     }
 
     private void OnFlyoutOpenStateChanged(object? sender, EventArgs e) => Dispatch(() =>
@@ -1282,8 +1354,8 @@ public sealed class DockSession : IDisposable
         if (!settings.Privacy.BingDownload)
         {
             var result = AskConsent(
-                "将访问 bing.com 下载壁纸图，并把它设为桌面。",
-                "今日 Bing 壁纸");
+                UiText.ApplyBingMessage,
+                UiText.TodayBing);
             if (result != MessageBoxResult.OK)
             {
                 return;
@@ -1294,7 +1366,7 @@ public sealed class DockSession : IDisposable
         }
 
         var ok = await Hub.Bing.TryApplyTodayAsync();
-        UserAlerts.Show("WinDock", ok ? "已设为今日 Bing 壁纸。" : "未能应用 Bing 壁纸。");
+        UserAlerts.Show("WinDock", ok ? UiText.BingApplied : UiText.BingApplyFailed);
     }
 
     private void SyncProviders()
@@ -1305,6 +1377,7 @@ public sealed class DockSession : IDisposable
             Hub.Network.Stop();
             Hub.Media.Stop();
             Hub.Power.Stop();
+            Hub.Weather.Stop();
             return;
         }
 
@@ -1312,10 +1385,12 @@ public sealed class DockSession : IDisposable
             .Where(item => item.Type == DockItemType.WidgetChip)
             .Select(item => item.WidgetId)
             .ToHashSet(StringComparer.Ordinal);
+        Hub.Weather.AllowAutoLocate = Settings.Privacy.PreciseLocation;
         Toggle(ids.Contains(BuiltInWidgets.SysActivity), Hub.Perf.Start, Hub.Perf.Stop);
         Toggle(ids.Contains(BuiltInWidgets.Network), Hub.Network.Start, Hub.Network.Stop);
         Toggle(ids.Contains(BuiltInWidgets.NowPlaying), Hub.Media.Start, Hub.Media.Stop);
         Toggle(ids.Contains(BuiltInWidgets.Power), Hub.Power.Start, Hub.Power.Stop);
+        Toggle(ids.Contains(BuiltInWidgets.Weather), Hub.Weather.Start, Hub.Weather.Stop);
     }
 
     private static void Toggle(bool on, Action start, Action stop)
@@ -1448,6 +1523,19 @@ public sealed class DockSession : IDisposable
             return;
         }
 
+        if (item is not null && item.WidgetId == BuiltInWidgets.Schedule)
+        {
+            var confirm = MessageBox.Show(
+                UiText.ConfirmRemoveSchedule,
+                BuiltInWidgets.DisplayName(BuiltInWidgets.Schedule),
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Question);
+            if (confirm != MessageBoxResult.OK)
+            {
+                return;
+            }
+        }
+
         Commit(SettingsEditor.RemoveDockItem(Settings, CurrentDiff.ProfileId, itemId));
     }
 
@@ -1487,6 +1575,11 @@ public sealed class DockSession : IDisposable
 
     private void SweepNotes()
     {
+        if (_store.SkipNotesSweep || _store.IsImmutable)
+        {
+            return;
+        }
+
         try
         {
             Hub.Notes.Sweep(SettingsEditor.LiveNoteKeys(Settings));
@@ -1543,6 +1636,22 @@ public sealed class DockSession : IDisposable
         }
 
         SaveWithoutRelayout(SettingsEditor.WithCountdown(Settings, CurrentDiff.ProfileId, itemId, settings));
+    }
+
+    private void OnAlarmChanged(object? sender, AlarmSettings settings)
+    {
+        if (CurrentDiff is null)
+        {
+            return;
+        }
+
+        var itemId = _widgetViews.FirstOrDefault(pair => ReferenceEquals(pair.Value, sender)).Key;
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return;
+        }
+
+        SaveWithoutRelayout(SettingsEditor.WithAlarm(Settings, CurrentDiff.ProfileId, itemId, settings));
     }
 
     private void OnClockTimeZoneChanged(object? sender, string? timeZoneId)
@@ -1631,6 +1740,67 @@ public sealed class DockSession : IDisposable
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    private void OnWeatherChanged(object? sender, WeatherSettings settings)
+    {
+        if (CurrentDiff is null)
+        {
+            return;
+        }
+
+        var itemId = _widgetViews.FirstOrDefault(pair => ReferenceEquals(pair.Value, sender)).Key;
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return;
+        }
+
+        var next = WeatherSettings.Normalize(settings);
+        if (next.AutoLocate && !Settings.Privacy.PreciseLocation)
+        {
+            if (AskConsent(UiText.ConsentLocation, BuiltInWidgets.DisplayName(BuiltInWidgets.Weather)) != MessageBoxResult.OK)
+            {
+                next = next with { AutoLocate = false };
+                if (sender is IWeatherConfigurable weather)
+                {
+                    weather.ApplySettings(next);
+                }
+            }
+            else
+            {
+                var privacy = Settings.Privacy with { PreciseLocation = true };
+                _gate.UpdatePrivacy(privacy);
+                Hub.Weather.AllowAutoLocate = true;
+                var withPrivacy = SettingsEditor.WithPrivacy(Settings, privacy);
+                SaveWithoutRelayout(SettingsEditor.WithWeather(withPrivacy, CurrentDiff.ProfileId, itemId, next));
+                RelayoutIsland();
+                Changed?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+        }
+
+        Hub.Weather.AllowAutoLocate = Settings.Privacy.PreciseLocation;
+        SaveWithoutRelayout(SettingsEditor.WithWeather(Settings, CurrentDiff.ProfileId, itemId, next));
+        RelayoutIsland();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnScheduleChanged(object? sender, ScheduleSettings settings)
+    {
+        if (CurrentDiff is null)
+        {
+            return;
+        }
+
+        var itemId = _widgetViews.FirstOrDefault(pair => ReferenceEquals(pair.Value, sender)).Key;
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return;
+        }
+
+        SaveWithoutRelayout(SettingsEditor.WithSchedule(Settings, CurrentDiff.ProfileId, itemId, settings));
+        RelayoutIsland();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     private void ApplyWidgetDensity(WidgetDensityRequest request)
     {
         if (_options.SafeMode || CurrentDiff is null)
@@ -1683,6 +1853,23 @@ public sealed class DockSession : IDisposable
             measured.Height,
             CurrentDiff.Dock.IslandLength);
         _dock.ApplyLayout(bounds, CurrentDiff.Dock.Edge, DockTokens.MinIslandLength, maxLength);
+        if (!_options.SafeMode && CurrentDiff.DockMode == DockMode.AppBar)
+        {
+            var reg = _appBar.TryRegister(new AppBarRequest
+            {
+                WindowHandle = _dock.Handle,
+                Edge = CurrentDiff.Dock.Edge,
+                Proposed = bounds
+            });
+            if (!reg.Succeeded)
+            {
+                AppLog.Write($"AppBar registration failed, falling back to overlay: {reg.FailureReason}");
+            }
+        }
+        else
+        {
+            _appBar.Remove();
+        }
     }
 
     private void SaveWithoutRelayout(AppSettings next)
@@ -1698,7 +1885,7 @@ public sealed class DockSession : IDisposable
         catch (Exception ex)
         {
             AppLog.Write("Failed to save settings.", ex);
-            UserAlerts.Show("WinDock", "未能保存设置，已记入日志。");
+            UserAlerts.Show("WinDock", UiText.SaveFailed);
             Apply(Settings);
         }
     }
@@ -1742,7 +1929,7 @@ public sealed class DockSession : IDisposable
             {
                 if (action.Kind == ActionKind.Notify)
                 {
-                    UserAlerts.Show("WinDock", string.IsNullOrWhiteSpace(action.Message) ? "情景已切换" : action.Message);
+                    UserAlerts.Show("WinDock", string.IsNullOrWhiteSpace(action.Message) ? UiText.ProfileSwitched : action.Message);
                     continue;
                 }
 
@@ -1755,7 +1942,7 @@ public sealed class DockSession : IDisposable
                 if (!_launchConfirmed.Contains(target))
                 {
                     var confirm = MessageBox.Show(
-                        $"情景要启动：{target}",
+                        UiText.ProfileWantsLaunch(target),
                         "WinDock",
                         MessageBoxButton.OKCancel,
                         MessageBoxImage.Question);
@@ -1771,7 +1958,7 @@ public sealed class DockSession : IDisposable
                 if (!Hub.Shell.TryLaunch(pin))
                 {
                     AppLog.Write($"Profile launch failed: {target}");
-                    UserAlerts.Show("WinDock", "情景未能启动程序，已记入日志。");
+                    UserAlerts.Show("WinDock", UiText.ProfileLaunchFailed);
                     try
                     {
                         Settings = SettingsEditor.RecordSwitch(
@@ -1813,6 +2000,11 @@ public sealed class DockSession : IDisposable
                     continue;
                 }
 
+                if (view is IWidgetDetachable detachable)
+                {
+                    detachable.Detach();
+                }
+
                 if (view is IIslandLayoutAware layout)
                 {
                     layout.IslandLayoutChanged -= OnIslandLayoutChanged;
@@ -1831,6 +2023,11 @@ public sealed class DockSession : IDisposable
                 if (view is ICountdownConfigurable countdown)
                 {
                     countdown.SettingsChanged -= OnCountdownChanged;
+                }
+
+                if (view is IAlarmConfigurable alarm)
+                {
+                    alarm.SettingsChanged -= OnAlarmChanged;
                 }
 
                 if (view is IClockConfigurable clock)
@@ -1856,6 +2053,16 @@ public sealed class DockSession : IDisposable
                 if (view is INetworkConfigurable net)
                 {
                     net.SettingsChanged -= OnNetworkWidgetChanged;
+                }
+
+                if (view is IWeatherConfigurable weather)
+                {
+                    weather.SettingsChanged -= OnWeatherChanged;
+                }
+
+                if (view is IScheduleConfigurable schedule)
+                {
+                    schedule.SettingsChanged -= OnScheduleChanged;
                 }
 
                 if (view is NotesWidget notes)

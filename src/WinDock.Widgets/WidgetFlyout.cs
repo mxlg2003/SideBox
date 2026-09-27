@@ -24,6 +24,7 @@ public static class WidgetFlyout
         Track(popup);
         popup.Opened += (_, _) =>
         {
+            CloseOthers(popup);
             Apply(popup);
             Elevate?.Invoke(popup);
             OpenStateChanged?.Invoke(null, EventArgs.Empty);
@@ -106,6 +107,20 @@ public static class WidgetFlyout
 
             Apply(popup);
             Elevate?.Invoke(popup);
+        }
+    }
+
+    private static void CloseOthers(Popup keep)
+    {
+        Prune();
+        for (var i = Attached.Count - 1; i >= 0; i--)
+        {
+            if (!Attached[i].TryGetTarget(out var popup) || ReferenceEquals(popup, keep) || !popup.IsOpen)
+            {
+                continue;
+            }
+
+            popup.IsOpen = false;
         }
     }
 

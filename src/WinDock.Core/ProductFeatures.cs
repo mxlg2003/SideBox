@@ -7,7 +7,7 @@ public static class ProductFeatures
     /// When false, the dock stays on the general layout: no settings page, tray/hotkey switching,
     /// or Focus / topology / schedule automatic switches.
     /// </summary>
-    public static readonly bool ProfilesEnabled = false;
+    public static readonly bool ProfilesEnabled = true;
 
     /// <summary>
     /// When false, Focus / display topology / schedule never auto-switch the dock.

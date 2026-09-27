@@ -360,7 +360,19 @@ public sealed class GsmtcMediaProvider : IMediaProvider, IDisposable
 
         try
         {
-            var session = PickPlayingSession();
+            InspectGsm(out var playing, out var idle);
+            var local = MediaTransportFallback.TrySnapshot(_transportPlaying);
+            var choice = MediaPlaybackPolicy.Choose(
+                gsmPlaying: playing is not null,
+                localTitled: MediaPlaybackPolicy.IsLocalTitled(local),
+                gsmIdle: idle is not null,
+                localIdle: local is not null);
+            var session = choice switch
+            {
+                MediaPlaybackSource.GsmPlaying => playing,
+                MediaPlaybackSource.GsmIdle => idle,
+                _ => null
+            };
             if (session is not null)
             {
                 if (!SameSession(_session, session))
@@ -374,7 +386,9 @@ public sealed class GsmtcMediaProvider : IMediaProvider, IDisposable
             }
 
             ClearGsmSession();
-            Publish(MediaTransportFallback.TrySnapshot(_transportPlaying));
+            Publish(choice is MediaPlaybackSource.LocalTitled or MediaPlaybackSource.LocalIdle
+                ? local
+                : null);
         }
         finally
         {
@@ -382,11 +396,15 @@ public sealed class GsmtcMediaProvider : IMediaProvider, IDisposable
         }
     }
 
-    private GlobalSystemMediaTransportControlsSession? PickPlayingSession()
+    private void InspectGsm(
+        out GlobalSystemMediaTransportControlsSession? playing,
+        out GlobalSystemMediaTransportControlsSession? idle)
     {
+        playing = null;
+        idle = null;
         if (_manager is null)
         {
-            return null;
+            return;
         }
 
         IReadOnlyList<GlobalSystemMediaTransportControlsSession> sessions;
@@ -399,33 +417,71 @@ public sealed class GsmtcMediaProvider : IMediaProvider, IDisposable
             sessions = [];
         }
 
-        foreach (var session in sessions)
-        {
-            try
-            {
-                if (session.GetPlaybackInfo().PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing)
-                {
-                    return session;
-                }
-            }
-            catch (Exception)
-            {
-                // Skip a session that cannot report playback.
-            }
-        }
-
-        if (MediaTransportFallback.TrySnapshot() is not null)
-        {
-            return null;
-        }
-
+        GlobalSystemMediaTransportControlsSession? current = null;
         try
         {
-            return _manager.GetCurrentSession() ?? sessions.FirstOrDefault();
+            current = _manager.GetCurrentSession();
         }
         catch (Exception)
         {
-            return sessions.FirstOrDefault();
+        }
+
+        if (current is not null && IsGsmPlaying(current))
+        {
+            playing = current;
+        }
+        else
+        {
+            foreach (var session in sessions)
+            {
+                if (IsGsmPlaying(session))
+                {
+                    playing = session;
+                    break;
+                }
+            }
+        }
+
+        if (current is not null && IsGsmIdle(current))
+        {
+            idle = current;
+            return;
+        }
+
+        foreach (var session in sessions)
+        {
+            if (IsGsmIdle(session))
+            {
+                idle = session;
+                return;
+            }
+        }
+    }
+
+    private static bool IsGsmPlaying(GlobalSystemMediaTransportControlsSession session)
+    {
+        try
+        {
+            return session.GetPlaybackInfo().PlaybackStatus
+                   == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsGsmIdle(GlobalSystemMediaTransportControlsSession session)
+    {
+        try
+        {
+            var status = session.GetPlaybackInfo().PlaybackStatus;
+            return status is not GlobalSystemMediaTransportControlsSessionPlaybackStatus.Closed
+                   && status is not GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 
@@ -554,11 +610,13 @@ public sealed class GsmtcMediaProvider : IMediaProvider, IDisposable
                 thumbnailPath = await TrySaveThumbnailAsync(properties?.Thumbnail).ConfigureAwait(false);
             }
 
-            var fallbackTransport = KnownLocalPlayers.PrefersOwnTransport(aumid) || !HasGsmTransport(playback);
+            var fallbackTransport = !MediaPlaybackPolicy.UseGsmCommands(HasGsmTransport(playback));
             if (fallbackTransport is false)
             {
                 _transportPlaying = null;
             }
+
+            ReadControls(playback, fallbackTransport, out var canPlayPause, out var canSkipNext, out var canSkipPrevious);
 
             var isPlaying = _transportPlaying
                             ?? (playback.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing);
@@ -580,9 +638,9 @@ public sealed class GsmtcMediaProvider : IMediaProvider, IDisposable
             {
                 SourceAppId = aumid,
                 IsPlaying = isPlaying,
-                CanPlayPause = true,
-                CanSkipNext = true,
-                CanSkipPrevious = true,
+                CanPlayPause = canPlayPause,
+                CanSkipNext = canSkipNext,
+                CanSkipPrevious = canSkipPrevious,
                 Title = title,
                 Artist = artist,
                 ThumbnailPath = thumbnailPath,
@@ -602,7 +660,7 @@ public sealed class GsmtcMediaProvider : IMediaProvider, IDisposable
         Func<GlobalSystemMediaTransportControlsSession, Task<bool>> command,
         CancellationToken cancellationToken)
     {
-        var session = _session ?? PickPlayingSession();
+        var session = _session;
         if (session is null && Current is null)
         {
             return false;
@@ -642,20 +700,6 @@ public sealed class GsmtcMediaProvider : IMediaProvider, IDisposable
         {
             return false;
         }
-        string? aumid = null;
-        try
-        {
-            aumid = session.SourceAppUserModelId;
-        }
-        catch (Exception)
-        {
-            // Treat as unknown source.
-        }
-
-        if (KnownLocalPlayers.PrefersOwnTransport(aumid))
-        {
-            return false;
-        }
 
         try
         {
@@ -670,6 +714,36 @@ public sealed class GsmtcMediaProvider : IMediaProvider, IDisposable
         catch (Exception)
         {
             return true;
+        }
+    }
+
+    private static void ReadControls(
+        GlobalSystemMediaTransportControlsSessionPlaybackInfo playback,
+        bool fallbackTransport,
+        out bool canPlayPause,
+        out bool canSkipNext,
+        out bool canSkipPrevious)
+    {
+        if (fallbackTransport)
+        {
+            canPlayPause = true;
+            canSkipNext = true;
+            canSkipPrevious = true;
+            return;
+        }
+
+        try
+        {
+            var controls = playback.Controls;
+            canPlayPause = controls.IsPlayEnabled || controls.IsPauseEnabled || controls.IsPlayPauseToggleEnabled;
+            canSkipNext = controls.IsNextEnabled;
+            canSkipPrevious = controls.IsPreviousEnabled;
+        }
+        catch (Exception)
+        {
+            canPlayPause = true;
+            canSkipNext = true;
+            canSkipPrevious = true;
         }
     }
 
@@ -793,6 +867,9 @@ public sealed class GsmtcMediaProvider : IMediaProvider, IDisposable
         return string.Equals(left.SourceAppId, right.SourceAppId, StringComparison.Ordinal)
                && left.IsPlaying == right.IsPlaying
                && left.UsesFallbackTransport == right.UsesFallbackTransport
+               && left.CanPlayPause == right.CanPlayPause
+               && left.CanSkipNext == right.CanSkipNext
+               && left.CanSkipPrevious == right.CanSkipPrevious
                && string.Equals(left.Title, right.Title, StringComparison.Ordinal)
                && string.Equals(left.Artist, right.Artist, StringComparison.Ordinal)
                && string.Equals(left.ThumbnailPath, right.ThumbnailPath, StringComparison.Ordinal)

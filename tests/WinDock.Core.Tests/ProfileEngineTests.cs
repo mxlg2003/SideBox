@@ -38,13 +38,13 @@ public class ProfileEngineTests
             [
                 DefaultProfiles.CreateGeneral() with
                 {
-                    Widgets = [new WidgetPlacement { Id = "weather", X = 0, Y = 0 }]
+                    Widgets = [new WidgetPlacement { Id = "unknown_widget", X = 0, Y = 0 }]
                 }
             ]
         };
 
         var normalized = SettingsValidator.EnsureInvariants(bad);
-        Assert.DoesNotContain(normalized.Profiles.SelectMany(profile => profile.Widgets), widget => widget.Id == "weather");
+        Assert.DoesNotContain(normalized.Profiles.SelectMany(profile => profile.Widgets), widget => widget.Id == "unknown_widget");
     }
 
     [Fact]
@@ -576,24 +576,28 @@ public class BuiltInWidgetsTests
     [Fact]
     public void Canonical_ids_are_known()
     {
-        Assert.Equal(11, BuiltInWidgets.All.Count);
+        Assert.Equal(14, BuiltInWidgets.All.Count);
         Assert.True(BuiltInWidgets.IsKnown("nowplaying"));
         Assert.True(BuiltInWidgets.IsKnown("bing"));
         Assert.True(BuiltInWidgets.IsKnown("stopwatch"));
         Assert.True(BuiltInWidgets.IsKnown("countdown"));
+        Assert.True(BuiltInWidgets.IsKnown("alarm"));
         Assert.True(BuiltInWidgets.IsKnown("focustimer"));
         Assert.True(BuiltInWidgets.IsKnown("power"));
         Assert.True(BuiltInWidgets.IsKnown("timeprogress"));
         Assert.True(BuiltInWidgets.IsKnown("sysactivity"));
+        Assert.True(BuiltInWidgets.IsKnown("weather"));
+        Assert.True(BuiltInWidgets.IsKnown("schedule"));
         Assert.False(BuiltInWidgets.IsKnown("cpu"));
         Assert.False(BuiltInWidgets.IsKnown("memory"));
         Assert.False(BuiltInWidgets.IsKnown("battery"));
         Assert.False(BuiltInWidgets.IsKnown("focus"));
-        Assert.False(BuiltInWidgets.IsKnown("weather"));
+        Assert.False(BuiltInWidgets.IsKnown("stocks"));
         Assert.False(BuiltInWidgets.IsKnown("CLOCK"));
         Assert.True(BuiltInWidgets.IsImplemented(BuiltInWidgets.Clock));
         Assert.True(BuiltInWidgets.IsImplemented(BuiltInWidgets.Stopwatch));
         Assert.True(BuiltInWidgets.IsImplemented(BuiltInWidgets.Countdown));
+        Assert.True(BuiltInWidgets.IsImplemented(BuiltInWidgets.Alarm));
         Assert.True(BuiltInWidgets.IsImplemented(BuiltInWidgets.FocusTimer));
         Assert.True(BuiltInWidgets.IsImplemented(BuiltInWidgets.Power));
         Assert.True(BuiltInWidgets.IsImplemented(BuiltInWidgets.TimeProgress));
@@ -612,6 +616,8 @@ public class BuiltInWidgetsTests
         Assert.True(WidgetCatalog.Matches(BuiltInWidgets.Stopwatch, "秒表"));
         Assert.True(WidgetCatalog.Matches(BuiltInWidgets.Countdown, "倒计时"));
         Assert.True(WidgetCatalog.Matches(BuiltInWidgets.Countdown, "预设"));
+        Assert.True(WidgetCatalog.Matches(BuiltInWidgets.Alarm, "闹钟"));
+        Assert.True(WidgetCatalog.Matches(BuiltInWidgets.Alarm, "时刻"));
         Assert.True(WidgetCatalog.Matches(BuiltInWidgets.FocusTimer, "专注计时"));
         Assert.True(WidgetCatalog.Matches(BuiltInWidgets.FocusTimer, "番茄"));
         Assert.True(WidgetCatalog.Matches(BuiltInWidgets.Power, "电源"));

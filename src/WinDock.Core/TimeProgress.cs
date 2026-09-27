@@ -55,22 +55,22 @@ public static class TimeProgressFormat
 {
     public static string PeriodTitle(string period) => TimeProgressPeriods.Normalize(period) switch
     {
-        TimeProgressPeriods.Month => "月",
-        TimeProgressPeriods.Day => "日",
-        _ => "年"
+        TimeProgressPeriods.Month => UiLocale.T("月", "Month"),
+        TimeProgressPeriods.Day => UiLocale.T("日", "Day"),
+        _ => UiLocale.T("年", "Year")
     };
 
     public static string LayoutTitle(string layout) => TimeProgressLayouts.Normalize(layout) switch
     {
-        TimeProgressLayouts.Percentage => "百分比",
-        TimeProgressLayouts.Ring => "圆环",
-        _ => "条形"
+        TimeProgressLayouts.Percentage => UiLocale.T("百分比", "Percentage"),
+        TimeProgressLayouts.Ring => UiLocale.T("圆环", "Ring"),
+        _ => UiLocale.T("条形", "Bars")
     };
 
     public static string Caption(DateTime now, string period) => TimeProgressPeriods.Normalize(period) switch
     {
-        TimeProgressPeriods.Month => $"{now.Month}月",
-        TimeProgressPeriods.Day => $"{now.Day}日",
+        TimeProgressPeriods.Month => UiLocale.IsChinese ? $"{now.Month}月" : now.ToString("MMM", UiLocale.Culture),
+        TimeProgressPeriods.Day => UiLocale.IsChinese ? $"{now.Day}日" : now.Day.ToString(UiLocale.Culture),
         _ => now.Year.ToString()
     };
 

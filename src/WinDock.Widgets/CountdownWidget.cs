@@ -11,7 +11,7 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownConfigurable, IKeepAliveWhileRunning
+public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownConfigurable, IKeepAliveWhileRunning, ILocalizable, IWidgetDetachable
 {
     private const uint Accent = 0xFF0078D4;
     private const string GlyphTimer = "\uE916";
@@ -39,6 +39,11 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
     private readonly DispatcherTimer _savedTimer = new() { Interval = TimeSpan.FromMilliseconds(1600) };
     private readonly DispatcherTimer _persistTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
     private readonly DispatcherTimer _repeatTimer = new();
+    private readonly Dictionary<string, TextBlock> _partCaptions = new(StringComparer.Ordinal);
+    private TextBlock _flyoutTitle = null!;
+    private TextBlock _presetsCaption = null!;
+    private TextBlock _nameLabel = null!;
+    private TextBlock _resetLabel = null!;
     private Action? _repeatClick;
     private bool _applying;
     private bool _suppressFields;
@@ -75,16 +80,17 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
             Children = { _glyph, copy }
         }, 0);
 
-        var title = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.Countdown));
+        _flyoutTitle = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.Countdown));
         var close = HeaderGlyph("\u00D7", ClosePopup, 18);
-        var header = HeaderRow(title, close);
+        var header = HeaderRow(_flyoutTitle, close);
 
+        _presetsCaption = Caption(CountdownFormat.Presets);
         _presetSection = new StackPanel
         {
             Margin = new Thickness(0, 4, 0, 8),
             Children =
             {
-                Caption(CountdownFormat.Presets),
+                _presetsCaption,
                 _presetList
             }
         };
@@ -92,12 +98,12 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
         var nameRow = new Grid { Margin = new Thickness(0, 4, 0, 12) };
         nameRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         nameRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var nameLabel = Caption(CountdownFormat.TimerName);
-        nameLabel.VerticalAlignment = VerticalAlignment.Center;
-        nameLabel.Margin = new Thickness(0, 0, 12, 0);
-        var nameHost = QuietCard(_name, 34);
+        _nameLabel = Caption(CountdownFormat.TimerName);
+        _nameLabel.VerticalAlignment = VerticalAlignment.Center;
+        _nameLabel.Margin = new Thickness(0, 0, 12, 0);
+        var nameHost = WidgetChrome.Field(_name, 34);
         Grid.SetColumn(nameHost, 1);
-        nameRow.Children.Add(nameLabel);
+        nameRow.Children.Add(_nameLabel);
         nameRow.Children.Add(nameHost);
 
         var parts = new Grid { Margin = new Thickness(0, 0, 0, 16) };
@@ -115,7 +121,9 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
         parts.Children.Add(seconds);
 
         _primary = ActionButton(_primaryLabel, Accent, Toggle);
-        _reset = ActionButton(ResetLabel(), DockTokens.QuietFill, Reset);
+        _resetLabel = ResetLabel();
+        _reset = ActionButton(_resetLabel, DockTokens.QuietFill, Reset);
+        WidgetChrome.MarkQuiet(_reset);
         var actions = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -143,12 +151,13 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
         {
             Placement = PlacementMode.Bottom,
             PlacementTarget = _tile,
-            StaysOpen = true,
+            StaysOpen = false,
             AllowsTransparency = true,
             VerticalOffset = 8,
             Child = panel
         };
         WidgetFlyout.Attach(_popup);
+        _popup.Closed += (_, _) => OnPopupClosed();
         _tile.MouseLeftButtonUp += (_, e) =>
         {
             if (_popup.IsOpen)
@@ -232,6 +241,25 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
 
     public bool IsAlive => _engine.Running;
 
+    public void Detach()
+    {
+        _timer.Stop();
+        _popup.IsOpen = false;
+    }
+
+    public void ApplyLocale()
+    {
+        _flyoutTitle.Text = BuiltInWidgets.DisplayName(BuiltInWidgets.Countdown);
+        _presetsCaption.Text = CountdownFormat.Presets;
+        _nameLabel.Text = CountdownFormat.TimerName;
+        if (_partCaptions.TryGetValue("hours", out var hours)) hours.Text = CountdownFormat.Hours;
+        if (_partCaptions.TryGetValue("minutes", out var minutes)) minutes.Text = CountdownFormat.Minutes;
+        if (_partCaptions.TryGetValue("seconds", out var seconds)) seconds.Text = CountdownFormat.Seconds;
+        _resetLabel.Text = StopwatchFormat.Reset;
+        _saved.Text = CountdownFormat.PresetSaved;
+        Render();
+    }
+
     public void ApplySettings(CountdownSettings settings)
     {
         _applying = true;
@@ -247,7 +275,6 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
         Render();
         PaintFields();
         PaintPresets();
-        _popup.StaysOpen = true;
         _popup.IsOpen = true;
     }
 
@@ -485,7 +512,7 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
         _tileTime.Text = time;
         _panelTime.Text = CountdownFormat.Time(remaining);
         _panelTime.Visibility = _engine.Running || paused ? Visibility.Visible : Visibility.Collapsed;
-        _tileStatus.Text = CountdownFormat.TileStatus(_engine.Running, paused, _engine.Settings.Name);
+        _tileStatus.Text = CountdownFormat.TileStatus(_engine.Running, paused);
         _primaryLabel.Text = StopwatchFormat.PrimaryAction(_engine.Running, paused ? TimeSpan.FromSeconds(1) : TimeSpan.Zero);
         _reset.Visibility = paused ? Visibility.Visible : Visibility.Collapsed;
         var canStart = _engine.CanStart(now);
@@ -534,6 +561,11 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
 
     private void ClosePopup()
     {
+        _popup.IsOpen = false;
+    }
+
+    private void OnPopupClosed()
+    {
         var before = _engine.Settings;
         CommitFields();
         if (!CountdownSettings.Same(before, _engine.Settings))
@@ -547,18 +579,15 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
         }
 
         StopRepeat();
-        _popup.StaysOpen = false;
-        _popup.IsOpen = false;
     }
 
     private Border PresetRow(CountdownPreset preset)
     {
         var name = WidgetCopy.Primary();
-        name.Text = preset.Name;
         name.FontSize = 13;
         name.FontWeight = FontWeights.Normal;
-        name.TextTrimming = TextTrimming.CharacterEllipsis;
         name.VerticalAlignment = VerticalAlignment.Center;
+        WidgetCopy.WrapUserText(name, preset.Name, DockTokens.FlyoutUserCopyMaxWidth);
         var time = WidgetCopy.Secondary();
         time.Text = CountdownFormat.Time(CountdownSettings.ToDuration(preset.Hours, preset.Minutes, preset.Seconds));
         time.Margin = new Thickness(8, 0, 4, 0);
@@ -583,6 +612,7 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
             Cursor = Cursors.Hand,
             Child = row
         };
+        WidgetChrome.MarkQuiet(border);
         border.MouseLeftButtonUp += (_, e) =>
         {
             if (e.Handled)
@@ -736,8 +766,10 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
         label.Text = caption;
         label.HorizontalAlignment = HorizontalAlignment.Center;
         label.Margin = new Thickness(0, 0, 0, 6);
+        _partCaptions[part] = label;
         var card = new Border
         {
+            Tag = WidgetChrome.FieldTag,
             CornerRadius = new CornerRadius(DockTokens.IslandCornerRadius),
             Background = TokenBrushes.From(DockTokens.QuietFill),
             MinHeight = 56,
@@ -746,6 +778,7 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
                 Children = { row, label }
             }
         };
+        WidgetChrome.ApplyTheme(card, false);
         MouseWheelEventHandler wheel = (_, e) =>
         {
             if (_engine.Running)
@@ -791,6 +824,7 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
             Cursor = Cursors.Hand,
             Child = icon
         };
+        WidgetChrome.MarkQuietOverlay(border);
         border.MouseLeftButtonDown += (_, e) =>
         {
             if (_engine.Running)
@@ -816,14 +850,6 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
         };
         return border;
     }
-
-    private static Border QuietCard(UIElement child, double height) => new()
-    {
-        CornerRadius = new CornerRadius(DockTokens.TileCornerRadius),
-        Background = TokenBrushes.From(DockTokens.QuietFill),
-        Height = height,
-        Child = child
-    };
 
     private static TextBlock Caption(string text)
     {

@@ -95,6 +95,9 @@ public sealed record DockItem
     /// <summary>Countdown name, last duration, and saved presets. Null uses 5 minutes and no presets.</summary>
     public CountdownSettings? Countdown { get; init; }
 
+    /// <summary>Alarm clock time, label, and armed instant. Null is 08:00 idle.</summary>
+    public AlarmSettings? Alarm { get; init; }
+
     /// <summary>Power module layout and which devices appear on the dock. Null uses status rings and all devices.</summary>
     public PowerWidgetSettings? Power { get; init; }
 
@@ -109,6 +112,12 @@ public sealed record DockItem
 
     /// <summary>Optional second clock timezone id (Windows or IANA). Null shows local time only.</summary>
     public string? TimeZoneId { get; init; }
+
+    /// <summary>Weather widget city, units, and refresh interval.</summary>
+    public WeatherSettings? Weather { get; init; }
+
+    /// <summary>Schedule widget events and countdown items.</summary>
+    public ScheduleSettings? Schedule { get; init; }
 }
 
 public sealed record WidgetPlacement

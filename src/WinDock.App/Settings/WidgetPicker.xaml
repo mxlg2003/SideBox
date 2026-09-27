@@ -4,23 +4,23 @@
              FontFamily="Segoe UI Variable, Segoe UI">
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="CatalogNavColumn" Width="200"/>
+            <ColumnDefinition x:Name="CatalogNavColumn" Width="168"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <Border x:Name="NavPane" Grid.Column="0" Background="#FFF4F5F7" BorderBrush="#14000000" BorderThickness="0,0,1,0">
-            <DockPanel Margin="16">
-                <Border x:Name="SearchHost" DockPanel.Dock="Top" Background="#FFE8E8EC" CornerRadius="4" Padding="12,8" Margin="0,0,0,16">
+        <Border x:Name="NavPane" Grid.Column="0" Background="#FFF4F5F7" BorderBrush="#14000000" BorderThickness="0,0,1,0" Padding="12">
+            <DockPanel>
+                <Border x:Name="SearchHost" DockPanel.Dock="Top" Background="#FFE8E8EC" CornerRadius="4" Padding="8,6" Margin="0,0,0,12">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="12" Opacity="0.45" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <Grid>
-                            <TextBox x:Name="SearchBox" BorderThickness="0" Background="Transparent"
+                            <TextBox x:Name="SearchBox" BorderThickness="0" Background="Transparent" Padding="0"
                                      VerticalContentAlignment="Center" FontSize="13"
-                                     AutomationProperties.Name="搜索模块"
+                                     AutomationProperties.Name="Search widgets"
                                      TextChanged="SearchBox_OnTextChanged"/>
-                            <TextBlock x:Name="SearchPlaceholder" Text="搜索模块" IsHitTestVisible="False"
+                            <TextBlock x:Name="SearchPlaceholder" Text="Search widgets" IsHitTestVisible="False"
                                        Foreground="#6F6F76" Opacity="0.7" FontSize="13"
-                                       VerticalAlignment="Center"/>
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                         </Grid>
                     </DockPanel>
                 </Border>

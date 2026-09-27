@@ -4,7 +4,7 @@ Windows 11 上的情境化桌面控制面：常驻边缘 Dock（模块直接嵌�
 
 WinDock 不是 macOS Dock 的逐像素复刻，也不是 Explorer / 任务栏替换。它只切换启动项、信息和轻量动作，默认不接管窗口管理。
 
-手动换情景**默认关闭**（`ProductFeatures.ProfilesEnabled`）。系统专注 / 显示器 / 时间**自动切换尚未开放**。出厂日常为时钟 + 便笺，并默认自动隐藏。`general`（日常）不能删除。
+手动换情景**默认打开**（`ProductFeatures.ProfilesEnabled`）。系统专注 / 显示器 / 时间**自动切换尚未开放**。出厂日常为时钟 + 便笺，默认不自动隐藏。`general`（日常）不能删除。
 
 ## 最低环境
 

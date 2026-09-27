@@ -66,16 +66,48 @@ public static class AtomicFile
             Directory.CreateDirectory(directory);
         }
 
-        var temp = path + ".tmp";
-        using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
-        using (var writer = new StreamWriter(stream))
+        var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
         {
-            writer.Write(contents);
-            writer.Flush();
-            stream.Flush(true);
-        }
+            using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var writer = new StreamWriter(stream))
+            {
+                writer.Write(contents);
+                writer.Flush();
+                stream.Flush(true);
+            }
 
-        File.Move(temp, path, overwrite: true);
+            MoveWithRetry(temp, path, maxRetries: 5, initialDelayMs: 15);
+        }
+        finally
+        {
+            if (File.Exists(temp))
+            {
+                try
+                {
+                    File.Delete(temp);
+                }
+                catch (Exception)
+                {
+                }
+            }
+        }
+    }
+
+    private static void MoveWithRetry(string source, string destination, int maxRetries, int initialDelayMs)
+    {
+        for (var attempt = 1; attempt <= maxRetries; attempt++)
+        {
+            try
+            {
+                File.Move(source, destination, overwrite: true);
+                return;
+            }
+            catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && attempt < maxRetries)
+            {
+                Thread.Sleep(initialDelayMs * attempt);
+            }
+        }
     }
 }
 
@@ -106,19 +138,41 @@ public sealed class JsonSettingsStore : ISettingsStore
 
     public bool IsImmutable { get; private set; }
 
+    public bool SkipNotesSweep { get; private set; }
+
     public AppSettings Load()
     {
         LastLoadMessage = null;
         IsImmutable = false;
+        SkipNotesSweep = false;
+
+        var mainExists = File.Exists(_path);
+        var backupExists = File.Exists(_backupPath);
+        if (!mainExists && !backupExists)
+        {
+            var firstRun = DefaultProfiles.CreateFactorySettings();
+            try
+            {
+                Save(firstRun);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("Failed to write factory settings.", ex);
+            }
+
+            return firstRun;
+        }
+
         if (TryAdopt(_path, overwriteOnPersist: true, out var fromMain, out var mainMessage))
         {
             LastLoadMessage = mainMessage;
+            SkipNotesSweep = IsImmutable;
             return fromMain;
         }
 
         if (TryAdopt(_backupPath, overwriteOnPersist: true, out var fromBackup, out var backupMessage))
         {
-            LastLoadMessage = backupMessage ?? "已从备份恢复设置。";
+            LastLoadMessage = backupMessage ?? UiText.RestoredFromBackup;
             try
             {
                 Save(fromBackup);
@@ -131,7 +185,7 @@ public sealed class JsonSettingsStore : ISettingsStore
             return fromBackup;
         }
 
-        if (File.Exists(_path))
+        if (mainExists)
         {
             Quarantine(_path);
         }
@@ -146,7 +200,8 @@ public sealed class JsonSettingsStore : ISettingsStore
             AppLog.Write("Failed to write factory settings.", ex);
         }
 
-        LastLoadMessage = "设置无法读取，已恢复出厂默认。";
+        SkipNotesSweep = true;
+        LastLoadMessage = UiText.ResetToFactory;
         AppLog.Write(LastLoadMessage);
         return factory;
     }
@@ -188,7 +243,7 @@ public sealed class JsonSettingsStore : ISettingsStore
 
         if (parsed.SchemaVersion > SettingsSchema.CurrentVersion)
         {
-            message = $"设置来自更新的版本（schema {parsed.SchemaVersion}），本版本不会覆盖该文件，已使用出厂默认。";
+            message = UiText.NewerSchema(parsed.SchemaVersion);
             AppLog.Write(message);
             IsImmutable = true;
             settings = DefaultProfiles.CreateFactorySettings();

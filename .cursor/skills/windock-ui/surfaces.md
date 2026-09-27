@@ -18,7 +18,7 @@
 
 应用 / 文件 / 文件夹。透明槽，高 50，图标 40（文件夹可略宽）。无图标时用 MDL2 字形 26。文件夹在图标上叠 9px 名称徽标（Tahoma + Noto Sans SC）。底部 4px 运行点，有窗口时显示。
 
-悬停：圆角 4 的钉名弹出层，最大宽 220，菜单实色底 + 描边 + 轻阴影。缺失路径 opacity 0.45。
+悬停：圆角 4 的钉名弹出层，最大宽 220，过长换行；菜单实色底 + 描边 + 轻阴影。缺失路径 opacity 0.45。
 
 左键：已有窗口则切换（多窗口轮换），否则启动。右键可「打开（新开一份）」、移除。
 
@@ -32,9 +32,9 @@
 
 ## 弹出层
 
-[`WidgetFlyout`](../../../src/WinDock.Widgets/WidgetFlyout.cs) + `WidgetChrome.Flyout`。`AllowsTransparency`，距岛 8px（下/上/左/右随 `DockEdge`）。卡片圆角 8、实色 `ResolveMenuFill`、内边距 16/12/16/20、最小宽约 280（便笺 300）。外层 DropShadow。打开时部分模块 140ms 淡入+缩放。
+[`WidgetFlyout`](../../../src/WinDock.Widgets/WidgetFlyout.cs) + `WidgetChrome.Flyout`。`AllowsTransparency`，距岛 8px（下/上/左/右随 `DockEdge`）。卡片圆角 8、实色 `ResolveMenuFill`、内边距 16/12/16/20、最小宽约 280（便笺 300）。外层 DropShadow。打开时部分模块 140ms 淡入+缩放。自定义里的 `ComboBox` 走 `WidgetChrome.PaintCombo`：闭合井 `ResolveFieldFill`，展开层圆角 8、`ResolveMenuFill`，外形同设置 ComboBox，不走系统默认下拉。弹出层内的滚动列表（如城市联想下拉、多项列表、便笺等）统一调用 `WidgetChrome.PaintScrollViewer`，使用 12px 槽、6px 宽圆角胶囊滑块、无箭头按钮，滑块颜色跟随当前主题 `DockTokens.Settings.ScrollThumb*`，样式与设置-模块（`Settings.ScrollBarVertical`）完全一致。
 
-弹出层开着时视为指针仍在 Dock（避免自动隐藏）。不要用独立 `Window` 做模块详情。
+弹出层开着时视为指针仍在 Dock（避免自动隐藏）。同一时间只开一层：打开新的模块弹出层或折叠钉展开层会立刻关掉已经打开的那一层。不要用独立 `Window` 做模块详情。
 
 程序/文件夹折叠的展开层是 [`PinStackFlyout`](../../../src/WinDock.Widgets/PinStackFlyout.cs)：同样 `WidgetFlyout.Attach` + `WidgetChrome.Flyout`，贴岛 8px。顶/底横排、左/右竖排，间距 `TileGap`，内边距 `TilePaddingX/Y`。成员钉外观与岛上一致（40px 图标、文件夹徽标、运行点）；点成员仍切换/启动，右键仍是打开一份/移除。再点聚合槽、点层外、或组成员不足 2 个时收起。
 
@@ -48,9 +48,9 @@
 
 ## 设置窗
 
-[`SettingsWindow.xaml`](../../../src/WinDock.App/Settings/SettingsWindow.xaml) 1000×680，单例、关闭即隐藏。窗口铺 `Settings.Page`。左栏 `NavWidth` 220（「设置」+ 分组导航），右栏页标题 16 SemiBold + 一句说明 + 内容。控件模板来自 [`SettingsTheme.xaml`](../../../src/WinDock.App/Settings/SettingsTheme.xaml)。`SettingsChrome.Publish` 按主题写入 token。模块目录只在「模块」页刷新。
+[`SettingsWindow.xaml`](../../../src/WinDock.App/Settings/SettingsWindow.xaml) 1000×680，单例、关闭即隐藏。窗口铺 `Settings.Page`。左栏 `NavWidth` 168、内边距 `NavPad` 12（「设置」+ 分组导航），右栏页标题 16 SemiBold + 一句说明 + 内容。控件模板来自 [`SettingsTheme.xaml`](../../../src/WinDock.App/Settings/SettingsTheme.xaml)。滚动条是隐式 `ScrollBar`：12px 槽、6px 圆角滑块、无上下箭头，浅/深色用 `Settings.ScrollThumb*`。`SettingsChrome.Publish` 按主题写入 token。模块目录只在「模块」页刷新。
 
-没有全局情景顶栏。`ProfilesEnabled` 默认关，左栏不出现「情景」。打开开关后，「情景」在最底分组 **高级**，撤销/复制/重命名/删除/历史只在该页。
+没有全局情景顶栏。`ProfilesEnabled` 默认开，左栏「情景」在最底分组 **高级**。撤销/复制/重命名/删除/历史只在该页。自动触发仍关。
 
 表单页边距 `PagePad` 24、区块间距 `SectionGap` 24、标签到控件 `FieldGap` 8、内容最大宽 560。布局的边缘+显示器、外观的主题+材质两列并排。
 
@@ -58,7 +58,7 @@
 |---|---|---|
 | 模块（默认） | Dock | `WidgetPicker`；页说明「把时钟、便笺等加到边缘岛上。」 |
 | 布局 | Dock | 边缘、显示器、自动隐藏、热区 Peek、可录制的全局唤醒快捷键、程序折叠、文件夹折叠 |
-| 外观 | 显示 | 主题、材质、岛面透明度滑块、岛面预览条 |
+| 外观 | 显示 | 主题、材质、语言、岛面透明度滑块、岛面预览条 |
 | 隐私 | 系统 | 媒体 / 网络 / Bing 开关 |
 | 关于 | 系统 | 版本、配置/日志路径、开机启动开关 |
 | 情景 | 高级 | 仅 `ProfilesEnabled`；当前情景下拉、撤销、复制/重命名/删除、热键、最近切换 |
@@ -67,7 +67,7 @@
 
 ## 模块目录
 
-[`WidgetPicker`](../../../src/WinDock.App/Settings/WidgetPicker.xaml)。作为设置右栏内容，不再自带大标题。左栏 `CatalogNavWidth` 200：搜索、分类（全部 / 时钟 / 便笺 / 媒体 / 系统 / 壁纸）。选中项圆角 4 + `NavSelected`。右栏 padding `PagePad` 24，分类标题 16 SemiBold，预览卡 3 列、预览区高 96 圆角 8。预览只展示，不添加；`+` 添加、`−` 从岛上拿掉一份。已添加会在标题后标数量。说明来自 `BuiltInWidgets.Blurb`，搜索也会匹配说明。无匹配时显示图标 + 标题 + 一句说明。时钟预览定时器只在目录可见时跑。
+[`WidgetPicker`](../../../src/WinDock.App/Settings/WidgetPicker.xaml)。作为设置右栏内容，不再自带大标题。左栏 `CatalogNavWidth` 168、内边距 `NavPad` 12：搜索、分类（全部 / 时钟 / 便笺 / 媒体 / 系统 / 壁纸）。选中项圆角 4 + `NavSelected`，高度与设置导航项同为 32。右栏 padding `PagePad` 24，分类标题 16 SemiBold。预览卡固定宽 `CatalogCardWidth` 160，`WrapPanel` 排布（默认窗口约 3 列），间距 `CatalogCardGap` 16；预览井高 96、内边距 12、圆角 8，`ClipToBounds`，文字过长省略。电源示例最多两个设备。预览只展示，不添加；`+` 把模块放到岛上。从 Dock 右键移除。卡片名称下不跟说明；`BuiltInWidgets.Blurb` 只用于预览悬停和搜索。无匹配时显示图标 + 标题 + 一句说明。时钟预览定时器只在目录可见时跑。界面中英双语，文案来自 `UiText`。
 
 ## 添加程序
 

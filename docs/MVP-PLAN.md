@@ -63,7 +63,7 @@ M0 两人一起完成骨架。之后按垂直切片并行，接口以 `WinDock.C
 
 交付可开关 widget：
 
-- clock、notes、sysactivity、network、power、nowplaying、bing、stopwatch、countdown、focustimer、timeprogress
+- clock、notes、sysactivity、network、power、nowplaying、bing、stopwatch、countdown、alarm、focustimer、timeprogress
 - CPU / 内存共用 `IPerfSampler`（`PerformanceCounter`），仅在系统状态模块上岛时启动；网络 / 电源 / 媒体同样按订阅 Start/Stop
 - Now Playing：Edge 网页媒体 + 至少一种常见播放器；有会话才显示封面与控制，无会话不发全局媒体键
 - Bing 壁纸：HPImageArchive（仅 bing.com URL）+ 设为桌面；模块要先同意；失败时卡片可点重试

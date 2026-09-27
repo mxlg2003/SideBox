@@ -22,16 +22,20 @@
 | `ClockFaceSize` | 26 | 岛上模拟时钟 |
 | `ClockPanelFaceSize` | 84 | 弹出层模拟时钟 |
 | `SparklineHeight` | 14 | 网络火花线默认高 |
+| `SparklineDockWidth` | 40 | 岛上网络火花线宽 |
 | `ResizeGrip` | 8 | 岛两端拖宽热区 |
 | `OverflowButtonWidth/Height` | 32 | 左右箭头按钮 |
 | `OverflowGlyphSize` | 12 | 箭头字形 |
 | `OverflowButtonGap` | 4 | 两箭头间距 |
+| `FlyoutUserCopyMaxWidth` | 248 | 弹出层用户短输入换行宽度 |
 | `ScrollStep` | 140 | 溢流一次滚动 |
 | `AutoHideStrip` | 4 | 自动隐藏贴边细条 |
 | `AutoHideIdleMs` | 800 | 离开岛后收成细条 |
+| `HysteresisDelayMs` | 300 | 指针刚离开岛时暂不收回 |
 | `WakeHoldMs` | 2000 | 唤醒快捷键后保持可见 |
 | `FlyoutOffset` | 8 | 弹出层离岛距离（`WidgetFlyout`） |
-| `DockHostGeometry.HotzonePixels` | 8 | 唤出热区；岛接近热区另加 8 slack |
+| `DockHostGeometry.HotzonePixels` | 8 | 唤出热区 |
+| `TrapezoidBuffer` | 8 | 岛接近热区两侧/外侧的 slack |
 
 岛厚度：`DockLayoutCalculator.DefaultThickness` = `TileHeight + 2*IslandPaddingY + 2`（描边）。侧边与顶边同厚。内容超出工作区时夹紧，岛沿边缘居中。
 
@@ -149,6 +153,8 @@ flyout 内边距 `16,12,16,20`（便笺底 16）。菜单内边距 6，项 `10,7
 - 岛 `ResolveIslandFill(isLight, backdropOk, backdrop, transparency)`
 - 药丸 `ResolveTileFill(isLight, backdrop)`
 - 菜单/钉名/flyout 底 `ResolveMenuFill(isLight, backdropOk, backdrop)`
+- 模块输入井 `ResolveFieldFill(isLight, backdrop)`：不透明。浅色把菜单底压暗到 90%，深色向白提亮 16%。描边仍用 `Light/Dark.Stroke`。便笺编辑框走纸色，不用这个。
+- 次要按钮/芯片 `ResolveQuietFill`：与输入井同色。旧的 `QuietFill`（`0x14000000`）在深色弹出层上几乎看不见，不要再拿来画按钮。
 
 运行中钉点：浅 `0xFF1A1A1A`，深 `0xFFFFFFFF`（即正文色）。文件夹徽标字始终 `0xFF1A1A1A`（压在彩色图标上）。
 
@@ -166,6 +172,7 @@ flyout 内边距 `16,12,16,20`（便笺底 16）。菜单内边距 6，项 `10,7
 | `NotesLight` / `NotesDark` | `0xF2FBF0C8` / `0xE6C4A35A` | 旧便笺底（岛上现用 `NotePapers`） |
 | `Focus` | `0xFFA78BFA` | 专注语义 |
 | `Bing` | `0xFF38BDF8` | Bing 字形 |
+| `Alarm` | `0xFFFF9F0A` | 已设定闹钟字形 |
 | `QuietFill` | `0x14000000` | 安静填充（圆钮、未选中 chip） |
 | `Danger` | `0xFFE11D48` | 菜单危险项 |
 
@@ -179,6 +186,9 @@ flyout 内边距 `16,12,16,20`（便笺底 16）。菜单内边距 6，项 `10,7
 | `Card` | `0xFFFFFFFF` | `0xFF2C2C2E` |
 | `Stroke` / `BorderDefault` | `0x14000000` | `0x33FFFFFF` |
 | `BorderStrong` | `0x33000000` | `0x66FFFFFF` |
+| `ScrollThumb` | `0x59000000` | `0x66FFFFFF` |
+| `ScrollThumbHover` | `0x8A000000` | `0x99FFFFFF` |
+| `ScrollThumbPressed` | `0xB3000000` | `0xCCFFFFFF` |
 | `Text` | `0xFF1A1A1A` | `0xFFF2F2F2` |
 | `Muted` | `0xFF6F6F76` | `0xFFB0B0B5` |
 | `FgDisabled` | `0xFFB0B0B5` | `0xFF8E8E93` |
@@ -193,7 +203,7 @@ flyout 内边距 `16,12,16,20`（便笺底 16）。菜单内边距 6，项 `10,7
 | `FocusRing` | `0xFF2563EB` | 同 |
 | `DangerSubtle` | `0x14E11D48` | `0x33E11D48` |
 
-控件高 `Settings.ControlHeight` = 32。左栏 `NavWidth` = 220，模块分类列 `CatalogNavWidth` = 200。Tab 最小宽 `TabMinWidth` = 96（旧胶囊样式仍在主题里）。表单 `FieldGap` = 8、`SectionGap` = 24、`PagePad` = 24、`ControlPad` = 12。焦点环 `FocusRingThickness` = 2。按钮：`Settings.Button` 次要（描边 + `BgSecondary`）、`PrimaryButton` 确定/添加、`DestructiveButton` 删除、`GhostButton` 目录 +/−。开关 `Settings.Toggle`。设置导航 `Settings.NavItem`。模板在 [`SettingsTheme.xaml`](../../../src/WinDock.App/Settings/SettingsTheme.xaml)。
+控件高 `Settings.ControlHeight` = 32。左栏 `NavWidth` = 168，模块分类列 `CatalogNavWidth` = 168，栏内边距 `NavPad` = 12。目录卡 `CatalogCardWidth` = 160、`CatalogCardGap` = 16、预览井 `CatalogPreviewHeight` = 96、`CatalogPreviewPad` = 12。Tab 最小宽 `TabMinWidth` = 96（旧胶囊样式仍在主题里）。表单 `FieldGap` = 8、`SectionGap` = 24、`PagePad` = 24、`ControlPad` = 12。滚动条槽 `ScrollThickness` = 12、滑块 `ScrollThumbSize` = 6。焦点环 `FocusRingThickness` = 2。按钮：`Settings.Button` 次要（描边 + `BgSecondary`）、`PrimaryButton` 确定/添加、`DestructiveButton` 删除、`GhostButton` 目录 +。开关 `Settings.Toggle`。设置导航 `Settings.NavItem`。滚动条隐式 `ScrollBar`（无上下箭头、透明槽、圆角滑块）。模板在 [`SettingsTheme.xaml`](../../../src/WinDock.App/Settings/SettingsTheme.xaml)。
 
 ## 模块色板（不放进 Light/Dark）
 

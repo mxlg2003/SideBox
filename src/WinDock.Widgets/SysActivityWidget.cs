@@ -10,7 +10,7 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, ISysActivityConfigurable, IWidgetThemeAware
+public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, ISysActivityConfigurable, IWidgetThemeAware, ILocalizable
 {
     private const uint QuietFill = 0x14000000;
     private const uint Accent = 0xFF0078D4;
@@ -50,6 +50,11 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
     private readonly Grid _editorPage;
     private readonly Grid _customizePage;
     private readonly Popup _popup;
+    private TextBlock _flyoutTitle = null!;
+    private TextBlock _customizeTitle = null!;
+    private TextBlock _backLabel = null!;
+    private TextBlock _layoutCaption = null!;
+    private readonly Dictionary<string, TextBlock> _layoutTitles = new(StringComparer.Ordinal);
     private SysActivitySettings _settings = SysActivitySettings.Default;
     private bool _applying;
     private bool _isLight = true;
@@ -59,10 +64,10 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
         _perf = perf;
         _updated = UiPump.Coalesce<PerfSnapshot>(Dispatcher, Render);
         _cpuCaption.Text = "CPU";
-        _memCaption.Text = "内存";
+        _memCaption.Text = UiText.MemoryShort;
         _panelCpuCaption.Text = "CPU";
-        _panelMemCaption.Text = "内存";
-        _usedLabel.Text = "已用内存";
+        _panelMemCaption.Text = UiText.Memory;
+        _usedLabel.Text = UiText.MemoryUsed;
         _cpuPercent.HorizontalAlignment = HorizontalAlignment.Center;
         _memPercent.HorizontalAlignment = HorizontalAlignment.Center;
         _cpuRingPercent.FontSize = 11;
@@ -120,6 +125,7 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
             Child = _panel
         };
         WidgetFlyout.Attach(_popup);
+        _popup.Closed += (_, _) => ShowEditor();
         _popup.Opened += (_, _) =>
         {
             var scale = (ScaleTransform)_panel.RenderTransform;
@@ -181,6 +187,23 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
         _memBar.Track = TokenBrushes.From(Fade(DockTokens.Memory, 0x33));
         _cpuDot.Fill = TokenBrushes.From(DockTokens.Cpu);
         _memDot.Fill = TokenBrushes.From(DockTokens.Memory);
+    }
+
+    public void ApplyLocale()
+    {
+        _memCaption.Text = UiText.MemoryShort;
+        _panelMemCaption.Text = UiText.Memory;
+        _usedLabel.Text = UiText.MemoryUsed;
+        _flyoutTitle.Text = BuiltInWidgets.DisplayName(BuiltInWidgets.SysActivity);
+        _customizeTitle.Text = UiText.Customize;
+        _backLabel.Text = UiText.Back;
+        _layoutCaption.Text = UiText.Layout;
+        foreach (var (layout, title) in _layoutTitles)
+        {
+            title.Text = SysActivityFormat.LayoutTitle(layout);
+        }
+
+        Render(_perf.Current);
     }
 
     public void ApplySettings(SysActivitySettings settings)
@@ -360,7 +383,11 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
 
     private static double MeasureDockWidth()
     {
-        var caption = Math.Max(MeasureSample(FontWeights.Normal, DockTokens.SecondaryFontSize, "CPU"), MeasureSample(FontWeights.Normal, DockTokens.SecondaryFontSize, "内存"));
+        var caption = Math.Max(
+            MeasureSample(FontWeights.Normal, DockTokens.SecondaryFontSize, "CPU"),
+            Math.Max(
+                MeasureSample(FontWeights.Normal, DockTokens.SecondaryFontSize, UiText.Memory),
+                MeasureSample(FontWeights.Normal, DockTokens.SecondaryFontSize, UiText.MemoryShort)));
         var rings = (caption + CaptionRingGap + DockRing) * 2 + MeterGap;
         var numbers = MeasureSample(FontWeights.SemiBold, 18, "100%") * 2 + MeterGap;
         return Math.Max(rings, numbers);
@@ -400,10 +427,10 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
 
     private Grid BuildEditor()
     {
-        var title = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.SysActivity));
+        _flyoutTitle = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.SysActivity));
         var customize = HeaderGlyph("\uE8FD", OpenCustomize);
         var close = HeaderGlyph("\u00D7", ClosePopup, 18);
-        var header = HeaderRow(title, customize, close);
+        var header = HeaderRow(_flyoutTitle, customize, close);
         var meters = new Grid { Margin = new Thickness(0, 12, 0, 8) };
         meters.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         meters.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -462,6 +489,7 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
 
     private Grid BuildCustomize()
     {
+        _backLabel = HeaderLabel(UiText.Back);
         var back = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -470,7 +498,7 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
             Children =
             {
                 HeaderGlyph("\uE76B", ShowEditor, 12),
-                HeaderLabel("返回")
+                _backLabel
             }
         };
         back.MouseLeftButtonUp += (_, e) =>
@@ -478,26 +506,26 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
             ShowEditor();
             e.Handled = true;
         };
-        var title = HeaderLabel("自定义");
-        title.Margin = new Thickness(8, 0, 0, 0);
-        title.FontWeight = FontWeights.SemiBold;
+        _customizeTitle = HeaderLabel(UiText.Customize);
+        _customizeTitle.Margin = new Thickness(8, 0, 0, 0);
+        _customizeTitle.FontWeight = FontWeights.SemiBold;
         var close = HeaderGlyph("\u00D7", ClosePopup, 18);
         var header = HeaderRow(new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Children = { back, title }
+            Children = { back, _customizeTitle }
         }, close);
 
-        var layoutCaption = HeaderLabel("布局");
-        layoutCaption.Opacity = 0.62;
-        layoutCaption.Margin = new Thickness(0, 8, 0, 8);
+        _layoutCaption = HeaderLabel(UiText.Layout);
+        _layoutCaption.Opacity = 0.62;
+        _layoutCaption.Margin = new Thickness(0, 8, 0, 8);
         var layouts = new StackPanel();
         foreach (var layout in SysActivityLayouts.All)
         {
             layouts.Children.Add(LayoutRow(layout));
         }
 
-        var page = new StackPanel { Children = { header, layoutCaption, layouts } };
+        var page = new StackPanel { Children = { header, _layoutCaption, layouts } };
         var grid = new Grid();
         grid.Children.Add(page);
         return grid;
@@ -526,6 +554,7 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
             Margin = new Thickness(0, 0, 10, 0)
         };
         var title = HeaderLabel(SysActivityFormat.LayoutTitle(layout));
+        _layoutTitles[layout] = title;
         var content = new Grid();
         content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });

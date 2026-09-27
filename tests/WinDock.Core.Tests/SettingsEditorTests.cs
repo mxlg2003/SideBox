@@ -29,7 +29,7 @@ public class SettingsEditorTests
         Assert.Equal(
             new[] { BuiltInWidgets.Clock, BuiltInWidgets.Notes },
             general.Dock.Items.Select(item => item.WidgetId).ToArray());
-        Assert.True(general.Dock.AutoHide);
+        Assert.False(general.Dock.AutoHide);
     }
 
     [Fact]
@@ -177,6 +177,7 @@ public class SettingsEditorTests
         Assert.True(BuiltInWidgets.CanOpen(BuiltInWidgets.Clock));
         Assert.True(BuiltInWidgets.CanOpen(BuiltInWidgets.Stopwatch));
         Assert.True(BuiltInWidgets.CanOpen(BuiltInWidgets.Countdown));
+        Assert.True(BuiltInWidgets.CanOpen(BuiltInWidgets.Alarm));
         Assert.True(BuiltInWidgets.CanOpen(BuiltInWidgets.FocusTimer));
         Assert.True(BuiltInWidgets.CanOpen(BuiltInWidgets.Power));
         Assert.True(BuiltInWidgets.CanOpen(BuiltInWidgets.TimeProgress));
@@ -190,6 +191,7 @@ public class SettingsEditorTests
         Assert.False(BuiltInWidgets.HasDensityModes(BuiltInWidgets.Notes));
         Assert.False(BuiltInWidgets.HasDensityModes(BuiltInWidgets.Stopwatch));
         Assert.False(BuiltInWidgets.HasDensityModes(BuiltInWidgets.Countdown));
+        Assert.False(BuiltInWidgets.HasDensityModes(BuiltInWidgets.Alarm));
         Assert.False(BuiltInWidgets.HasDensityModes(BuiltInWidgets.FocusTimer));
         Assert.False(BuiltInWidgets.HasDensityModes(BuiltInWidgets.Power));
         Assert.True(BuiltInWidgets.CanCustomize(BuiltInWidgets.Notes));
@@ -201,6 +203,9 @@ public class SettingsEditorTests
         Assert.True(BuiltInWidgets.CanCustomize(BuiltInWidgets.Clock));
         Assert.False(BuiltInWidgets.CanCustomize(BuiltInWidgets.Stopwatch));
         Assert.False(BuiltInWidgets.CanCustomize(BuiltInWidgets.Countdown));
+        Assert.False(BuiltInWidgets.CanCustomize(BuiltInWidgets.Alarm));
+        Assert.False(BuiltInWidgets.CanCustomize(BuiltInWidgets.Weather));
+        Assert.False(BuiltInWidgets.CanCustomize(BuiltInWidgets.Schedule));
     }
 
     [Fact]
@@ -358,6 +363,46 @@ public class SettingsEditorTests
         Assert.Equal(59, next?.Seconds);
         Assert.Equal(40, next?.Name.Length);
         Assert.Empty(next?.Presets ?? []);
+    }
+
+    [Fact]
+    public void Alarm_settings_round_trip_and_normalize()
+    {
+        var settings = DefaultProfiles.CreateFactorySettings();
+        var added = SettingsEditor.AddWidget(settings, DefaultProfiles.GeneralId, BuiltInWidgets.Alarm);
+        var itemId = ItemId(added, BuiltInWidgets.Alarm);
+        var ringsAt = new DateTimeOffset(2026, 9, 20, 14, 30, 0, TimeSpan.Zero);
+        var saved = SettingsEditor.WithAlarm(added, DefaultProfiles.GeneralId, itemId, new AlarmSettings
+        {
+            Hour = 14,
+            Minute = 30,
+            Label = "Call Alex",
+            Armed = true,
+            RingsAt = ringsAt
+        });
+        var alarm = saved.Profiles.First(p => p.Id == DefaultProfiles.GeneralId).Dock.Items
+            .First(item => item.Id == itemId).Alarm;
+        Assert.Equal(14, alarm?.Hour);
+        Assert.Equal(30, alarm?.Minute);
+        Assert.Equal("Call Alex", alarm?.Label);
+        Assert.True(alarm?.Armed);
+        Assert.Equal(ringsAt, alarm?.RingsAt);
+
+        var clamped = SettingsEditor.WithAlarm(saved, DefaultProfiles.GeneralId, itemId, new AlarmSettings
+        {
+            Hour = 30,
+            Minute = 90,
+            Label = new string('x', 80),
+            Armed = false,
+            RingsAt = ringsAt
+        });
+        var next = clamped.Profiles.First(p => p.Id == DefaultProfiles.GeneralId).Dock.Items
+            .First(item => item.Id == itemId).Alarm;
+        Assert.Equal(23, next?.Hour);
+        Assert.Equal(59, next?.Minute);
+        Assert.Equal(40, next?.Label.Length);
+        Assert.False(next?.Armed);
+        Assert.Null(next?.RingsAt);
     }
 
     [Fact]
@@ -533,6 +578,17 @@ public class SettingsEditorTests
     }
 
     [Fact]
+    public void Language_round_trips()
+    {
+        var settings = DefaultProfiles.CreateFactorySettings();
+        Assert.Equal(UiLanguage.System, settings.Ui.Language);
+        var english = SettingsEditor.WithLanguage(settings, UiLanguage.English);
+        Assert.Equal(UiLanguage.English, english.Ui.Language);
+        Assert.Equal(settings.Ui.Theme, english.Ui.Theme);
+        Assert.Equal(settings.Ui.Backdrop, english.Ui.Backdrop);
+    }
+
+    [Fact]
     public void Island_transparency_clamps_to_percent()
     {
         var settings = DefaultProfiles.CreateFactorySettings();
@@ -560,6 +616,22 @@ public class SettingsEditorTests
         Assert.Equal(255u, DockTokens.ResolveMenuFill(true, true, DockBackdrop.Glass) >> 24);
         Assert.Equal(255u, DockTokens.ResolveMenuFill(false, true, DockBackdrop.Frosted) >> 24);
         Assert.Equal(255u, DockTokens.ResolveMenuFill(true, true, DockBackdrop.Mica) >> 24);
+    }
+
+    [Fact]
+    public void Field_fill_is_opaque_and_distinct_from_menu()
+    {
+        Assert.Equal(255u, DockTokens.ResolveFieldFill(false, DockBackdrop.Mica) >> 24);
+        Assert.Equal(255u, DockTokens.ResolveFieldFill(true, DockBackdrop.Glass) >> 24);
+        Assert.NotEqual(
+            DockTokens.ResolveMenuFill(false, true, DockBackdrop.Mica),
+            DockTokens.ResolveFieldFill(false, DockBackdrop.Mica));
+        Assert.NotEqual(
+            DockTokens.ResolveMenuFill(true, true, DockBackdrop.Mica),
+            DockTokens.ResolveFieldFill(true, DockBackdrop.Mica));
+        Assert.Equal(
+            DockTokens.ResolveFieldFill(false, DockBackdrop.Mica),
+            DockTokens.ResolveQuietFill(false, DockBackdrop.Mica));
     }
 
     [Fact]

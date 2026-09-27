@@ -13,7 +13,7 @@ public class CountdownEngineTests
         var engine = new CountdownEngine();
         Assert.Equal(TimeSpan.FromMinutes(5), engine.Duration);
         Assert.Equal("5:00", CountdownFormat.Time(engine.Remaining(Zero)));
-        Assert.Equal(CountdownFormat.Ready, CountdownFormat.TileStatus(false, false, null));
+        Assert.Equal(CountdownFormat.Ready, CountdownFormat.TileStatus(false, false));
         Assert.True(engine.CanStart(Zero));
     }
 
@@ -144,8 +144,8 @@ public class CountdownEngineTests
     {
         Assert.Equal("5:00", CountdownFormat.Time(TimeSpan.FromMinutes(5)));
         Assert.Equal("1:01:01", CountdownFormat.Time(TimeSpan.FromSeconds(3661)));
-        Assert.Equal("茶", CountdownFormat.TileStatus(true, false, "茶"));
-        Assert.Equal(CountdownFormat.Paused, CountdownFormat.TileStatus(false, true, "茶"));
+        Assert.Equal(CountdownFormat.Ready, CountdownFormat.TileStatus(true, false));
+        Assert.Equal(CountdownFormat.Paused, CountdownFormat.TileStatus(false, true));
         Assert.Equal("茶", CountdownFormat.FinishedMessage("茶"));
         Assert.Equal(CountdownFormat.Finished, CountdownFormat.FinishedMessage(" "));
         Assert.False(new CountdownEngine().UpsertPreset());

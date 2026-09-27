@@ -12,7 +12,7 @@ public class FocusTimerEngineTests
     {
         var engine = new FocusTimerEngine();
         Assert.Equal("25:00", FocusTimerFormat.Time(engine.Remaining(Zero)));
-        Assert.Equal("专注 · 第 1 / 4 段", FocusTimerFormat.SessionLine(engine.Phase, engine.Session, engine.Settings.LongBreakEvery));
+        Assert.Equal("专注 · 第 1 / 4 轮", FocusTimerFormat.SessionLine(engine.Phase, engine.Session, engine.Settings.LongBreakEvery));
 
         FinishFocus(engine, Zero, sessionAfter: 1, FocusTimerPhase.ShortBreak);
         FinishBreak(engine, Zero.AddMinutes(25), sessionAfter: 2);

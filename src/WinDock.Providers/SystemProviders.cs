@@ -290,11 +290,11 @@ public sealed class Win32PowerProvider : IPowerProvider, IDisposable
         try
         {
             var name = Environment.MachineName;
-            return string.IsNullOrWhiteSpace(name) ? "这台电脑" : name;
+            return string.IsNullOrWhiteSpace(name) ? UiText.ThisPc : name;
         }
         catch (Exception)
         {
-            return "这台电脑";
+            return UiText.ThisPc;
         }
     }
 }
@@ -330,8 +330,17 @@ public sealed class PerformanceCounterSampler : IPerfSampler, IDisposable
             return;
         }
 
-        EnsureCounters();
-        Sample();
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            if (Volatile.Read(ref _started) == 0 || Volatile.Read(ref _disposed) == 1)
+            {
+                return;
+            }
+
+            EnsureCounters();
+            Sample();
+        });
+
         _timer.Change(TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
     }
 

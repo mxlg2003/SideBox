@@ -10,7 +10,7 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, INotesHistory
+public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, INotesHistory, ILocalizable
 {
     private readonly INotesStore _store;
     private readonly string _key;
@@ -27,6 +27,17 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
     };
     private readonly StackPanel _historyList = new();
     private readonly TextBlock _historyCaption = new();
+    private IReadOnlyList<NotesHistoryItem> _history = [];
+    private TextBlock _flyoutTitle = null!;
+    private TextBlock _todoGlyph = null!;
+    private TextBlock _customizeTitle = null!;
+    private TextBlock _backLabel = null!;
+    private TextBlock _paperCaption = null!;
+    private TextBlock _syntaxCaption = null!;
+    private TextBlock _syntaxHint = null!;
+    private TextBlock _customizeGlyph = null!;
+    private TextBlock _deleteCancel = null!;
+    private TextBlock _deleteConfirmLabel = null!;
     private readonly ScrollViewer _historyScroll = new()
     {
         MaxHeight = 148,
@@ -76,7 +87,9 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
             Foreground = ink,
             FontFamily = WidgetFonts.Notes,
             FontSize = 16,
-            MinHeight = 148
+            MinHeight = 148,
+            MaxHeight = 280,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         };
 
         _tile = WidgetChrome.Wrap(_preview, 0, WidgetChrome.NotesTag);
@@ -138,6 +151,11 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
                 Save();
                 e.Handled = true;
             }
+            else if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                ToggleCurrentLineTodo();
+                e.Handled = true;
+            }
         };
 
         Unloaded += (_, _) =>
@@ -163,8 +181,33 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
 
     public event EventHandler<string>? DiscardRequested;
 
+    public void ApplyLocale()
+    {
+        _flyoutTitle.Text = UiText.WidgetNotes;
+        if (_todoGlyph is not null)
+        {
+            _todoGlyph.ToolTip = UiText.NotesTodoToggle;
+        }
+        _customizeGlyph.ToolTip = UiText.Customize;
+        _backLabel.Text = UiText.Back;
+        _customizeTitle.Text = UiText.Customize;
+        _paperCaption.Text = UiText.PaperColor;
+        _syntaxCaption.Text = UiText.NotesSyntax;
+        _syntaxHint.Text = UiText.NotesSyntaxHint;
+        _historyCaption.Text = UiText.NotesHistory;
+        _deleteButton.ToolTip = UiText.DeleteThisNote;
+        _deleteCancel.Text = UiText.Cancel;
+        _deleteConfirmLabel.Text = UiText.ConfirmDelete;
+        _deleteConfirm.ToolTip = UiText.DeleteNoteForeverHint;
+        var text = _box.Text ?? string.Empty;
+        _preview.Text = PreviewText(text);
+        FitPreview(text);
+        ApplyHistory(_history);
+    }
+
     public void ApplyHistory(IReadOnlyList<NotesHistoryItem> items)
     {
+        _history = items;
         _historyList.Children.Clear();
         var any = items.Count > 0;
         _historyCaption.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
@@ -270,11 +313,13 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
 
     private Grid BuildEditor(Brush ink)
     {
-        var title = HeaderLabel("便笺", ink);
-        var customize = HeaderGlyph("\uE8FD", ink, OpenCustomize);
-        customize.ToolTip = "自定义";
+        _flyoutTitle = HeaderLabel(UiText.WidgetNotes, ink);
+        _todoGlyph = HeaderGlyph("\uE73A", ink, ToggleCurrentLineTodo);
+        _todoGlyph.ToolTip = UiText.NotesTodoToggle;
+        _customizeGlyph = HeaderGlyph("\uE8FD", ink, OpenCustomize);
+        _customizeGlyph.ToolTip = UiText.Customize;
         var close = HeaderGlyph("\u00D7", ink, ClosePopup, 18);
-        var header = HeaderRow(title, customize, close);
+        var header = HeaderRow(_flyoutTitle, _todoGlyph, _customizeGlyph, close);
         var footer = BuildDeleteFooter(ink);
         var page = new Grid();
         page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -288,6 +333,39 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         return page;
     }
 
+    private void ToggleCurrentLineTodo()
+    {
+        var text = _box.Text ?? string.Empty;
+        var caret = _box.CaretIndex;
+        var lineStart = text.LastIndexOf('\n', Math.Max(0, caret - 1));
+        lineStart = lineStart < 0 ? 0 : lineStart + 1;
+        var lineEnd = text.IndexOf('\n', lineStart);
+        if (lineEnd < 0)
+        {
+            lineEnd = text.Length;
+        }
+
+        var hasCarriageReturn = lineEnd > lineStart && text[lineEnd - 1] == '\r';
+        var actualEnd = hasCarriageReturn ? lineEnd - 1 : lineEnd;
+        var line = text.Substring(lineStart, actualEnd - lineStart);
+
+        string newLine;
+        if (NotesText.IsTodoLine(line))
+        {
+            newLine = NotesText.ToggleTodoLine(line);
+        }
+        else
+        {
+            newLine = "- [ ] " + line;
+        }
+
+        var newText = text.Substring(0, lineStart) + newLine + (hasCarriageReturn ? "\r" : "") + text.Substring(lineEnd);
+        _box.Text = newText;
+        var diff = newLine.Length - line.Length;
+        _box.CaretIndex = Math.Clamp(caret + diff, 0, newText.Length);
+        _box.Focus();
+    }
+
     private Grid BuildCustomize(Brush ink)
     {
         var back = new StackPanel
@@ -298,28 +376,29 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
             Children =
             {
                 HeaderGlyph("\uE76B", ink, ShowEditor, 12),
-                HeaderLabel("返回", ink)
+                HeaderLabel(UiText.Back, ink)
             }
         };
+        _backLabel = (TextBlock)back.Children[1];
         back.MouseLeftButtonUp += (_, e) =>
         {
             ShowEditor();
             e.Handled = true;
         };
-        var title = HeaderLabel("自定义", ink);
-        title.Margin = new Thickness(8, 0, 0, 0);
-        title.FontWeight = FontWeights.SemiBold;
+        _customizeTitle = HeaderLabel(UiText.Customize, ink);
+        _customizeTitle.Margin = new Thickness(8, 0, 0, 0);
+        _customizeTitle.FontWeight = FontWeights.SemiBold;
         var close = HeaderGlyph("\u00D7", ink, ClosePopup, 18);
         var left = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { back, title }
+            Children = { back, _customizeTitle }
         };
         var header = HeaderRow(left, close);
-        var caption = HeaderLabel("纸张颜色", ink);
-        caption.Opacity = 0.62;
-        caption.Margin = new Thickness(0, 14, 0, 0);
+        _paperCaption = HeaderLabel(UiText.PaperColor, ink);
+        _paperCaption.Opacity = 0.62;
+        _paperCaption.Margin = new Thickness(0, 14, 0, 0);
         foreach (var id in NotePapers.All)
         {
             var (dot, check) = Swatch(id);
@@ -328,7 +407,7 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         }
 
         _historyCaption.Tag = "ink";
-        _historyCaption.Text = "历史便笺";
+        _historyCaption.Text = UiText.NotesHistory;
         _historyCaption.FontFamily = WidgetFonts.Notes;
         _historyCaption.FontSize = 13;
         _historyCaption.Foreground = ink;
@@ -338,14 +417,14 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         _historyScroll.Content = _historyList;
         _historyScroll.Visibility = Visibility.Collapsed;
 
-        var syntaxCaption = HeaderLabel("便签语法", ink);
-        syntaxCaption.Opacity = 0.62;
-        syntaxCaption.Margin = new Thickness(0, 16, 0, 0);
-        var syntaxHint = HeaderLabel("第一行以 ### 开头作为标题。有标题时 Dock 只显示标题；没有标题时显示前两行。", ink);
-        syntaxHint.TextWrapping = TextWrapping.Wrap;
-        syntaxHint.Opacity = 0.78;
-        syntaxHint.Margin = new Thickness(0, 6, 0, 0);
-        syntaxHint.MaxWidth = 268;
+        _syntaxCaption = HeaderLabel(UiText.NotesSyntax, ink);
+        _syntaxCaption.Opacity = 0.62;
+        _syntaxCaption.Margin = new Thickness(0, 16, 0, 0);
+        _syntaxHint = HeaderLabel(UiText.NotesSyntaxHint, ink);
+        _syntaxHint.TextWrapping = TextWrapping.Wrap;
+        _syntaxHint.Opacity = 0.78;
+        _syntaxHint.Margin = new Thickness(0, 6, 0, 0);
+        _syntaxHint.MaxWidth = 268;
 
         var page = new Grid();
         page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -356,14 +435,14 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         page.Children.Add(header);
-        Grid.SetRow(caption, 1);
-        page.Children.Add(caption);
+        Grid.SetRow(_paperCaption, 1);
+        page.Children.Add(_paperCaption);
         Grid.SetRow(_swatches, 2);
         page.Children.Add(_swatches);
-        Grid.SetRow(syntaxCaption, 3);
-        page.Children.Add(syntaxCaption);
-        Grid.SetRow(syntaxHint, 4);
-        page.Children.Add(syntaxHint);
+        Grid.SetRow(_syntaxCaption, 3);
+        page.Children.Add(_syntaxCaption);
+        Grid.SetRow(_syntaxHint, 4);
+        page.Children.Add(_syntaxHint);
         Grid.SetRow(_historyCaption, 5);
         page.Children.Add(_historyCaption);
         Grid.SetRow(_historyScroll, 6);
@@ -379,7 +458,7 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         preview.MaxWidth = 196;
         preview.Cursor = Cursors.Hand;
         preview.VerticalAlignment = VerticalAlignment.Center;
-        preview.ToolTip = "替换当前便笺";
+        preview.ToolTip = UiText.ReplaceCurrentNote;
         void Restore() => RestoreRequested?.Invoke(this, id);
         preview.MouseLeftButtonUp += (_, e) =>
         {
@@ -387,7 +466,7 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
             e.Handled = true;
         };
         var trash = HeaderGlyph("\uE74D", _historyCaption.Foreground, () => DiscardRequested?.Invoke(this, id));
-        trash.ToolTip = "永久删除";
+        trash.ToolTip = UiText.DeleteForever;
         trash.Padding = new Thickness(8, 4, 0, 4);
         var dot = new Ellipse
         {
@@ -501,12 +580,12 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         var trash = HeaderGlyph("\uE74D", ink, AskDelete);
         trash.HorizontalAlignment = HorizontalAlignment.Right;
         trash.VerticalAlignment = VerticalAlignment.Bottom;
-        trash.ToolTip = "删除这张便笺";
+        trash.ToolTip = UiText.DeleteThisNote;
         _deleteButton = trash;
-        var cancel = TextAction("取消", ink, HideDeleteConfirm);
-        var confirm = TextAction("确认删除", ink, RequestDelete);
-        ((TextBlock)confirm.Child).Opacity = 0.82;
-        confirm.ToolTip = "永久删除，不会进入历史";
+        var cancel = TextAction(UiText.Cancel, ink, HideDeleteConfirm, out _deleteCancel);
+        var confirm = TextAction(UiText.ConfirmDelete, ink, RequestDelete, out _deleteConfirmLabel);
+        _deleteConfirmLabel.Opacity = 0.82;
+        confirm.ToolTip = UiText.DeleteNoteForeverHint;
         var actions = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -553,9 +632,9 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         }
     }
 
-    private static Border TextAction(string text, Brush ink, Action click)
+    private static Border TextAction(string text, Brush ink, Action click, out TextBlock label)
     {
-        var label = HeaderLabel(text, ink);
+        label = HeaderLabel(text, ink);
         label.Opacity = 0.55;
         var border = new Border
         {
@@ -630,7 +709,7 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         {
             _preview.Text = PreviewText(text);
             FitPreview(text);
-            UserAlerts.Show("WinDock 便笺", "便笺未能写入磁盘。");
+            UserAlerts.Show(UiText.NotesAlertTitle, UiText.NotesSaveFailed);
         }
     }
 

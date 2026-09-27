@@ -16,7 +16,7 @@ namespace WinDock.Widgets;
 
 public sealed class WidgetViewRegistry
 {
-    public UIElement Create(DockItem item, IProviderHub hub)
+    public UIElement Create(DockItem item, IProviderHub hub, Func<Task>? applyBingWallpaper = null)
     {
         return item.WidgetId switch
         {
@@ -26,22 +26,31 @@ public sealed class WidgetViewRegistry
             BuiltInWidgets.SysActivity => new SysActivityWidget(hub.Perf),
             BuiltInWidgets.Network => new NetworkWidget(hub.Network),
             BuiltInWidgets.NowPlaying => new NowPlayingWidget(hub.Media),
-            BuiltInWidgets.BingWallpaper => new BingWallpaperWidget(hub.Bing),
+            BuiltInWidgets.BingWallpaper => new BingWallpaperWidget(hub.Bing, applyBingWallpaper),
             BuiltInWidgets.Stopwatch => new StopwatchWidget(),
             BuiltInWidgets.Countdown => new CountdownWidget(),
+            BuiltInWidgets.Alarm => new AlarmWidget(),
             BuiltInWidgets.FocusTimer => new FocusTimerWidget(),
             BuiltInWidgets.TimeProgress => new TimeProgressWidget(hub.Clock),
-            _ => new PlaceholderWidget(BuiltInWidgets.DisplayName(item.WidgetId ?? string.Empty))
+            BuiltInWidgets.Weather => new WeatherWidget(hub.Weather),
+            BuiltInWidgets.Schedule => new ScheduleWidget(),
+            _ => new PlaceholderWidget(item.WidgetId ?? string.Empty)
         };
     }
 }
 
-public static class WidgetChrome
+public static partial class WidgetChrome
 {
     internal const string Tag = "wd-chrome";
     internal const string NotesTag = "wd-chrome-notes";
     internal const string FlyoutTag = "wd-chrome-flyout";
     internal const string FlyoutHostTag = "wd-chrome-flyout-host";
+    internal const string FieldTag = "wd-chrome-field";
+    internal const string QuietTag = "wd-chrome-quiet";
+    internal const string QuietOverlayTag = "wd-chrome-quiet-overlay";
+
+    private static bool _themeIsLight;
+    private static DockBackdrop _themeBackdrop = DockBackdrop.Mica;
 
     public static Border Wrap(UIElement content, double minWidth = 64, string tag = Tag)
     {
@@ -79,6 +88,21 @@ public static class WidgetChrome
         Round(card, DockTokens.IslandCornerRadius);
         ApplyTheme(card, false);
         return Shadow(card);
+    }
+
+    public static Border Field(UIElement content, double height = 34)
+    {
+        var border = new Border
+        {
+            Tag = FieldTag,
+            CornerRadius = new CornerRadius(DockTokens.TileCornerRadius),
+            Height = height,
+            SnapsToDevicePixels = true,
+            BorderThickness = new Thickness(1),
+            Child = content
+        };
+        ApplyTheme(border, false);
+        return border;
     }
 
     public static Border Shadow(UIElement child) => new()
@@ -133,8 +157,45 @@ public static class WidgetChrome
         Children = { glyph, body }
     };
 
+    public static void MarkQuiet(Border border)
+    {
+        border.Tag = QuietTag;
+        ApplyTheme(border, _themeIsLight, _themeBackdrop);
+    }
+
+    public static void MarkQuietOverlay(Border border)
+    {
+        border.Tag = QuietOverlayTag;
+        ApplyTheme(border, _themeIsLight, _themeBackdrop);
+    }
+
+    public static void ClearQuiet(Border border, uint fill)
+    {
+        border.Tag = null;
+        border.Background = TokenBrushes.From(fill);
+        border.BorderBrush = Brushes.Transparent;
+        border.BorderThickness = new Thickness(0);
+    }
+
     public static void ApplyTree(DependencyObject root, bool isLight, DockBackdrop backdrop = DockBackdrop.Mica)
     {
+        ApplyTreeCore(root, isLight, backdrop, []);
+    }
+
+    private static void ApplyTreeCore(DependencyObject root, bool isLight, DockBackdrop backdrop, HashSet<DependencyObject> seen)
+    {
+        if (!seen.Add(root))
+        {
+            return;
+        }
+
+        _themeIsLight = isLight;
+        _themeBackdrop = backdrop;
+        if (root is ILocalizable localizable)
+        {
+            localizable.ApplyLocale();
+        }
+
         if (root is IWidgetThemeAware themed)
         {
             themed.ApplyTheme(isLight);
@@ -145,33 +206,30 @@ public static class WidgetChrome
             ApplyTheme(border, isLight, backdrop);
         }
 
+        if (root is TextBox box)
+        {
+            PaintInput(box, isLight, backdrop);
+        }
+
+        if (root is ComboBox combo)
+        {
+            PaintCombo(combo, isLight, backdrop);
+        }
+
+        if (root is ScrollViewer scroll)
+        {
+            PaintScrollViewer(scroll, isLight);
+        }
+
         var count = VisualTreeHelper.GetChildrenCount(root);
         for (var i = 0; i < count; i++)
         {
-            ApplyTree(VisualTreeHelper.GetChild(root, i), isLight, backdrop);
+            ApplyTreeCore(VisualTreeHelper.GetChild(root, i), isLight, backdrop, seen);
         }
 
-        if (root is Decorator decorator && decorator.Child is not null)
+        if (root is Popup popup && popup.Child is DependencyObject popupChild)
         {
-            ApplyTree(decorator.Child, isLight, backdrop);
-        }
-        else if (root is Panel panel)
-        {
-            foreach (var child in panel.Children)
-            {
-                if (child is DependencyObject d)
-                {
-                    ApplyTree(d, isLight, backdrop);
-                }
-            }
-        }
-        else if (root is ContentControl control && control.Content is DependencyObject inner)
-        {
-            ApplyTree(inner, isLight, backdrop);
-        }
-        else if (root is Popup popup && popup.Child is DependencyObject popupChild)
-        {
-            ApplyTree(popupChild, isLight, backdrop);
+            ApplyTreeCore(popupChild, isLight, backdrop, seen);
         }
     }
 
@@ -191,12 +249,38 @@ public static class WidgetChrome
         {
             border.Background = TokenBrushes.From(DockTokens.ResolveMenuFill(isLight, true, backdrop));
         }
+        else if (Equals(border.Tag, FieldTag) || Equals(border.Tag, QuietTag))
+        {
+            border.Background = TokenBrushes.From(DockTokens.ResolveQuietFill(isLight, backdrop));
+            border.BorderBrush = TokenBrushes.From(isLight ? DockTokens.Light.Stroke : DockTokens.Dark.Stroke);
+            border.BorderThickness = new Thickness(1);
+        }
+        else if (Equals(border.Tag, QuietOverlayTag))
+        {
+            border.Background = TokenBrushes.From(isLight ? DockTokens.Light.Stroke : DockTokens.Dark.TileHover);
+        }
         else
         {
             border.Background = TokenBrushes.From(DockTokens.ResolveTileFill(isLight, backdrop));
         }
 
         SetForeground(border, isLight ? DockTokens.Light.Text : DockTokens.Dark.Text);
+    }
+
+    private static void PaintInput(TextBox box, bool isLight, DockBackdrop backdrop)
+    {
+        if (Equals(box.Tag, "ink"))
+        {
+            return;
+        }
+
+        var text = TokenBrushes.From(isLight ? DockTokens.Light.Text : DockTokens.Dark.Text);
+        box.Foreground = text;
+        box.CaretBrush = text;
+        box.Background = TokenBrushes.From(DockTokens.ResolveFieldFill(isLight, backdrop));
+        box.BorderBrush = TokenBrushes.From(isLight ? DockTokens.Light.Stroke : DockTokens.Dark.Stroke);
+        TextOptions.SetTextRenderingMode(box, TextRenderingMode.Grayscale);
+        TextOptions.SetTextFormattingMode(box, TextFormattingMode.Display);
     }
 
     private static void SetForeground(DependencyObject root, uint argb)
@@ -290,21 +374,50 @@ internal static class WidgetCopy
         Opacity = 0.62,
         Margin = new Thickness(0, 1, 0, 0)
     };
+
+    public static void WrapUserText(TextBlock block, string? text, double? maxWidth = null)
+    {
+        var value = text ?? string.Empty;
+        block.Text = value;
+        block.TextWrapping = TextWrapping.Wrap;
+        block.TextTrimming = TextTrimming.None;
+        block.ToolTip = null;
+        if (maxWidth is { } width)
+        {
+            block.MaxWidth = width;
+        }
+    }
+
+    public static void TrimIslandText(TextBlock block, string? text, double maxWidth)
+    {
+        block.Text = text ?? string.Empty;
+        block.TextWrapping = TextWrapping.NoWrap;
+        block.TextTrimming = TextTrimming.CharacterEllipsis;
+        block.MaxWidth = maxWidth;
+    }
 }
 
-public sealed class PlaceholderWidget : UserControl
+public sealed class PlaceholderWidget : UserControl, ILocalizable
 {
-    public PlaceholderWidget(string title)
+    private readonly string _widgetId;
+    private readonly TextBlock _label;
+
+    public PlaceholderWidget(string widgetId)
     {
-        Content = WidgetChrome.Wrap(new TextBlock
+        _widgetId = widgetId;
+        Tag = BuiltInWidgets.PlaceholderTag;
+        _label = new TextBlock
         {
-            Text = title,
+            Text = BuiltInWidgets.DisplayName(widgetId),
             FontSize = DockTokens.PrimaryFontSize,
             Opacity = 0.7
-        });
+        };
+        Content = WidgetChrome.Wrap(_label);
         Opacity = 0.55;
         IsHitTestVisible = false;
     }
+
+    public void ApplyLocale() => _label.Text = BuiltInWidgets.DisplayName(_widgetId);
 }
 
 internal static class WidgetMode
@@ -313,7 +426,7 @@ internal static class WidgetMode
         density == WidgetDensity.Expanded ? Visibility.Visible : Visibility.Collapsed;
 }
 
-public sealed class ClockWidget : UserControl, IWidgetModeAware, IWidgetOpenable, IWidgetCustomizable, IClockConfigurable
+public sealed class ClockWidget : UserControl, IWidgetModeAware, IWidgetOpenable, IWidgetCustomizable, IClockConfigurable, ILocalizable
 {
     private readonly IClockProvider _clock;
     private readonly AnalogClockFace _tileFace = new(DockTokens.ClockFaceSize)
@@ -339,6 +452,9 @@ public sealed class ClockWidget : UserControl, IWidgetModeAware, IWidgetOpenable
     private WidgetDensity _density = WidgetDensity.Expanded;
     private string? _timeZoneId;
     private readonly Popup _customize;
+    private readonly TextBlock _flyoutTitle = WidgetCopy.Secondary();
+    private readonly TextBlock _zoneCaption = new() { FontSize = 13 };
+    private readonly ComboBox _zoneBox = new();
 
     public event EventHandler<string>? PaperChanged;
 
@@ -383,10 +499,9 @@ public sealed class ClockWidget : UserControl, IWidgetModeAware, IWidgetOpenable
             e.Handled = true;
         };
 
-        var title = WidgetCopy.Secondary();
-        title.Text = BuiltInWidgets.DisplayName(BuiltInWidgets.Clock);
-        title.FontSize = 12;
-        title.VerticalAlignment = VerticalAlignment.Center;
+        _flyoutTitle.Text = BuiltInWidgets.DisplayName(BuiltInWidgets.Clock);
+        _flyoutTitle.FontSize = 12;
+        _flyoutTitle.VerticalAlignment = VerticalAlignment.Center;
         var close = new TextBlock
         {
             Text = "\u00D7",
@@ -399,7 +514,7 @@ public sealed class ClockWidget : UserControl, IWidgetModeAware, IWidgetOpenable
         var header = new Grid();
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        header.Children.Add(title);
+        header.Children.Add(_flyoutTitle);
         Grid.SetColumn(close, 1);
         header.Children.Add(close);
 
@@ -477,6 +592,14 @@ public sealed class ClockWidget : UserControl, IWidgetModeAware, IWidgetOpenable
         InvalidateMeasure();
     }
 
+    public void ApplyLocale()
+    {
+        _flyoutTitle.Text = BuiltInWidgets.DisplayName(BuiltInWidgets.Clock);
+        _zoneCaption.Text = UiText.SecondTimeZone;
+        FillZoneBox();
+        Tick();
+    }
+
     public void ApplyDensity(WidgetDensity density)
     {
         _density = density;
@@ -531,30 +654,26 @@ public sealed class ClockWidget : UserControl, IWidgetModeAware, IWidgetOpenable
 
     private Popup BuildCustomizePopup()
     {
-        var box = new ComboBox { Width = 220, Margin = new Thickness(0, 8, 0, 0) };
-        box.Items.Add(new ComboBoxItem { Content = "仅本地时间", Tag = "" });
-        foreach (var choice in ClockFormat.ZoneChoices)
+        WidgetChrome.PaintCombo(_zoneBox, false);
+        FillZoneBox();
+        _zoneBox.SelectionChanged += (_, _) =>
         {
-            box.Items.Add(new ComboBoxItem { Content = choice.Place, Tag = choice.Id });
-        }
-
-        box.SelectionChanged += (_, _) =>
-        {
-            if (box.SelectedItem is not ComboBoxItem item)
+            if (_zoneBox.SelectedItem is not ComboChoice choice)
             {
                 return;
             }
 
-            var id = item.Tag as string;
-            TimeZoneChanged?.Invoke(this, string.IsNullOrWhiteSpace(id) ? null : id);
+            TimeZoneChanged?.Invoke(this, string.IsNullOrWhiteSpace(choice.Id) ? null : choice.Id);
         };
 
+        _zoneBox.Margin = new Thickness(0, 8, 0, 0);
+        _zoneCaption.Text = UiText.SecondTimeZone;
         var panel = WidgetChrome.Flyout(new StackPanel
         {
             Children =
             {
-                new TextBlock { Text = "第二时区", FontSize = 13 },
-                box
+                _zoneCaption,
+                _zoneBox
             }
         }, 260);
         var popup = new Popup
@@ -569,18 +688,26 @@ public sealed class ClockWidget : UserControl, IWidgetModeAware, IWidgetOpenable
         WidgetFlyout.Attach(popup);
         popup.Opened += (_, _) =>
         {
-            foreach (var item in box.Items.OfType<ComboBoxItem>())
+            WidgetChrome.SelectChoice(_zoneBox, _timeZoneId ?? string.Empty);
+            if (_zoneBox.SelectedItem is null && _zoneBox.Items.Count > 0)
             {
-                var tag = item.Tag as string;
-                item.IsSelected = string.Equals(tag, _timeZoneId ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-            }
-
-            if (box.SelectedItem is null && box.Items.Count > 0)
-            {
-                box.SelectedIndex = 0;
+                _zoneBox.SelectedIndex = 0;
             }
         };
         return popup;
+    }
+
+    private void FillZoneBox()
+    {
+        var selected = _zoneBox.SelectedItem is ComboChoice current ? current.Id : _timeZoneId ?? string.Empty;
+        _zoneBox.Items.Clear();
+        _zoneBox.Items.Add(new ComboChoice(string.Empty, UiText.LocalTimeOnly));
+        foreach (var choice in ClockFormat.ZoneChoices)
+        {
+            _zoneBox.Items.Add(new ComboChoice(choice.Id, choice.Place));
+        }
+
+        WidgetChrome.SelectChoice(_zoneBox, selected);
     }
 }
 
@@ -594,6 +721,11 @@ public interface IClockConfigurable
 public interface IKeepAliveWhileRunning
 {
     bool IsAlive { get; }
+}
+
+public interface IWidgetDetachable
+{
+    void Detach();
 }
 
 public interface IPrivacyAware
@@ -650,6 +782,13 @@ public interface ICountdownConfigurable
     event EventHandler<CountdownSettings>? SettingsChanged;
 }
 
+public interface IAlarmConfigurable
+{
+    void ApplySettings(AlarmSettings settings);
+
+    event EventHandler<AlarmSettings>? SettingsChanged;
+}
+
 public interface IPowerWidgetConfigurable
 {
     void ApplySettings(PowerWidgetSettings settings);
@@ -678,12 +817,31 @@ public interface INetworkConfigurable
     event EventHandler<NetworkWidgetSettings>? SettingsChanged;
 }
 
+public interface IWeatherConfigurable
+{
+    void ApplySettings(WeatherSettings settings);
+
+    event EventHandler<WeatherSettings>? SettingsChanged;
+}
+
+public interface IScheduleConfigurable
+{
+    void ApplySettings(ScheduleSettings settings);
+
+    event EventHandler<ScheduleSettings>? SettingsChanged;
+}
+
 public interface IWidgetThemeAware
 {
     void ApplyTheme(bool isLight);
 }
 
-public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAware
+public interface ILocalizable
+{
+    void ApplyLocale();
+}
+
+public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAware, IWidgetThemeAware, ILocalizable
 {
     private const string GlyphPrevious = "\uE892";
     private const string GlyphPlay = "\uE768";
@@ -698,17 +856,21 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
     private readonly Image _artImage = new() { Stretch = Stretch.UniformToFill, Visibility = Visibility.Collapsed };
     private readonly TextBlock _elapsed = WidgetCopy.Secondary();
     private readonly TextBlock _remaining = WidgetCopy.Secondary();
+    private readonly Border _artWell;
+    private readonly Border _progressWell;
     private readonly Border _progressFill = new()
     {
         Height = 3,
         CornerRadius = new CornerRadius(2),
-        HorizontalAlignment = HorizontalAlignment.Left,
-        Background = TokenBrushes.From(0x99000000)
+        HorizontalAlignment = HorizontalAlignment.Left
     };
     private readonly Grid _progressTrack;
     private readonly StackPanel _progressRow;
     private readonly TextBlock _inlinePlayGlyph;
     private readonly TextBlock _pillPlayGlyph;
+    private readonly Border _prevButton;
+    private readonly Border _playButton;
+    private readonly Border _nextButton;
     private readonly StackPanel _controls;
     private readonly Border _playPill;
     private readonly StackPanel _detail;
@@ -734,11 +896,20 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
         _artGlyph.Tag = "tint";
         _artGlyph.FontSize = 14;
         _artGlyph.Margin = new Thickness(0);
+        _artGlyph.HorizontalAlignment = HorizontalAlignment.Center;
+        _artGlyph.VerticalAlignment = VerticalAlignment.Center;
+        _artGlyph.TextAlignment = TextAlignment.Center;
         _inlinePlayGlyph = MediaGlyph(GlyphPlay, 11);
         _pillPlayGlyph = MediaGlyph(GlyphPlay, 14);
-        var prev = TransportButton(GlyphPrevious, "上一首", () => _ = _media.TrySkipPreviousAsync());
-        var inlinePlay = TransportButton(GlyphPlay, "播放/暂停", () => _ = TogglePlayPauseAsync(), _inlinePlayGlyph);
-        var next = TransportButton(GlyphNext, "下一首", () => _ = _media.TrySkipNextAsync());
+        _prevButton = TransportButton(GlyphPrevious, UiText.PreviousTrack, () => _ = _media.TrySkipPreviousAsync());
+        _playButton = TransportButton(GlyphPlay, UiText.PlayPause, () => _ = TogglePlayPauseAsync(), _inlinePlayGlyph);
+        _nextButton = TransportButton(GlyphNext, UiText.NextTrack, () => _ = _media.TrySkipNextAsync());
+        _artWell = new Border
+        {
+            CornerRadius = new CornerRadius(DockTokens.ArtCornerRadius),
+            Child = _artGlyph
+        };
+        WidgetChrome.MarkQuietOverlay(_artWell);
         var art = new Grid
         {
             Width = DockTokens.ArtSize,
@@ -749,42 +920,35 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
                 DockTokens.ArtCornerRadius,
                 DockTokens.ArtCornerRadius)
         };
-        art.Children.Add(new Border
-        {
-            CornerRadius = new CornerRadius(DockTokens.ArtCornerRadius),
-            Background = TokenBrushes.From(0x33000000),
-            Child = _artGlyph
-        });
+        art.Children.Add(_artWell);
         art.Children.Add(_artImage);
         _controls = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { prev, inlinePlay, next }
+            Margin = new Thickness(DockTokens.TileGap, 0, 0, 0),
+            Children = { _prevButton, _playButton, _nextButton }
         };
-        var titleRow = new Grid();
-        titleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        titleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        titleRow.Children.Add(_title);
-        Grid.SetColumn(_controls, 1);
-        titleRow.Children.Add(_controls);
+        var titleRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { _title, _controls }
+        };
 
+        _progressWell = new Border
+        {
+            Height = 3,
+            CornerRadius = new CornerRadius(2)
+        };
+        WidgetChrome.MarkQuietOverlay(_progressWell);
         _progressTrack = new Grid
         {
             Width = 72,
             Height = 4,
             Margin = new Thickness(6, 0, 6, 0),
             VerticalAlignment = VerticalAlignment.Center,
-            Children =
-            {
-                new Border
-                {
-                    Height = 3,
-                    CornerRadius = new CornerRadius(2),
-                    Background = TokenBrushes.From(0x33000000)
-                },
-                _progressFill
-            }
+            Children = { _progressWell, _progressFill }
         };
         _progressTrack.SizeChanged += (_, _) => RenderProgress(_media.Current);
         _progressRow = new StackPanel
@@ -799,11 +963,11 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
             Width = 32,
             Height = 32,
             CornerRadius = new CornerRadius(16),
-            Background = TokenBrushes.From(0x14000000),
             Cursor = Cursors.Hand,
             Child = _pillPlayGlyph,
-            ToolTip = "播放/暂停"
+            ToolTip = UiText.PlayPause
         };
+        WidgetChrome.MarkQuietOverlay(_playPill);
         _playPill.MouseLeftButtonUp += (_, e) =>
         {
             _ = TogglePlayPauseAsync();
@@ -835,6 +999,7 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
             Render();
         };
         Unloaded += (_, _) => _media.Changed -= _changed;
+        ApplyTheme(false);
         ApplyDensity(_density);
     }
 
@@ -850,13 +1015,26 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
 
     public void OnPrivacyChanged() => Render();
 
+    public void ApplyTheme(bool isLight)
+    {
+        _progressFill.Background = TokenBrushes.From(isLight ? DockTokens.Light.Text : DockTokens.Dark.Text);
+    }
+
+    public void ApplyLocale()
+    {
+        _prevButton.ToolTip = UiText.PreviousTrack;
+        _playButton.ToolTip = UiText.PlayPause;
+        _nextButton.ToolTip = UiText.NextTrack;
+        Render();
+    }
+
     private async Task TogglePlayPauseAsync()
     {
         var wasPlaying = _media.Current?.IsPlaying == true;
         var next = wasPlaying ? GlyphPlay : GlyphPause;
         _inlinePlayGlyph.Text = next;
         _pillPlayGlyph.Text = next;
-        _playPill.ToolTip = wasPlaying ? "播放" : "暂停";
+        _playPill.ToolTip = wasPlaying ? UiText.Play : UiText.Pause;
         _inlinePlayGlyph.ToolTip = _playPill.ToolTip;
         await _media.TryPlayPauseAsync();
         if (Dispatcher.CheckAccess())
@@ -873,33 +1051,33 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
         var session = _media.Current;
         if (session is null)
         {
-            _title.Text = "未在播放";
-            _artist.Text = "网易云 / PotPlayer 等桌面版常常不提供系统媒体控制";
-            _artist.TextWrapping = TextWrapping.Wrap;
-            _artist.MaxWidth = 160;
-            _title.ToolTip = "网易云 / PotPlayer 等桌面版常常不提供系统媒体控制，按钮会改用播放器自己的命令。";
+            _title.Text = UiText.NotPlaying;
+            _title.ToolTip = null;
+            _artist.Text = string.Empty;
+            _artist.Visibility = Visibility.Collapsed;
+            _controls.Visibility = Visibility.Collapsed;
             _inlinePlayGlyph.Text = GlyphPlay;
             _pillPlayGlyph.Text = GlyphPlay;
-            _playPill.ToolTip = "没有可控制的播放会话";
-            _playPill.IsEnabled = false;
-            _controls.IsEnabled = false;
+            _playPill.ToolTip = UiText.NoPlaybackSession;
+            SetTransportEnabled(false, false, false);
             _artImage.Source = null;
             _artImage.Visibility = Visibility.Collapsed;
             RenderProgress(null);
             return;
         }
 
-        _playPill.IsEnabled = true;
-        _controls.IsEnabled = true;
-
         _title.Text = string.IsNullOrWhiteSpace(session.Title)
-            ? (session.IsPlaying ? "播放中" : "已暂停")
+            ? (session.IsPlaying ? UiText.Playing : UiText.Paused)
             : session.Title;
+        _title.ToolTip = _title.Text;
         _artist.Text = session.Artist ?? string.Empty;
+        _artist.Visibility = string.IsNullOrWhiteSpace(_artist.Text) ? Visibility.Collapsed : Visibility.Visible;
+        _controls.Visibility = Visibility.Visible;
         var glyph = session.IsPlaying ? GlyphPause : GlyphPlay;
         _inlinePlayGlyph.Text = glyph;
         _pillPlayGlyph.Text = glyph;
-        _playPill.ToolTip = session.IsPlaying ? "暂停" : "播放";
+        _playPill.ToolTip = session.IsPlaying ? UiText.Pause : UiText.Play;
+        SetTransportEnabled(session.CanPlayPause, session.CanSkipPrevious, session.CanSkipNext);
         _artImage.Source = ImageThumbCache.Load(session.ThumbnailPath, 64);
         _artImage.Visibility = _artImage.Source is null ? Visibility.Collapsed : Visibility.Visible;
         RenderProgress(session);
@@ -924,10 +1102,19 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
             position = duration;
         }
 
+        _progressRow.Visibility = session is null ? Visibility.Collapsed : Visibility.Visible;
         _elapsed.Text = FormatClock(position);
         _remaining.Text = duration > TimeSpan.Zero ? FormatClock(duration) : "--:--";
         var ratio = duration > TimeSpan.Zero ? Math.Clamp(position.TotalSeconds / duration.TotalSeconds, 0, 1) : 0;
         _progressFill.Width = Math.Max(0, _progressTrack.ActualWidth * ratio);
+    }
+
+    private void SetTransportEnabled(bool playPause, bool previous, bool next)
+    {
+        _playPill.IsEnabled = playPause;
+        _playButton.IsEnabled = playPause;
+        _prevButton.IsEnabled = previous;
+        _nextButton.IsEnabled = next;
     }
 
     private static string FormatClock(TimeSpan value) =>
@@ -963,7 +1150,7 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
     };
 }
 
-public sealed class BingWallpaperWidget : UserControl, IWidgetModeAware
+public sealed class BingWallpaperWidget : UserControl, IWidgetModeAware, ILocalizable
 {
     private const string GlyphPhoto = "\uE91B";
     private const string GlyphPrevious = "\uE892";
@@ -974,22 +1161,25 @@ public sealed class BingWallpaperWidget : UserControl, IWidgetModeAware
     private const double ThumbRadius = 8;
 
     private readonly IBingWallpaperProvider _bing;
+    private readonly Func<Task>? _applyDesktop;
     private readonly TextBlock _artGlyph = WidgetChrome.Glyph(GlyphPhoto, DockTokens.Bing);
     private readonly Border _thumb;
     private readonly TextBlock _title = WidgetCopy.Primary();
     private readonly TextBlock _detail = WidgetCopy.Secondary();
     private readonly StackPanel _copy;
-    private readonly Button _prev;
-    private readonly Button _apply;
-    private readonly Button _next;
+    private readonly Border _prev;
+    private readonly Border _apply;
+    private readonly Border _restore;
+    private readonly Border _next;
     private readonly StackPanel _controls;
     private readonly Border _tile;
     private readonly EventHandler _changed;
     private WidgetDensity _density = WidgetDensity.Expanded;
 
-    public BingWallpaperWidget(IBingWallpaperProvider bing)
+    public BingWallpaperWidget(IBingWallpaperProvider bing, Func<Task>? applyDesktop = null)
     {
         _bing = bing;
+        _applyDesktop = applyDesktop;
         _title.TextTrimming = TextTrimming.CharacterEllipsis;
         _title.TextWrapping = TextWrapping.NoWrap;
         _title.Width = CopyWidth;
@@ -1001,9 +1191,10 @@ public sealed class BingWallpaperWidget : UserControl, IWidgetModeAware
         _artGlyph.Margin = new Thickness(0);
         _artGlyph.HorizontalAlignment = HorizontalAlignment.Center;
         _artGlyph.VerticalAlignment = VerticalAlignment.Center;
-        _prev = IconButton(GlyphPrevious, "前一天", () => _ = _bing.SelectRelativeAsync(-1));
-        _apply = IconButton(GlyphApply, "设为桌面", () => _ = _bing.TryApplyCurrentAsync());
-        _next = IconButton(GlyphNext, "后一天", () => _ = _bing.SelectRelativeAsync(1));
+        _prev = IconButton(GlyphPrevious, UiText.PreviousDay, () => _ = _bing.SelectRelativeAsync(-1));
+        _apply = IconButton(GlyphApply, UiText.SetAsDesktop, () => _ = ApplyDesktopAsync());
+        _restore = IconButton("\uE7A7", UiText.RestorePreviousWallpaper, () => _ = RestoreDesktopAsync());
+        _next = IconButton(GlyphNext, UiText.NextDay, () => _ = _bing.SelectRelativeAsync(1));
         _thumb = new Border
         {
             Width = ThumbSize,
@@ -1011,9 +1202,9 @@ public sealed class BingWallpaperWidget : UserControl, IWidgetModeAware
             CornerRadius = new CornerRadius(ThumbRadius),
             Margin = new Thickness(0, 0, 8, 0),
             SnapsToDevicePixels = true,
-            Background = TokenBrushes.From(0x33FFFFFF),
             Child = _artGlyph
         };
+        WidgetChrome.MarkQuietOverlay(_thumb);
         _copy = new StackPanel
         {
             Width = CopyWidth,
@@ -1027,7 +1218,7 @@ public sealed class BingWallpaperWidget : UserControl, IWidgetModeAware
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { _prev, _apply, _next }
+            Children = { _prev, _apply, _restore, _next }
         };
         _tile = WidgetChrome.Wrap(new StackPanel
         {
@@ -1064,6 +1255,15 @@ public sealed class BingWallpaperWidget : UserControl, IWidgetModeAware
         InvalidateMeasure();
     }
 
+    public void ApplyLocale()
+    {
+        _prev.ToolTip = UiText.PreviousDay;
+        _apply.ToolTip = UiText.SetAsDesktop;
+        _restore.ToolTip = UiText.RestorePreviousWallpaper;
+        _next.ToolTip = UiText.NextDay;
+        Render();
+    }
+
     private void Render()
     {
         var snapshot = _bing.Current;
@@ -1071,10 +1271,12 @@ public sealed class BingWallpaperWidget : UserControl, IWidgetModeAware
         _prev.IsEnabled = !snapshot.IsBusy;
         _next.IsEnabled = !snapshot.IsBusy;
         _apply.IsEnabled = !snapshot.IsBusy && selected is not null;
+        _restore.Visibility = _bing.CanRestorePreviousWallpaper ? Visibility.Visible : Visibility.Collapsed;
+        _restore.IsEnabled = !snapshot.IsBusy && _bing.CanRestorePreviousWallpaper;
         if (selected is null)
         {
-            _title.Text = "Bing 壁纸";
-            _detail.Text = snapshot.Error ?? (snapshot.IsBusy ? "加载中…" : "点击重试");
+            _title.Text = UiText.WidgetBing;
+            _detail.Text = snapshot.Error ?? (snapshot.IsBusy ? UiText.Loading : UiText.ClickRetry);
             ShowThumb(null);
             return;
         }
@@ -1082,17 +1284,38 @@ public sealed class BingWallpaperWidget : UserControl, IWidgetModeAware
         _title.Text = selected.Title;
         _detail.Text = snapshot.Error
                        ?? (snapshot.AppliedKey == selected.Key
-                           ? "已设为桌面"
-                           : snapshot.IsBusy ? "加载中…" : BingWallpaperArchive.FormatDate(selected.StartDate));
+                           ? UiText.SetAsDesktopDone
+                           : snapshot.IsBusy ? UiText.Loading : BingWallpaperArchive.FormatDate(selected.StartDate));
         ToolTip = selected.Copyright;
         ShowThumb(ImageThumbCache.Load(snapshot.LocalPath, 96));
+    }
+
+    private async Task ApplyDesktopAsync()
+    {
+        if (_applyDesktop is not null)
+        {
+            await _applyDesktop().ConfigureAwait(true);
+        }
+        else
+        {
+            await _bing.TryApplyCurrentAsync().ConfigureAwait(true);
+        }
+
+        Render();
+    }
+
+    private async Task RestoreDesktopAsync()
+    {
+        var ok = await _bing.TryRestorePreviousAsync().ConfigureAwait(true);
+        UserAlerts.Show("WinDock", ok ? UiText.WallpaperRestored : UiText.WallpaperRestoreFailed);
+        Render();
     }
 
     private void ShowThumb(ImageSource? image)
     {
         if (image is null)
         {
-            _thumb.Background = TokenBrushes.From(0x33FFFFFF);
+            WidgetChrome.MarkQuietOverlay(_thumb);
             _thumb.Child = _artGlyph;
             return;
         }
@@ -1104,35 +1327,36 @@ public sealed class BingWallpaperWidget : UserControl, IWidgetModeAware
             AlignmentY = AlignmentY.Center
         };
         brush.Freeze();
+        _thumb.Tag = null;
         _thumb.Background = brush;
         _thumb.Child = null;
     }
 
-    private static Button IconButton(string glyph, string tooltip, Action click)
+    private static Border IconButton(string glyph, string tooltip, Action click)
     {
-        var button = new Button
+        var icon = new TextBlock
         {
-            Content = new TextBlock
-            {
-                Text = glyph,
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                FontSize = 11,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            },
-            Width = 32,
-            Height = 32,
-            MinWidth = 32,
-            MinHeight = 32,
-            Padding = new Thickness(0),
-            Margin = new Thickness(0, 0, 2, 0),
-            BorderThickness = new Thickness(0),
-            Background = TokenBrushes.From(0x33FFFFFF),
-            Cursor = Cursors.Hand,
-            ToolTip = tooltip
+            Text = glyph,
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 11,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
         };
-        System.Windows.Automation.AutomationProperties.SetName(button, tooltip);
-        button.Click += (_, _) => click();
+        var button = new Border
+        {
+            Width = 22,
+            Height = 22,
+            Background = Brushes.Transparent,
+            Cursor = Cursors.Hand,
+            ToolTip = tooltip,
+            Child = icon
+        };
+        AutomationProperties.SetName(button, tooltip);
+        button.MouseLeftButtonUp += (_, e) =>
+        {
+            click();
+            e.Handled = true;
+        };
         return button;
     }
 }

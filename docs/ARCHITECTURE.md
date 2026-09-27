@@ -137,7 +137,7 @@ DPI：`app.manifest` 声明 Per-Monitor v2；按窗口缓存 `GetDpiForWindow`�
 
 Focus 禁止：轮询 WNF、读 Focus Assist 注册表、推断“正在开会 / 游戏”。
 
-媒体：首次显示前提示；按 profile 可关。不保证所有播放器都有封面或控制。
+媒体：首次显示前提示；按 profile 可关。优先 GSMTC 会话与系统传输控件；失败或不存在时再回退本地窗口命令。不保证所有播放器都有封面或控制。
 
 日历（stretch）：`AppointmentStore` 在 unpackaged 下常不可用。本地库优先；系统日历必须检测能力并降级。
 

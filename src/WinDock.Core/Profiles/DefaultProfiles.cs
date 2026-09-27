@@ -21,13 +21,13 @@ public static class DefaultProfiles
     public static Profile CreateGeneral() => new()
     {
         Id = GeneralId,
-        Name = "日常",
+        Name = UiText.ProfileDaily,
         Triggers = [],
         Dock = new DockLayout
         {
             Edge = DockEdge.Top,
             Monitor = "primary",
-            AutoHide = true,
+            AutoHide = false,
             Items =
             [
                 new DockItem { Type = DockItemType.WidgetChip, WidgetId = BuiltInWidgets.Clock, Title = BuiltInWidgets.DisplayName(BuiltInWidgets.Clock) },
@@ -44,7 +44,7 @@ public static class DefaultProfiles
     public static Profile CreateDeepWork() => new()
     {
         Id = DeepWorkId,
-        Name = "深度工作",
+        Name = UiText.ProfileDeepWork,
         Triggers =
         [
             new ProfileTrigger { Type = TriggerType.Focus, Active = true }
@@ -53,7 +53,7 @@ public static class DefaultProfiles
         {
             Edge = DockEdge.Top,
             Monitor = "primary",
-            AutoHide = true,
+            AutoHide = false,
             Items =
             [
                 new DockItem { Type = DockItemType.WidgetChip, WidgetId = BuiltInWidgets.FocusTimer, Title = BuiltInWidgets.DisplayName(BuiltInWidgets.FocusTimer) },
@@ -66,6 +66,25 @@ public static class DefaultProfiles
             new WidgetPlacement { Id = BuiltInWidgets.Notes, Monitor = "primary", X = 40, Y = 200, Visible = true }
         ]
     };
+
+    public static string DisplayName(Profile profile)
+    {
+        if (profile.Id == GeneralId && IsFactoryName(profile.Name, "日常", "Daily"))
+        {
+            return UiText.ProfileDaily;
+        }
+
+        if (profile.Id == DeepWorkId && IsFactoryName(profile.Name, "深度工作", "Deep Work"))
+        {
+            return UiText.ProfileDeepWork;
+        }
+
+        return profile.Name;
+    }
+
+    private static bool IsFactoryName(string name, string zh, string en) =>
+        string.Equals(name, zh, StringComparison.Ordinal)
+        || string.Equals(name, en, StringComparison.Ordinal);
 }
 
 public static class SettingsValidator

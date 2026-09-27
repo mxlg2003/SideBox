@@ -11,7 +11,7 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IFocusTimerConfigurable, IKeepAliveWhileRunning
+public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IFocusTimerConfigurable, IKeepAliveWhileRunning, IWidgetThemeAware, ILocalizable, IWidgetDetachable
 {
     private const uint Accent = 0xFF0078D4;
     private const uint QuietFill = 0x14000000;
@@ -48,9 +48,17 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
     private readonly List<(int Minutes, Border Chip, TextBlock Label)> _presetChips = [];
     private readonly List<(string Id, TextBlock Check)> _marks = [];
     private readonly Dictionary<string, TextBlock> _stepValues = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, TextBlock> _stepNames = new(StringComparer.Ordinal);
+    private TextBlock _flyoutTitle = null!;
+    private TextBlock _customizeTitle = null!;
+    private TextBlock _backLabel = null!;
+    private TextBlock _colorCaption = null!;
+    private TextBlock _resetPeriodLabel = null!;
+    private TextBlock _resetSessionLabel = null!;
+    private TextBlock _resetLabel = null!;
     private readonly CheckBox _notify = new()
     {
-        Content = "结束时通知",
+        Content = UiText.NotifyWhenDone,
         IsChecked = true,
         Margin = new Thickness(0, 16, 0, 0),
         VerticalAlignment = VerticalAlignment.Center
@@ -81,8 +89,8 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
             Visibility = Visibility.Collapsed,
             Children = { _pauseLeft, _pauseRight }
         };
-        _ring.Track = TokenBrushes.From(0x33000000);
         _ring.VerticalAlignment = VerticalAlignment.Center;
+        ApplyTheme(false);
 
         var ringHost = new Grid
         {
@@ -130,6 +138,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
             Child = _panel
         };
         WidgetFlyout.Attach(_popup);
+        _popup.Closed += (_, _) => ShowEditor();
         _popup.Opened += (_, _) =>
         {
             var scale = (ScaleTransform)_panel.RenderTransform;
@@ -182,6 +191,34 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
     {
     }
 
+    public void ApplyTheme(bool isLight)
+    {
+        _ring.Track = TokenBrushes.From(isLight ? DockTokens.Light.Stroke : DockTokens.Dark.Stroke);
+    }
+
+    public void ApplyLocale()
+    {
+        _flyoutTitle.Text = BuiltInWidgets.DisplayName(BuiltInWidgets.FocusTimer);
+        _customizeTitle.Text = UiText.Customize;
+        _backLabel.Text = UiText.Back;
+        _colorCaption.Text = UiText.FocusColor;
+        _notify.Content = UiText.NotifyWhenDone;
+        _resetPeriodLabel.Text = UiText.ResetTimer;
+        _resetSessionLabel.Text = UiText.BackToSession1;
+        _resetLabel.Text = StopwatchFormat.Reset;
+        if (_stepNames.TryGetValue("focus", out var focus)) focus.Text = UiText.FocusLabel;
+        if (_stepNames.TryGetValue("short", out var shortBreak)) shortBreak.Text = UiText.ShortBreak;
+        if (_stepNames.TryGetValue("long", out var longBreak)) longBreak.Text = UiText.LongBreak;
+        if (_stepNames.TryGetValue("every", out var every)) every.Text = UiText.LongBreakEvery;
+        foreach (var (minutes, _, label) in _presetChips)
+        {
+            label.Text = FocusTimerFormat.Preset(minutes);
+        }
+
+        PaintCustomize();
+        Render();
+    }
+
     public void ApplySettings(FocusTimerSettings settings)
     {
         _applying = true;
@@ -192,6 +229,12 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
     }
 
     public bool IsAlive => _engine.Running;
+
+    public void Detach()
+    {
+        _timer.Stop();
+        _popup.IsOpen = false;
+    }
 
     public void Open()
     {
@@ -218,7 +261,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
         if (_engine.Settings.NotifyWhenFinished)
         {
             SystemSounds.Asterisk.Play();
-            UserAlerts.Show("专注计时器", _engine.Phase == FocusTimerPhase.Focus ? "专注开始" : "本段结束");
+            UserAlerts.Show(UiText.WidgetFocusTimer, _engine.Phase == FocusTimerPhase.Focus ? UiText.FocusStarted : UiText.PeriodEnded);
             if (IsVisible && IsLoaded)
             {
                 Open();
@@ -343,9 +386,16 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
         foreach (var (minutes, chip, label) in _presetChips)
         {
             var selected = minutes == _engine.Settings.FocusMinutes;
-            chip.Background = TokenBrushes.From(selected ? Accent : QuietFill);
             label.Tag = selected ? "tint" : null;
-            label.Foreground = selected ? Brushes.White : _panelTime.Foreground;
+            if (selected)
+            {
+                WidgetChrome.ClearQuiet(chip, Accent);
+                label.Foreground = Brushes.White;
+            }
+            else
+            {
+                WidgetChrome.MarkQuiet(chip);
+            }
         }
     }
 
@@ -378,10 +428,10 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
     {
         _applying = true;
         _notify.IsChecked = _engine.Settings.NotifyWhenFinished;
-        SetStep("focus", FocusTimerFormat.StepValue(_engine.Settings.FocusMinutes, "分"));
-        SetStep("short", FocusTimerFormat.StepValue(_engine.Settings.ShortBreakMinutes, "分"));
-        SetStep("long", FocusTimerFormat.StepValue(_engine.Settings.LongBreakMinutes, "分"));
-        SetStep("every", FocusTimerFormat.StepValue(_engine.Settings.LongBreakEvery, "段"));
+        SetStep("focus", FocusTimerFormat.StepValue(_engine.Settings.FocusMinutes, UiText.MinutesUnit));
+        SetStep("short", FocusTimerFormat.StepValue(_engine.Settings.ShortBreakMinutes, UiText.MinutesUnit));
+        SetStep("long", FocusTimerFormat.StepValue(_engine.Settings.LongBreakMinutes, UiText.MinutesUnit));
+        SetStep("every", FocusTimerFormat.StepValue(_engine.Settings.LongBreakEvery, UiText.SessionsUnit));
         foreach (var (id, check) in _marks)
         {
             check.Visibility = string.Equals(id, _engine.Settings.Color, StringComparison.Ordinal)
@@ -402,17 +452,19 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
 
     private Grid BuildEditor()
     {
-        var title = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.FocusTimer));
+        _flyoutTitle = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.FocusTimer));
         var customize = HeaderGlyph("\uE8FD", OpenCustomize);
         var close = HeaderGlyph("\u00D7", ClosePopup, 18);
-        var header = HeaderRow(title, customize, close);
+        var header = HeaderRow(_flyoutTitle, customize, close);
         var primary = ActionButton(_primaryLabel, Accent, Toggle);
-        var reset = ActionButton(ResetLabel(), QuietFill, () =>
+        _resetLabel = ResetLabel();
+        var reset = ActionButton(_resetLabel, QuietFill, () =>
         {
             _resetMenu.Visibility = _resetMenu.Visibility == Visibility.Visible
                 ? Visibility.Collapsed
                 : Visibility.Visible;
         });
+        WidgetChrome.MarkQuiet(reset);
         var actions = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -432,6 +484,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
 
     private Grid BuildCustomize()
     {
+        _backLabel = HeaderLabel(UiText.Back);
         var back = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -440,7 +493,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
             Children =
             {
                 HeaderGlyph("\uE76B", ShowEditor, 12),
-                HeaderLabel("返回")
+                _backLabel
             }
         };
         back.MouseLeftButtonUp += (_, e) =>
@@ -448,18 +501,18 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
             ShowEditor();
             e.Handled = true;
         };
-        var title = HeaderLabel("自定义");
-        title.Margin = new Thickness(8, 0, 0, 0);
-        title.FontWeight = FontWeights.SemiBold;
+        _customizeTitle = HeaderLabel(UiText.Customize);
+        _customizeTitle.Margin = new Thickness(8, 0, 0, 0);
+        _customizeTitle.FontWeight = FontWeights.SemiBold;
         var close = HeaderGlyph("\u00D7", ClosePopup, 18);
         var header = HeaderRow(new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Children = { back, title }
+            Children = { back, _customizeTitle }
         }, close);
-        var caption = HeaderLabel("专注颜色");
-        caption.Opacity = 0.62;
-        caption.Margin = new Thickness(0, 12, 0, 0);
+        _colorCaption = HeaderLabel(UiText.FocusColor);
+        _colorCaption.Opacity = 0.62;
+        _colorCaption.Margin = new Thickness(0, 12, 0, 0);
         foreach (var id in FocusTimerColors.All)
         {
             var (dot, check) = Swatch(id);
@@ -472,12 +525,12 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
             Children =
             {
                 header,
-                caption,
+                _colorCaption,
                 _swatches,
-                Stepper("focus", "专注", () => Nudge("focus", -1), () => Nudge("focus", 1)),
-                Stepper("short", "短休息", () => Nudge("short", -1), () => Nudge("short", 1)),
-                Stepper("long", "长休息", () => Nudge("long", -1), () => Nudge("long", 1)),
-                Stepper("every", "每几段长休息", () => Nudge("every", -1), () => Nudge("every", 1)),
+                Stepper("focus", UiText.FocusLabel, () => Nudge("focus", -1), () => Nudge("focus", 1)),
+                Stepper("short", UiText.ShortBreak, () => Nudge("short", -1), () => Nudge("short", 1)),
+                Stepper("long", UiText.LongBreak, () => Nudge("long", -1), () => Nudge("long", 1)),
+                Stepper("every", UiText.LongBreakEvery, () => Nudge("every", -1), () => Nudge("every", 1)),
                 _notify
             }
         };
@@ -488,9 +541,9 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
 
     private Border BuildResetMenu()
     {
-        var reset = MenuRow("复位计时", ResetPeriod);
-        var session = MenuRow("回到第 1 段", ResetToSession1);
-        return new Border
+        var reset = MenuRow(UiText.ResetTimer, ResetPeriod, out _resetPeriodLabel);
+        var session = MenuRow(UiText.BackToSession1, ResetToSession1, out _resetSessionLabel);
+        var menu = new Border
         {
             Visibility = Visibility.Collapsed,
             CornerRadius = new CornerRadius(DockTokens.IslandCornerRadius),
@@ -499,11 +552,13 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
             Padding = new Thickness(4),
             Child = new StackPanel { Children = { reset, session } }
         };
+        WidgetChrome.MarkQuiet(menu);
+        return menu;
     }
 
-    private static Border MenuRow(string text, Action click)
+    private static Border MenuRow(string text, Action click, out TextBlock label)
     {
-        var label = WidgetCopy.Primary();
+        label = WidgetCopy.Primary();
         label.Text = text;
         label.FontSize = 13;
         label.FontWeight = FontWeights.Normal;
@@ -534,6 +589,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
             Cursor = Cursors.Hand,
             Child = label
         };
+        WidgetChrome.MarkQuiet(chip);
         chip.MouseLeftButtonUp += (_, e) =>
         {
             ChoosePreset(minutes);
@@ -546,6 +602,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
     private Grid Stepper(string key, string title, Action minus, Action plus)
     {
         var name = HeaderLabel(title);
+        _stepNames[key] = name;
         var value = WidgetCopy.Primary();
         value.FontSize = 13;
         value.MinWidth = 64;
@@ -591,6 +648,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
             Cursor = Cursors.Hand,
             Child = icon
         };
+        WidgetChrome.MarkQuiet(border);
         border.MouseLeftButtonUp += (_, e) =>
         {
             click();

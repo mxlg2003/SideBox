@@ -20,6 +20,8 @@ public class SettingsStoreTests
 
             var loaded = store.Load();
             Assert.Equal(DefaultProfiles.GeneralId, loaded.ActiveProfileId);
+            Assert.Null(store.LastLoadMessage);
+            Assert.False(store.SkipNotesSweep);
             Assert.True(File.Exists(Path.Combine(dir, "settings.json")));
         }
         finally
@@ -79,6 +81,7 @@ public class SettingsStoreTests
             Assert.Equal(DefaultProfiles.GeneralId, loaded.ActiveProfileId);
             Assert.Contains("更新的版本", store.LastLoadMessage);
             Assert.True(store.IsImmutable);
+            Assert.True(store.SkipNotesSweep);
             Assert.Contains("\"schemaVersion\": 99", File.ReadAllText(path));
             store.Save(DefaultProfiles.CreateFactorySettings());
             Assert.Contains("\"schemaVersion\": 99", File.ReadAllText(path));
@@ -192,6 +195,30 @@ public class SettingsStoreTests
             var general = loaded.Profiles.First(p => p.Id == DefaultProfiles.GeneralId);
             Assert.Equal(id, Assert.Single(SettingsEditor.HiddenNotes(general)).Id);
             Assert.DoesNotContain(general.Dock.Items, item => item.Id == id);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AtomicFile_writes_safely_and_cleans_up_temp()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "WinDock-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var path = Path.Combine(dir, "atomic-test.json");
+            WinDock.Infrastructure.AtomicFile.WriteAllText(path, "{\"test\": 1}");
+            Assert.True(File.Exists(path));
+            Assert.Equal("{\"test\": 1}", File.ReadAllText(path));
+
+            WinDock.Infrastructure.AtomicFile.WriteAllText(path, "{\"test\": 2}");
+            Assert.Equal("{\"test\": 2}", File.ReadAllText(path));
+
+            var tmpFiles = Directory.GetFiles(dir, "*.tmp");
+            Assert.Empty(tmpFiles);
         }
         finally
         {

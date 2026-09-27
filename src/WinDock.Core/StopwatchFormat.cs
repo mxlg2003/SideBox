@@ -3,13 +3,13 @@ namespace WinDock.Core;
 /// <summary>Stopwatch copy and elapsed formatting for the dock pill and flyout.</summary>
 public static class StopwatchFormat
 {
-    public const string Ready = "就绪";
-    public const string Running = "运行中";
-    public const string Paused = "已暂停";
-    public const string Start = "开始";
-    public const string Pause = "暂停";
-    public const string Resume = "继续";
-    public const string Reset = "复位";
+    public static string Ready => UiLocale.T("就绪", "Ready");
+    public static string Running => UiLocale.T("运行中", "Running");
+    public static string Paused => UiLocale.T("已暂停", "Paused");
+    public static string Start => UiLocale.T("开始", "Start");
+    public static string Pause => UiLocale.T("暂停", "Pause");
+    public static string Resume => UiLocale.T("继续", "Resume");
+    public static string Reset => UiLocale.T("重置", "Reset");
 
     public static string Time(TimeSpan elapsed)
     {

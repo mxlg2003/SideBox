@@ -26,6 +26,7 @@ public partial class SettingsWindow : Window
         _onChanged = (_, _) => Dispatcher.BeginInvoke(OnSessionChanged, DispatcherPriority.Background);
         InitializeComponent();
         NavColumn.Width = new GridLength(DockTokens.Settings.NavWidth);
+        NavPane.Padding = new Thickness(DockTokens.Settings.NavPad);
         var advanced = ProductFeatures.ProfilesEnabled ? Visibility.Visible : Visibility.Collapsed;
         AdvancedGroup.Visibility = advanced;
         NavProfiles.Visibility = advanced;
@@ -40,9 +41,11 @@ public partial class SettingsWindow : Window
 
             e.Cancel = true;
             Hide();
+            _session.NotifyBackgroundRunning();
         };
         NavModules.IsChecked = true;
         ShowPage("modules");
+        ApplyCopy();
         Reload();
     }
 
@@ -98,9 +101,11 @@ public partial class SettingsWindow : Window
     public void Reload()
     {
         _suppress = true;
+        ApplyCopy();
         var settings = _session.Settings;
         var diff = _session.CurrentDiff;
         SelectTag(ThemeBox, settings.Ui.Theme.ToString());
+        SelectTag(LanguageBox, settings.Ui.Language.ToString());
         SelectTag(BackdropBox, settings.Ui.Backdrop.ToString());
         TransparencySlider.Value = settings.Ui.IslandTransparency;
         TransparencyLabel.Text = $"{settings.Ui.IslandTransparency}%";
@@ -108,6 +113,7 @@ public partial class SettingsWindow : Window
         ReloadMonitors(diff.Dock.Monitor);
         MediaCheck.IsChecked = settings.Privacy.MediaRead;
         NetworkCheck.IsChecked = settings.Privacy.NetworkDetails;
+        LocationCheck.IsChecked = settings.Privacy.PreciseLocation;
         BingCheck.IsChecked = settings.Privacy.BingDownload;
         AutoHideCheck.IsChecked = diff.Dock.AutoHide;
         PeekCheck.IsChecked = diff.Dock.PeekOnPointer;
@@ -125,16 +131,24 @@ public partial class SettingsWindow : Window
         SyncAutoHideDependents();
         if (ProductFeatures.ProfilesEnabled)
         {
-            HotkeyText.Text = $"当前快捷键（暂不能改）：下一个 {settings.Hotkeys.NextProfile ?? "无"}，撤销 {settings.Hotkeys.UndoProfile ?? "无"}。托盘右键也可切换。";
-            FocusHint.Text = "模块里的「专注计时器」是本地番茄钟，不会打开系统专注，也不会自动换情景。";
+            HotkeyText.Text = UiText.ProfileHotkeys(settings.Hotkeys.NextProfile ?? UiText.None, settings.Hotkeys.UndoProfile ?? UiText.None);
+            FocusHint.Text = UiText.FocusProfileHint;
             DeleteProfileButton.IsEnabled = diff.ProfileId != DefaultProfiles.GeneralId;
             DeleteProfileButton.ToolTip = diff.ProfileId == DefaultProfiles.GeneralId
-                ? "日常是兜底情景，不能删除"
-                : "删除当前情景";
+                ? UiText.CannotDeleteGeneral
+                : UiText.DeleteCurrentProfile;
             HistoryList.Items.Clear();
             foreach (var record in settings.SwitchHistory.Reverse().Take(ProfileSwitchLog.MaxRecords))
             {
-                HistoryList.Items.Add(ProfileSwitchLog.Summarize(record, settings.Profiles));
+                var line = ProfileSwitchLog.Summarize(record, settings.Profiles);
+                HistoryList.Items.Add(new TextBlock
+                {
+                    Text = line,
+                    TextWrapping = TextWrapping.NoWrap,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    ToolTip = line,
+                    HorizontalAlignment = HorizontalAlignment.Stretch
+                });
             }
 
             ReloadProfileBox(settings.Profiles, diff.ProfileId);
@@ -143,11 +157,12 @@ public partial class SettingsWindow : Window
 
         StartupCheck.IsChecked = RunAtStartup.IsEnabled();
         AboutVersion.Text = $"WinDock {typeof(App).Assembly.GetName().Version?.ToString(3) ?? "1.0"}";
-        AboutPaths.Text = $"配置：{AppPaths.SettingsFile}{Environment.NewLine}日志：{AppPaths.LogsDirectory}";
-        MediaHint.Text = MediaGrantHint(settings, diff.ProfileName);
+        AboutPaths.Text = UiText.AboutConfig(AppPaths.SettingsFile, AppPaths.LogsDirectory);
+        var active = settings.Profiles.FirstOrDefault(profile => profile.Id == diff.ProfileId);
+        MediaHint.Text = MediaGrantHint(settings, active is null ? diff.ProfileName : DefaultProfiles.DisplayName(active));
         ApplyChrome();
         PaintIslandPreview();
-        WidgetPicker.SetProfileName(diff.ProfileName);
+        WidgetPicker.SetProfileName(active is null ? diff.ProfileName : DefaultProfiles.DisplayName(active));
         if (IsModulesPage())
         {
             WidgetPicker.Refresh();
@@ -166,45 +181,78 @@ public partial class SettingsWindow : Window
         var selected = ProfileBox.SelectedItem as ComboBoxItem;
         if (ProfileBox.Items.Count == profiles.Count
             && ProfileBox.Items.OfType<ComboBoxItem>().Select(item => item.Tag as string).SequenceEqual(profiles.Select(profile => profile.Id))
-            && ProfileBox.Items.OfType<ComboBoxItem>().Select(item => item.Content as string).SequenceEqual(profiles.Select(profile => profile.Name)))
+            && ProfileBox.Items.OfType<ComboBoxItem>().Select(ComboName).SequenceEqual(profiles.Select(DefaultProfiles.DisplayName)))
         {
             if (selected?.Tag as string != activeId)
             {
                 SelectTag(ProfileBox, activeId);
             }
 
+            foreach (var item in ProfileBox.Items.OfType<ComboBoxItem>())
+            {
+                ApplyOverflow(item, ComboName(item));
+            }
+
+            ApplyOverflow(ProfileBox, profiles.FirstOrDefault(profile => profile.Id == activeId) is { } active
+                ? DefaultProfiles.DisplayName(active)
+                : null);
             return;
         }
 
         ProfileBox.Items.Clear();
         foreach (var profile in profiles)
         {
-            ProfileBox.Items.Add(new ComboBoxItem
+            var item = new ComboBoxItem
             {
-                Content = profile.Name,
+                Content = OverflowText(DefaultProfiles.DisplayName(profile)),
                 Tag = profile.Id,
                 IsSelected = profile.Id == activeId
-            });
+            };
+            ApplyOverflow(item, profile.Name);
+            ProfileBox.Items.Add(item);
         }
+
+        ApplyOverflow(ProfileBox, profiles.FirstOrDefault(profile => profile.Id == activeId)?.Name);
+    }
+
+    private static string ComboName(ComboBoxItem item) =>
+        item.Content as string ?? (item.Content as TextBlock)?.Text ?? string.Empty;
+
+    private static TextBlock OverflowText(string text)
+    {
+        var block = new TextBlock
+        {
+            Text = text,
+            TextWrapping = TextWrapping.NoWrap,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
+        ApplyOverflow(block, text);
+        return block;
+    }
+
+    private static void ApplyOverflow(FrameworkElement target, string? text)
+    {
+        target.ToolTip = string.IsNullOrWhiteSpace(text) ? null : text;
     }
 
     private static string MediaGrantHint(AppSettings settings, string currentName)
     {
         if (!ProductFeatures.ProfilesEnabled)
         {
-            return "关掉后模块仍在岛上，只是不读曲名和封面。";
+            return UiText.MediaHintOff;
         }
 
         var granted = settings.Profiles
             .Where(profile => profile.Permissions.Contains(PermissionIds.MediaRead, StringComparer.Ordinal))
-            .Select(profile => profile.Name)
+            .Select(DefaultProfiles.DisplayName)
             .ToArray();
         if (granted.Length == 0)
         {
-            return $"开启后只授权当前情景「{currentName}」。关掉后模块仍在岛上，只是不读曲名和封面。";
+            return UiText.MediaHintGrant(currentName);
         }
 
-        return $"已授权：{string.Join("、", granted)}。关掉后模块仍在岛上，只是不读曲名和封面。";
+        var joiner = UiLocale.IsChinese ? "、" : ", ";
+        return UiText.MediaHintGranted(string.Join(joiner, granted));
     }
 
     private void ApplyChrome()
@@ -233,9 +281,9 @@ public partial class SettingsWindow : Window
         IslandPreviewLabel.Foreground = SettingsChrome.Brush(light ? DockTokens.Light.Text : DockTokens.Dark.Text);
         IslandPreviewLabel.Text = backdrop switch
         {
-            DockBackdrop.Frosted => "磨砂",
-            DockBackdrop.Glass => "玻璃",
-            _ => "云母"
+            DockBackdrop.Frosted => UiText.BackdropFrostedShort,
+            DockBackdrop.Glass => UiText.BackdropGlassShort,
+            _ => UiText.BackdropMicaShort
         };
     }
 
@@ -303,6 +351,16 @@ public partial class SettingsWindow : Window
         }
 
         _session.SetTheme(Enum.Parse<ThemePreference>(tag));
+    }
+
+    private void LanguageBox_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppress || !IsLoaded || LanguageBox.SelectedItem is not ComboBoxItem item || item.Tag is not string tag)
+        {
+            return;
+        }
+
+        _session.SetLanguage(Enum.Parse<UiLanguage>(tag));
     }
 
     private void BackdropBox_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -375,6 +433,7 @@ public partial class SettingsWindow : Window
         {
             MediaRead = MediaCheck.IsChecked == true,
             NetworkDetails = NetworkCheck.IsChecked == true,
+            PreciseLocation = LocationCheck.IsChecked == true,
             BingDownload = BingCheck.IsChecked == true
         });
     }
@@ -432,7 +491,7 @@ public partial class SettingsWindow : Window
             RevealHotkeyCheck.IsChecked = false;
             SyncAutoHideDependents();
             RevealHotkeyBox.Focus();
-            RevealHotkeyHint.Text = "快捷键已被占用，请改成别的组合";
+            RevealHotkeyHint.Text = UiText.HotkeyTaken;
             return;
         }
 
@@ -448,7 +507,7 @@ public partial class SettingsWindow : Window
 
         _capturingRevealHotkey = true;
         _revealHotkeyBeforeCapture = RevealHotkeyBox.Text;
-        RevealHotkeyBox.Text = "按下快捷键…";
+        RevealHotkeyBox.Text = UiText.PressShortcut;
         RevealHotkeyHint.Text = "";
     }
 
@@ -497,8 +556,8 @@ public partial class SettingsWindow : Window
 
         if (!_session.TrySetRevealDockHotkey(chord))
         {
-            RevealHotkeyHint.Text = "快捷键已被占用，请改成别的组合";
-            RevealHotkeyBox.Text = "按下快捷键…";
+            RevealHotkeyHint.Text = UiText.HotkeyTaken;
+            RevealHotkeyBox.Text = UiText.PressShortcut;
             return;
         }
 
@@ -587,7 +646,7 @@ public partial class SettingsWindow : Window
     {
         var id = _session.CurrentDiff.ProfileId;
         var current = _session.Settings.Profiles.FirstOrDefault(profile => profile.Id == id)?.Name ?? id;
-        if (!TextPrompt.TryAsk(this, "重命名情景", "显示名称", current, out var name, _session.IsLightTheme()))
+        if (!TextPrompt.TryAsk(this, UiText.RenameProfileTitle, UiText.DisplayNameLabel, current, out var name, _session.IsLightTheme()))
         {
             return;
         }
@@ -606,8 +665,8 @@ public partial class SettingsWindow : Window
         var name = _session.CurrentDiff.ProfileName;
         var result = MessageBox.Show(
             this,
-            $"确定删除情景「{name}」？日常会保留。",
-            "删除情景",
+            UiText.DeleteProfileConfirm(name),
+            UiText.DeleteProfileTitle,
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
         if (result != MessageBoxResult.Yes)
@@ -616,6 +675,105 @@ public partial class SettingsWindow : Window
         }
 
         _session.RemoveProfile(id);
+    }
+
+    private void ApplyCopy()
+    {
+        Title = $"WinDock {UiText.Settings}";
+        NavTitle.Text = UiText.Settings;
+        NavModulesLabel.Text = UiText.Modules;
+        System.Windows.Automation.AutomationProperties.SetName(NavModules, UiText.Modules);
+        NavLayoutLabel.Text = UiText.Layout;
+        System.Windows.Automation.AutomationProperties.SetName(NavLayout, UiText.Layout);
+        NavGroupDisplay.Text = UiText.Display;
+        NavAppearanceLabel.Text = UiText.Appearance;
+        System.Windows.Automation.AutomationProperties.SetName(NavAppearance, UiText.Appearance);
+        NavGroupSystem.Text = UiText.System;
+        NavPrivacyLabel.Text = UiText.Privacy;
+        System.Windows.Automation.AutomationProperties.SetName(NavPrivacy, UiText.Privacy);
+        NavAboutLabel.Text = UiText.About;
+        System.Windows.Automation.AutomationProperties.SetName(NavAbout, UiText.About);
+        NavExitLabel.Text = UiText.ExitWinDock;
+        AboutExitButton.Content = UiText.ExitWinDock;
+        NavGroupAdvanced.Text = UiText.Advanced;
+        NavProfilesLabel.Text = UiText.Profiles;
+        System.Windows.Automation.AutomationProperties.SetName(NavProfiles, UiText.Profiles);
+
+        ModulesTitle.Text = UiText.Modules;
+        ModulesHelp.Text = UiText.ModulesIntro;
+        LayoutTitle.Text = UiText.Layout;
+        LayoutIntro.Text = UiText.LayoutIntro;
+        EdgeLabel.Text = UiText.Edge;
+        EdgeTop.Content = UiText.EdgeTop;
+        EdgeLeft.Content = UiText.EdgeLeft;
+        EdgeRight.Content = UiText.EdgeRight;
+        MonitorLabel.Text = UiText.Monitor;
+        AutoHideTitle.Text = UiText.AutoHide;
+        AutoHideHelp.Text = UiText.AutoHideHelp;
+        System.Windows.Automation.AutomationProperties.SetName(AutoHideCheck, UiText.AutoHide);
+        PeekTitle.Text = UiText.Peek;
+        PeekHelp.Text = UiText.PeekHelp;
+        System.Windows.Automation.AutomationProperties.SetName(PeekCheck, UiText.Peek);
+        RevealHotkeyTitle.Text = UiText.RevealHotkey;
+        RevealHotkeyHelp.Text = UiText.RevealHotkeyHelp;
+        System.Windows.Automation.AutomationProperties.SetName(RevealHotkeyCheck, UiText.RevealHotkey);
+        System.Windows.Automation.AutomationProperties.SetName(RevealHotkeyBox, UiText.RevealHotkeyName);
+        CollapseAppsTitle.Text = UiText.CollapseApps;
+        CollapseAppsHelp.Text = UiText.CollapseAppsHelp;
+        System.Windows.Automation.AutomationProperties.SetName(CollapseAppsCheck, UiText.CollapseApps);
+        CollapseFoldersTitle.Text = UiText.CollapseFolders;
+        CollapseFoldersHelp.Text = UiText.CollapseFoldersHelp;
+        System.Windows.Automation.AutomationProperties.SetName(CollapseFoldersCheck, UiText.CollapseFolders);
+        LayoutHelp.Text = UiText.LayoutFooter;
+
+        AppearanceTitle.Text = UiText.Appearance;
+        AppearanceIntro.Text = UiText.AppearanceIntro;
+        ThemeLabel.Text = UiText.Theme;
+        ThemeSystem.Content = UiText.ThemeSystem;
+        ThemeLight.Content = UiText.ThemeLight;
+        ThemeDark.Content = UiText.ThemeDark;
+        BackdropLabel.Text = UiText.Backdrop;
+        BackdropMica.Content = UiText.BackdropMica;
+        BackdropFrosted.Content = UiText.BackdropFrosted;
+        BackdropGlass.Content = UiText.BackdropGlass;
+        LanguageLabel.Text = UiText.Language;
+        LanguageSystem.Content = UiText.LanguageSystem;
+        LanguageChinese.Content = UiText.LanguageChinese;
+        LanguageEnglish.Content = UiText.LanguageEnglish;
+        LanguageHelp.Text = UiText.LanguageHelp;
+        TransparencyCaption.Text = UiText.IslandTransparency;
+        AppearanceHelp.Text = UiText.AppearanceFooter;
+
+        PrivacyTitle.Text = UiText.Privacy;
+        PrivacyIntro.Text = UiText.PrivacyIntro;
+        MediaPrivacyTitle.Text = UiText.MediaPrivacy;
+        System.Windows.Automation.AutomationProperties.SetName(MediaCheck, UiText.MediaPrivacy);
+        NetworkPrivacyTitle.Text = UiText.NetworkPrivacy;
+        NetworkPrivacyHelp.Text = UiText.NetworkPrivacyHelp;
+        System.Windows.Automation.AutomationProperties.SetName(NetworkCheck, UiText.NetworkPrivacy);
+        BingPrivacyTitle.Text = UiText.BingPrivacy;
+        BingPrivacyHelp.Text = UiText.BingPrivacyHelp;
+        System.Windows.Automation.AutomationProperties.SetName(BingCheck, UiText.BingPrivacy);
+        LocationPrivacyTitle.Text = UiText.LocationPrivacy;
+        LocationPrivacyHelp.Text = UiText.LocationPrivacyHelp;
+        System.Windows.Automation.AutomationProperties.SetName(LocationCheck, UiText.LocationPrivacy);
+        PrivacyHelp.Text = UiText.PrivacyFooter;
+
+        AboutTitle.Text = UiText.About;
+        AboutBlurb.Text = UiText.AboutIntro;
+        StartupTitle.Text = UiText.RunAtStartup;
+        StartupHelp.Text = UiText.RunAtStartupHelp;
+        System.Windows.Automation.AutomationProperties.SetName(StartupCheck, UiText.RunAtStartup);
+
+        ProfilesTitle.Text = UiText.Profiles;
+        ProfilesIntro.Text = UiText.ProfilesIntro;
+        CurrentProfileLabel.Text = UiText.CurrentProfile;
+        System.Windows.Automation.AutomationProperties.SetName(ProfileBox, UiText.CurrentProfile);
+        UndoButton.Content = UiText.UndoLast;
+        DuplicateProfileButton.Content = UiText.DuplicateProfile;
+        RenameProfileButton.Content = UiText.Rename;
+        DeleteProfileButton.Content = UiText.Delete;
+        RecentSwitchesTitle.Text = UiText.RecentSwitches;
     }
 
     private static void SelectTag(ComboBox box, string tag)
@@ -628,5 +786,10 @@ public partial class SettingsWindow : Window
                 return;
             }
         }
+    }
+
+    private void NavExit_OnClick(object sender, RoutedEventArgs e)
+    {
+        _session.RequestExit();
     }
 }

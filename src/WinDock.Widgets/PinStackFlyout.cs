@@ -244,7 +244,7 @@ public sealed class PinStackFlyout
             Cursor = Cursors.Hand,
             Child = body
         };
-        var title = string.IsNullOrWhiteSpace(item.Title) ? item.Path ?? "快捷方式" : item.Title;
+        var title = string.IsNullOrWhiteSpace(item.Title) ? item.Path ?? UiText.ShortcutFallback : item.Title;
         System.Windows.Automation.AutomationProperties.SetName(tile, title);
         tile.ToolTip = title;
         var id = item.Id;
@@ -270,9 +270,9 @@ public sealed class PinStackFlyout
             FontSize = 13,
             PlacementTarget = target
         };
-        var open = new MenuItem { Header = "打开（新开一份）" };
+        var open = new MenuItem { Header = UiText.OpenNew };
         open.Click += (_, _) => PinLaunchRequested?.Invoke(this, itemId);
-        var remove = new MenuItem { Header = "从 Dock 移除" };
+        var remove = new MenuItem { Header = UiText.RemoveFromDock };
         remove.Foreground = TokenBrushes.From(DockTokens.Danger);
         remove.Click += (_, _) => PinRemoveRequested?.Invoke(this, itemId);
         menu.Items.Add(open);
@@ -384,6 +384,7 @@ public sealed class PinStackFlyout
             FontSize = 9,
             TextAlignment = TextAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
+            TextWrapping = TextWrapping.NoWrap,
             MaxWidth = Math.Max(24, faceWidth - 8),
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
