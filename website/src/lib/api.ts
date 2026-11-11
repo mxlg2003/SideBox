@@ -2,7 +2,7 @@ import axios from "axios";
 
 export const apiBase = (import.meta.env.VITE_API_BASE || "https://SideBox.microsoftware.app").replace(/\/$/, "");
 
-export const downloadUrl = (import.meta.env.VITE_DOWNLOAD_URL || "https://github.com/mxlg2003/WinDock/releases/latest/download/SideBox-setup.exe").trim();
+export const downloadUrl = (import.meta.env.VITE_DOWNLOAD_URL || "https://github.com/mxlg2003/SideBox/releases/latest/download/SideBox-setup.exe").trim();
 
 export const api = axios.create({
   baseURL: apiBase,

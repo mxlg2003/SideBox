@@ -52,10 +52,10 @@ jobs:
           $manifest = [ordered]@{
             version = $rawVer
             min_supported_version = "1.0.0"
-            download_url = "https://github.com/mxlg2003/WinDock/releases/download/$tag/SideBox-setup.exe"
+            download_url = "https://github.com/mxlg2003/SideBox/releases/download/$tag/SideBox-setup.exe"
             sha256 = $hash
             changelog = "Release $tag"
-            release_page = "https://github.com/mxlg2003/WinDock/releases/tag/$tag"
+            release_page = "https://github.com/mxlg2003/SideBox/releases/tag/$tag"
             mandatory = $false
           }
           $json = $manifest | ConvertTo-Json -Depth 5

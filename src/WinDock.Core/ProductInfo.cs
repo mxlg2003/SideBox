@@ -12,12 +12,12 @@ public static class ProductInfo
     public const string LegacyDataFolderName2 = "Sidebox";
 
     public const string GitHubOwner = "mxlg2003";
-    public const string GitHubRepo = "WinDock";
-    public const string GitHubRepositoryUrl = "https://github.com/mxlg2003/WinDock";
-    public const string GitHubReleasesUrl = "https://github.com/mxlg2003/WinDock/releases";
-    public const string GitHubLatestReleaseUrl = "https://github.com/mxlg2003/WinDock/releases/latest";
-    public const string GitHubLatestJsonUrl = "https://github.com/mxlg2003/WinDock/releases/latest/download/latest.json";
-    public const string GitHubLatestApiUrl = "https://api.github.com/repos/mxlg2003/WinDock/releases/latest";
+    public const string GitHubRepo = "SideBox";
+    public const string GitHubRepositoryUrl = "https://github.com/mxlg2003/SideBox";
+    public const string GitHubReleasesUrl = "https://github.com/mxlg2003/SideBox/releases";
+    public const string GitHubLatestReleaseUrl = "https://github.com/mxlg2003/SideBox/releases/latest";
+    public const string GitHubLatestJsonUrl = "https://github.com/mxlg2003/SideBox/releases/latest/download/latest.json";
+    public const string GitHubLatestApiUrl = "https://api.github.com/repos/mxlg2003/SideBox/releases/latest";
     public const string DownloadMirrorPrefix = "https://ghfast.top/";
 
     public static string LocalData(params string[] relative)
