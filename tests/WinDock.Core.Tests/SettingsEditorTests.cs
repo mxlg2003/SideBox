@@ -183,10 +183,15 @@ public class SettingsEditorTests
         Assert.True(BuiltInWidgets.CanOpen(BuiltInWidgets.TimeProgress));
         Assert.True(BuiltInWidgets.CanOpen(BuiltInWidgets.SysActivity));
         Assert.True(BuiltInWidgets.CanOpen(BuiltInWidgets.Network));
+        Assert.True(BuiltInWidgets.CanOpen(BuiltInWidgets.Disk));
+        Assert.True(BuiltInWidgets.CanOpen(BuiltInWidgets.Gpu));
+        Assert.True(BuiltInWidgets.CanOpen(BuiltInWidgets.Processes));
+        Assert.True(BuiltInWidgets.CanOpen(BuiltInWidgets.Stocks));
         Assert.True(BuiltInWidgets.HasDensityModes(BuiltInWidgets.Clock));
         Assert.True(BuiltInWidgets.HasDensityModes(BuiltInWidgets.TimeProgress));
         Assert.True(BuiltInWidgets.HasDensityModes(BuiltInWidgets.Network));
         Assert.True(BuiltInWidgets.HasDensityModes(BuiltInWidgets.BingWallpaper));
+        Assert.True(BuiltInWidgets.HasDensityModes(BuiltInWidgets.Stocks));
         Assert.False(BuiltInWidgets.HasDensityModes(BuiltInWidgets.SysActivity));
         Assert.False(BuiltInWidgets.HasDensityModes(BuiltInWidgets.Notes));
         Assert.False(BuiltInWidgets.HasDensityModes(BuiltInWidgets.Stopwatch));
@@ -200,12 +205,17 @@ public class SettingsEditorTests
         Assert.True(BuiltInWidgets.CanCustomize(BuiltInWidgets.TimeProgress));
         Assert.True(BuiltInWidgets.CanCustomize(BuiltInWidgets.SysActivity));
         Assert.True(BuiltInWidgets.CanCustomize(BuiltInWidgets.Network));
+        Assert.True(BuiltInWidgets.CanCustomize(BuiltInWidgets.Disk));
+        Assert.True(BuiltInWidgets.CanCustomize(BuiltInWidgets.Gpu));
+        Assert.True(BuiltInWidgets.CanCustomize(BuiltInWidgets.Processes));
         Assert.True(BuiltInWidgets.CanCustomize(BuiltInWidgets.Clock));
         Assert.False(BuiltInWidgets.CanCustomize(BuiltInWidgets.Stopwatch));
         Assert.False(BuiltInWidgets.CanCustomize(BuiltInWidgets.Countdown));
         Assert.False(BuiltInWidgets.CanCustomize(BuiltInWidgets.Alarm));
         Assert.False(BuiltInWidgets.CanCustomize(BuiltInWidgets.Weather));
-        Assert.False(BuiltInWidgets.CanCustomize(BuiltInWidgets.Schedule));
+        Assert.False(BuiltInWidgets.CanCustomize(BuiltInWidgets.WhiteNoise));
+        Assert.True(BuiltInWidgets.CanCustomize(BuiltInWidgets.Schedule));
+        Assert.True(BuiltInWidgets.CanCustomize(BuiltInWidgets.Stocks));
     }
 
     [Fact]
@@ -652,6 +662,113 @@ public class SettingsEditorTests
 
         var normalized = SettingsValidator.EnsureInvariants(settings);
         Assert.Contains(normalized.Profiles, p => p.Id == DefaultProfiles.GeneralId);
+    }
+
+    [Fact]
+    public void Bing_wallpaper_is_singleton_weather_allows_multiple()
+    {
+        Assert.True(BuiltInWidgets.IsSingleton(BuiltInWidgets.BingWallpaper));
+        Assert.False(BuiltInWidgets.AllowsMultiple(BuiltInWidgets.BingWallpaper));
+        Assert.True(BuiltInWidgets.AllowsMultiple(BuiltInWidgets.Weather));
+        Assert.False(BuiltInWidgets.IsSingleton(BuiltInWidgets.Weather));
+    }
+
+    [Fact]
+    public void Adding_bing_again_does_not_append_another_chip()
+    {
+        var settings = DefaultProfiles.CreateFactorySettings();
+        var once = SettingsEditor.AddWidget(settings, DefaultProfiles.GeneralId, BuiltInWidgets.BingWallpaper);
+        var twice = SettingsEditor.AddWidget(once, DefaultProfiles.GeneralId, BuiltInWidgets.BingWallpaper);
+        var bings = twice.Profiles.First(p => p.Id == DefaultProfiles.GeneralId).Dock.Items
+            .Where(item => item.WidgetId == BuiltInWidgets.BingWallpaper)
+            .ToArray();
+        Assert.Single(bings);
+    }
+
+    [Fact]
+    public void Extra_bing_chips_are_dropped_on_load()
+    {
+        var settings = SettingsEditor.AddWidget(
+            DefaultProfiles.CreateFactorySettings(),
+            DefaultProfiles.GeneralId,
+            BuiltInWidgets.BingWallpaper);
+        var general = settings.Profiles.First(p => p.Id == DefaultProfiles.GeneralId);
+        var items = general.Dock.Items.ToList();
+        items.Add(new DockItem
+        {
+            Id = "bing-extra",
+            Type = DockItemType.WidgetChip,
+            WidgetId = BuiltInWidgets.BingWallpaper,
+            Title = BuiltInWidgets.DisplayName(BuiltInWidgets.BingWallpaper)
+        });
+        var dirty = settings with
+        {
+            Profiles = settings.Profiles
+                .Select(profile => profile.Id == DefaultProfiles.GeneralId
+                    ? profile with { Dock = profile.Dock with { Items = items } }
+                    : profile)
+                .ToArray()
+        };
+
+        var cleaned = SettingsValidator.EnsureInvariants(dirty);
+        Assert.Single(
+            cleaned.Profiles.First(p => p.Id == DefaultProfiles.GeneralId).Dock.Items,
+            item => item.WidgetId == BuiltInWidgets.BingWallpaper);
+    }
+
+    [Fact]
+    public void Bing_wallpaper_settings_can_be_updated_and_auto_apply_toggled()
+    {
+        var settings = DefaultProfiles.CreateFactorySettings();
+        var withBing = SettingsEditor.AddWidget(settings, DefaultProfiles.GeneralId, BuiltInWidgets.BingWallpaper);
+        var bingItem = withBing.Profiles.First(p => p.Id == DefaultProfiles.GeneralId).Dock.Items
+            .First(item => item.WidgetId == BuiltInWidgets.BingWallpaper);
+
+        var configured = SettingsEditor.WithBingWallpaper(
+            withBing,
+            DefaultProfiles.GeneralId,
+            bingItem.Id,
+            new BingWallpaperSettings { AutoApplyDaily = true, LastAppliedKey = "test-key" });
+
+        var updatedItem = configured.Profiles.First(p => p.Id == DefaultProfiles.GeneralId).Dock.Items
+            .First(item => item.Id == bingItem.Id);
+        Assert.NotNull(updatedItem.BingWallpaper);
+        Assert.True(updatedItem.BingWallpaper.AutoApplyDaily);
+        Assert.Equal("test-key", updatedItem.BingWallpaper.LastAppliedKey);
+
+        var toggledOff = SettingsEditor.WithBingWallpaperAutoApply(configured, false);
+        var toggledItem = toggledOff.Profiles.First(p => p.Id == DefaultProfiles.GeneralId).Dock.Items
+            .First(item => item.Id == bingItem.Id);
+        Assert.False(toggledItem.BingWallpaper?.AutoApplyDaily);
+    }
+
+    [Fact]
+    public void Multiple_weather_chips_keep_independent_cities()
+    {
+        var settings = DefaultProfiles.CreateFactorySettings();
+        var once = SettingsEditor.AddWidget(settings, DefaultProfiles.GeneralId, BuiltInWidgets.Weather);
+        var twice = SettingsEditor.AddWidget(once, DefaultProfiles.GeneralId, BuiltInWidgets.Weather);
+        var weathers = twice.Profiles.First(p => p.Id == DefaultProfiles.GeneralId).Dock.Items
+            .Where(item => item.WidgetId == BuiltInWidgets.Weather)
+            .ToArray();
+        Assert.Equal(2, weathers.Length);
+
+        var beijing = SettingsEditor.WithWeather(
+            twice,
+            DefaultProfiles.GeneralId,
+            weathers[0].Id,
+            new WeatherSettings { City = "北京" });
+        var both = SettingsEditor.WithWeather(
+            beijing,
+            DefaultProfiles.GeneralId,
+            weathers[1].Id,
+            new WeatherSettings { City = "上海" });
+
+        var items = both.Profiles.First(p => p.Id == DefaultProfiles.GeneralId).Dock.Items
+            .Where(item => item.WidgetId == BuiltInWidgets.Weather)
+            .ToArray();
+        Assert.Equal("北京", items.Single(item => item.Id == weathers[0].Id).Weather?.City);
+        Assert.Equal("上海", items.Single(item => item.Id == weathers[1].Id).Weather?.City);
     }
 
     private static string ItemId(AppSettings settings, string widgetId) =>
@@ -1134,6 +1251,7 @@ public class DockPinTests
         Assert.False(hidden.Profiles.First(p => p.Id == DefaultProfiles.DeepWorkId).Dock.AutoHide);
         var recorded = SettingsEditor.RecordSwitch(settings, DefaultProfiles.GeneralId, DefaultProfiles.DeepWorkId, TriggerReason.Manual);
         Assert.Equal(DefaultProfiles.GeneralId, recorded.LastProfileId);
+        Assert.Empty(recorded.SwitchHistory);
         Assert.Equal(DefaultProfiles.GeneralId, SettingsEditor.UndoTarget(recorded, DefaultProfiles.DeepWorkId));
         Assert.Null(SettingsEditor.UndoTarget(DefaultProfiles.CreateFactorySettings(), DefaultProfiles.GeneralId));
         Assert.Equal(ManualOverrideUntil.UntilManual, DefaultProfiles.CreateFactorySettings().ManualOverride.Until);
@@ -1165,7 +1283,7 @@ public class DockPinTests
 
         var chord = SettingsEditor.WithRevealDockHotkey(settings, "Ctrl+Alt+F1");
         Assert.Equal("Ctrl+Alt+F1", chord.Hotkeys.RevealDock);
-        Assert.Equal("Win+Shift+D", chord.Hotkeys.NextProfile);
+        Assert.Null(chord.Hotkeys.NextProfile);
     }
 
     [Fact]

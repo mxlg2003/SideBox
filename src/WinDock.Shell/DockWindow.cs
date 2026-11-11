@@ -1,12 +1,10 @@
 using System.Runtime.InteropServices;
 using System.IO;
-using System.Text;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -14,6 +12,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using WinDock.Core;
 using Brushes = System.Windows.Media.Brushes;
 using Color = System.Windows.Media.Color;
@@ -50,6 +49,7 @@ public sealed class DockWindow : Window, IDockSurface
     private Point _dragOrigin;
     private bool _dragArmed;
     private bool _dragging;
+    private bool _tileDragSuspended;
     private TranslateTransform? _dragLift;
     private Point _grabOffset;
     private RectLogical _pixelWorkArea;
@@ -59,14 +59,20 @@ public sealed class DockWindow : Window, IDockSurface
     private readonly TextBlock _pinNameText = new();
     private readonly Border _pinNameHost = new();
     private readonly Popup _pinNamePopup = new();
+    private readonly TextBlock _statusText = new();
+    private readonly Border _statusHost = new();
+    private readonly Popup _statusPopup = new();
+    private DispatcherTimer _statusTimer = null!;
     private int _pinNameToken;
     private Border? _emptyHint;
     private bool _islandDragArmed;
+    private bool _islandDragCaptured;
+    private Point _islandDragOrigin;
     private readonly Border _insertionCaret;
 
     public DockWindow()
     {
-        Title = "WinDock";
+        Title = ProductInfo.Name;
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         ResizeMode = ResizeMode.NoResize;
@@ -85,7 +91,7 @@ public sealed class DockWindow : Window, IDockSurface
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
         Background = Brushes.Transparent;
-        FontFamily = new FontFamily("Segoe UI Variable, Segoe UI");
+        FontFamily = UiFont.Family;
         Height = DockLayoutCalculator.DefaultThickness;
 
         _itemsHost = new StackPanel
@@ -109,8 +115,8 @@ public sealed class DockWindow : Window, IDockSurface
         _scroll.ScrollChanged += (_, _) => UpdateOverflowChrome();
         _itemsHost.PreviewMouseLeftButtonDown += OnTileMouseDown;
 
-        _overflowBack = OverflowGlyph("\uE76B", UiText.ScrollLeft, () => ScrollBy(-DockTokens.ScrollStep));
-        _overflowForward = OverflowGlyph("\uE76C", UiText.ScrollRight, () => ScrollBy(DockTokens.ScrollStep));
+        _overflowBack = OverflowGlyph(PhosphorIcon.CaretLeft, UiText.ScrollLeft, () => ScrollBy(-DockTokens.ScrollStep));
+        _overflowForward = OverflowGlyph(PhosphorIcon.CaretRight, UiText.ScrollRight, () => ScrollBy(DockTokens.ScrollStep));
         _overflow = new Border
         {
             Margin = new Thickness(2, 0, DockTokens.ResizeGrip, 0),
@@ -182,11 +188,12 @@ public sealed class DockWindow : Window, IDockSurface
 
         Content = _island;
         PreparePinName();
+        PrepareStatus();
         ApplyTheme(false);
         SourceInitialized += (_, _) => ApplyTheme(_isLight, _backdrop);
         Loaded += (_, _) => ApplyTheme(_isLight, _backdrop);
         MouseMove += OnWindowMouseMove;
-        MouseLeftButtonUp += OnWindowMouseUp;
+        AddHandler(MouseLeftButtonUpEvent, new MouseButtonEventHandler(OnWindowMouseUp), handledEventsToo: true);
         PreviewMouseLeftButtonDown += OnStripMouseDown;
         _island.PreviewMouseLeftButtonDown += OnIslandBackgroundDown;
         LostMouseCapture += (_, _) =>
@@ -201,7 +208,7 @@ public sealed class DockWindow : Window, IDockSurface
             }
             else if (_islandDragArmed)
             {
-                EndIslandMonitorDrag();
+                CancelIslandMonitorDrag();
             }
         };
         MouseRightButtonUp += OnDockRightClick;
@@ -261,9 +268,19 @@ public sealed class DockWindow : Window, IDockSurface
         _overflow.Visibility = Visibility.Collapsed;
         _itemsHost.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
         var size = _itemsHost.DesiredSize;
-        return new System.Windows.Size(
-            Math.Max(1, size.Width + (DockTokens.IslandPaddingX * 2) + 2),
-            Math.Max(1, size.Height + (DockTokens.IslandPaddingY * 2) + 2));
+        var width = Math.Max(1, size.Width + (DockTokens.IslandPaddingX * 2) + 2);
+        var height = Math.Max(1, size.Height + (DockTokens.IslandPaddingY * 2) + 2);
+        var thickness = DockLayoutCalculator.ThicknessFor(_edge);
+        if (IsHorizontal(_edge))
+        {
+            height = Math.Min(height, thickness);
+        }
+        else
+        {
+            width = Math.Min(width, thickness);
+        }
+
+        return new System.Windows.Size(width, height);
     }
 
     public void SetEdge(DockEdge edge)
@@ -435,6 +452,7 @@ public sealed class DockWindow : Window, IDockSurface
 
         SyncSlotGaps();
         ShowEmptyHint(slots.Count == 0);
+        LayoutEdgeSlots();
     }
 
     private void ShowEmptyHint(bool empty)
@@ -653,6 +671,7 @@ public sealed class DockWindow : Window, IDockSurface
                     view.InvalidateMeasure();
                 }
 
+                slot.InvalidateMeasure();
                 break;
             }
         }
@@ -703,7 +722,7 @@ public sealed class DockWindow : Window, IDockSurface
         }
     }
 
-    public void ApplyProfileMenu(IReadOnlyList<Profile> profiles, string activeProfileId)
+    public void ApplyProfileMenu(IReadOnlyList<Profile> profiles, string activeProfileId, bool canUndo = false)
     {
         ContextMenu = DockContextMenuBuilder.BuildProfileMenu(
             profiles,
@@ -715,6 +734,23 @@ public sealed class DockWindow : Window, IDockSurface
             () => SettingsRequested?.Invoke(this, EventArgs.Empty),
             id => ProfileSwitchRequested?.Invoke(this, id),
             () => ExitRequested?.Invoke(this, EventArgs.Empty));
+    }
+
+    public void ShowStatus(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        _statusText.Text = text;
+        _statusHost.Background = TokenBrushes.From(DockTokens.ResolveMenuFill(_isLight, _backdropOk, _backdrop));
+        _statusHost.BorderBrush = TokenBrushes.From(_isLight ? DockTokens.Light.Stroke : DockTokens.Dark.Stroke);
+        _statusHost.BorderThickness = new Thickness(1);
+        _statusText.Foreground = TokenBrushes.From(_isLight ? DockTokens.Light.Text : DockTokens.Dark.Text);
+        _statusPopup.IsOpen = true;
+        _statusTimer.Stop();
+        _statusTimer.Start();
     }
 
     private void OnDockMenuOpening(object sender, ContextMenuEventArgs e)
@@ -847,9 +883,7 @@ public sealed class DockWindow : Window, IDockSurface
             id => WidgetOpenRequested?.Invoke(this, id),
             id => WidgetCustomizeRequested?.Invoke(this, id),
             req => WidgetDensityRequested?.Invoke(this, req),
-            id => WidgetRemoveRequested?.Invoke(this, id),
-            () => SettingsRequested?.Invoke(this, EventArgs.Empty),
-            () => ExitRequested?.Invoke(this, EventArgs.Empty));
+            id => WidgetRemoveRequested?.Invoke(this, id));
 
         slot.ContextMenu = menu;
         menu.IsOpen = true;
@@ -905,8 +939,8 @@ public sealed class DockWindow : Window, IDockSurface
         _overflowForward.Margin = horizontal
             ? new Thickness(DockTokens.OverflowButtonGap, 0, 0, 0)
             : new Thickness(0, DockTokens.OverflowButtonGap, 0, 0);
-        _overflowBack.Content = OverflowGlyphText(horizontal ? "\uE76B" : "\uE70E");
-        _overflowForward.Content = OverflowGlyphText(horizontal ? "\uE76C" : "\uE70D");
+        _overflowBack.Content = OverflowGlyphText(horizontal ? PhosphorIcon.CaretLeft : PhosphorIcon.CaretUp);
+        _overflowForward.Content = OverflowGlyphText(horizontal ? PhosphorIcon.CaretRight : PhosphorIcon.CaretDown);
         _overflowBack.ToolTip = horizontal ? UiText.ScrollLeft : UiText.ScrollUp;
         _overflowForward.ToolTip = horizontal ? UiText.ScrollRight : UiText.ScrollDown;
 
@@ -952,6 +986,111 @@ public sealed class DockWindow : Window, IDockSurface
         }
 
         SyncSlotGaps();
+        LayoutEdgeSlots();
+    }
+
+    private void LayoutEdgeSlots()
+    {
+        var side = !Horizontal;
+        foreach (UIElement child in _itemsHost.Children)
+        {
+            if (child is Border { Tag: "empty-cta" } hint)
+            {
+                hint.Height = double.NaN;
+                hint.MaxWidth = side ? DockTokens.SideTileWidth : double.PositiveInfinity;
+                if (hint.Child is TextBlock copy)
+                {
+                    copy.TextWrapping = side ? TextWrapping.Wrap : TextWrapping.NoWrap;
+                    copy.TextAlignment = side ? TextAlignment.Center : TextAlignment.Left;
+                    copy.MaxWidth = side ? DockTokens.SideTileWidth - 8 : double.PositiveInfinity;
+                }
+
+                continue;
+            }
+
+            if (child is not Border { Tag: DockVisibleSlot view } slot)
+            {
+                continue;
+            }
+
+            var pin = view.IsStack || (view.Item is { } item && DockPins.IsPin(item.Type));
+            if (pin && slot.Child is Border { Child: Grid body })
+            {
+                LayoutPinBody(body, slot.Child as FrameworkElement, side);
+                slot.Width = side ? DockTokens.SideTileWidth : double.NaN;
+                slot.Height = side ? DockTokens.SidePinHeight : DockTokens.TileHeight;
+                continue;
+            }
+
+            slot.Width = double.NaN;
+            slot.Height = side ? double.NaN : DockTokens.TileHeight;
+        }
+    }
+
+    private void LayoutPinBody(Grid body, FrameworkElement? tile, bool side)
+    {
+        Ellipse? dot = null;
+        FrameworkElement? face = null;
+        foreach (var child in body.Children)
+        {
+            if (child is Ellipse { Tag: "pin-running" } running)
+            {
+                dot = running;
+            }
+            else if (child is FrameworkElement element)
+            {
+                face = element;
+            }
+        }
+
+        if (dot is null)
+        {
+            return;
+        }
+
+        var faceWidth = face?.Width > 0 ? face.Width : DockTokens.ArtSize;
+        if (side)
+        {
+            body.RowDefinitions.Clear();
+            body.Width = DockTokens.SideTileWidth;
+            body.Height = DockTokens.SidePinHeight;
+            if (face is not null)
+            {
+                Grid.SetRow(face, 0);
+                face.HorizontalAlignment = HorizontalAlignment.Center;
+                face.VerticalAlignment = VerticalAlignment.Center;
+            }
+
+            Grid.SetRow(dot, 0);
+            dot.HorizontalAlignment = _edge == DockEdge.Left ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+            dot.VerticalAlignment = VerticalAlignment.Center;
+            dot.Margin = new Thickness(4, 0, 4, 0);
+        }
+        else
+        {
+            body.RowDefinitions.Clear();
+            body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(7) });
+            body.Width = faceWidth + 16;
+            body.Height = DockTokens.TileHeight;
+            if (face is not null)
+            {
+                Grid.SetRow(face, 0);
+                face.HorizontalAlignment = HorizontalAlignment.Center;
+                face.VerticalAlignment = VerticalAlignment.Center;
+            }
+
+            Grid.SetRow(dot, 1);
+            dot.HorizontalAlignment = HorizontalAlignment.Center;
+            dot.VerticalAlignment = VerticalAlignment.Center;
+            dot.Margin = new Thickness(0);
+        }
+
+        if (tile is not null)
+        {
+            tile.Width = body.Width;
+            tile.Height = body.Height;
+        }
     }
 
     private void UpdateOverflowChrome()
@@ -1116,7 +1255,15 @@ public sealed class DockWindow : Window, IDockSurface
             var pos = e.GetPosition(_itemsHost);
             if (!_dragging)
             {
-                if (Math.Abs(pos.X - _dragOrigin.X) < 8 && Math.Abs(pos.Y - _dragOrigin.Y) < 8)
+                if (_tileDragSuspended || IsPointerOutsideDockAxis(pos))
+                {
+                    DisarmTileDrag();
+                    return;
+                }
+
+                var deltaX = pos.X - _dragOrigin.X;
+                var deltaY = pos.Y - _dragOrigin.Y;
+                if (!DockDragConstraints.IsDragStart(deltaX, deltaY))
                 {
                     return;
                 }
@@ -1157,8 +1304,10 @@ public sealed class DockWindow : Window, IDockSurface
 
         if (_dragArmed)
         {
+            CancelIslandMonitorDrag();
+            var wasDragging = _dragging;
             EndTileDrag(commit: true);
-            e.Handled = _dragging;
+            e.Handled = wasDragging;
             return;
         }
 
@@ -1171,7 +1320,17 @@ public sealed class DockWindow : Window, IDockSurface
 
     private void OnIslandBackgroundDown(object sender, MouseButtonEventArgs e)
     {
-        if (_resizing || _dragArmed || e.ChangedButton != MouseButton.Left)
+        if (_resizing || _dragArmed || _tileDragSuspended || !IsMouseOver || e.ChangedButton != MouseButton.Left)
+        {
+            return;
+        }
+
+        if (e.OriginalSource is Button or TextBox or TextBoxBase)
+        {
+            return;
+        }
+
+        if (e.OriginalSource is DependencyObject source && FindAncestor<Button>(source) is not null)
         {
             return;
         }
@@ -1190,6 +1349,8 @@ public sealed class DockWindow : Window, IDockSurface
         }
 
         _islandDragArmed = true;
+        _islandDragOrigin = CursorPixels();
+        _islandDragCaptured = CaptureMouse();
     }
 
     private void EndIslandMonitorDrag()
@@ -1199,9 +1360,48 @@ public sealed class DockWindow : Window, IDockSurface
             return;
         }
 
+        var origin = _islandDragOrigin;
+        var captured = _islandDragCaptured;
         _islandDragArmed = false;
-        var id = NativeMonitors.GetCurrentCursorMonitorId();
-        IslandMonitorRequested?.Invoke(this, id);
+        _islandDragCaptured = false;
+        ReleaseIslandCapture();
+        if (!captured)
+        {
+            return;
+        }
+
+        var now = CursorPixels();
+        if (!DockDragConstraints.IsIslandMonitorDrag(now.X - origin.X, now.Y - origin.Y))
+        {
+            return;
+        }
+
+        IslandMonitorRequested?.Invoke(this, NativeMonitors.GetCurrentCursorMonitorId());
+    }
+
+    public void CancelIslandMonitorDrag()
+    {
+        _islandDragArmed = false;
+        _islandDragCaptured = false;
+        ReleaseIslandCapture();
+    }
+
+    private static Point CursorPixels()
+    {
+        if (NativeMonitors.GetCursorPos(out var pt))
+        {
+            return new Point(pt.X, pt.Y);
+        }
+
+        return default;
+    }
+
+    private void ReleaseIslandCapture()
+    {
+        if (!_dragging && !_resizing && IsMouseCaptured)
+        {
+            ReleaseMouseCapture();
+        }
     }
 
     private void EndResize(bool commit)
@@ -1281,11 +1481,8 @@ public sealed class DockWindow : Window, IDockSurface
         }
         else
         {
-            face = new TextBlock
+            face = new PhosphorGlyph(PinGlyph(item.Type, missing), 26)
             {
-                Text = PinGlyph(item.Type, missing),
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                FontSize = 26,
                 Opacity = missing ? 0.45 : 0.9,
                 Foreground = ForegroundBrush(),
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -1411,11 +1608,8 @@ public sealed class DockWindow : Window, IDockSurface
         {
             faceWidth = DockTokens.ArtSize;
             faceHeight = DockTokens.ArtSize;
-            content = new TextBlock
+            content = new PhosphorGlyph(PinGlyph(type, missing: false), 26)
             {
-                Text = PinGlyph(type, missing: false),
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                FontSize = 26,
                 Opacity = 0.9,
                 Foreground = ForegroundBrush(),
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -1484,33 +1678,6 @@ public sealed class DockWindow : Window, IDockSurface
         return (height, height);
     }
 
-    private static readonly FontFamily LatinCaptionFont = new("Tahoma");
-    private static readonly FontFamily CjkCaptionFont = new(
-        new Uri("pack://application:,,,/WinDock.Shell;component/Fonts/"),
-        "./#Noto Sans SC");
-
-    private static void SetFolderCaption(TextBlock label, string text)
-    {
-        label.Inlines.Clear();
-        foreach (var rune in text.EnumerateRunes())
-        {
-            label.Inlines.Add(new Run(rune.ToString())
-            {
-                FontFamily = IsCjk(rune) ? CjkCaptionFont : LatinCaptionFont
-            });
-        }
-    }
-
-    private static bool IsCjk(Rune rune)
-    {
-        var value = rune.Value;
-        return value is >= 0x3400 and <= 0x9FFF
-            or >= 0xF900 and <= 0xFAFF
-            or >= 0x3040 and <= 0x30FF
-            or >= 0xAC00 and <= 0xD7AF
-            or >= 0x20000 and <= 0x2CEAF;
-    }
-
     private Border FolderBadge(DockItem item, bool missing, double faceWidth)
     {
         var label = new TextBlock
@@ -1524,9 +1691,7 @@ public sealed class DockWindow : Window, IDockSurface
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         };
-        SetFolderCaption(label, DockPins.FolderBadge(PinTitle(item)));
-        TextOptions.SetTextFormattingMode(label, TextFormattingMode.Display);
-        TextOptions.SetTextRenderingMode(label, TextRenderingMode.ClearType);
+        FolderCaption.Apply(label, DockPins.FolderBadge(PinTitle(item)));
         var badge = new Border
         {
             Tag = "pin-badge",
@@ -1609,12 +1774,19 @@ public sealed class DockWindow : Window, IDockSurface
             case TextBlock glyph:
                 glyph.Foreground = ForegroundBrush();
                 break;
+            case PhosphorGlyph icon:
+                icon.Foreground = ForegroundBrush();
+                break;
             case Grid host:
                 foreach (var nested in host.Children)
                 {
                     if (nested is TextBlock glyph)
                     {
                         glyph.Foreground = ForegroundBrush();
+                    }
+                    else if (nested is PhosphorGlyph icon)
+                    {
+                        icon.Foreground = ForegroundBrush();
                     }
                     else if (nested is Border { Tag: "pin-badge" } badge)
                     {
@@ -1640,7 +1812,7 @@ public sealed class DockWindow : Window, IDockSurface
 
     private void PreparePinName()
     {
-        _pinNameText.FontFamily = new FontFamily("Segoe UI Variable, Segoe UI");
+        _pinNameText.FontFamily = UiFont.Family;
         _pinNameText.FontSize = 12;
         _pinNameText.TextWrapping = TextWrapping.Wrap;
         _pinNameText.TextTrimming = TextTrimming.CharacterEllipsis;
@@ -1667,6 +1839,32 @@ public sealed class DockWindow : Window, IDockSurface
         _pinNamePopup.CustomPopupPlacementCallback = PlaceCenteredPinName;
         _pinNamePopup.Child = _pinNameHost;
         PaintPinName();
+    }
+
+    private void PrepareStatus()
+    {
+        _statusText.FontFamily = UiFont.Family;
+        _statusText.FontSize = 12;
+        _statusText.TextWrapping = TextWrapping.NoWrap;
+        _statusHost.CornerRadius = new CornerRadius(DockTokens.TileCornerRadius);
+        _statusHost.Padding = new Thickness(10, 6, 10, 6);
+        _statusHost.IsHitTestVisible = false;
+        _statusHost.Child = _statusText;
+        _statusPopup.AllowsTransparency = true;
+        _statusPopup.StaysOpen = true;
+        _statusPopup.Focusable = false;
+        _statusPopup.IsHitTestVisible = false;
+        _statusPopup.Placement = PlacementMode.Bottom;
+        _statusPopup.PlacementTarget = _island;
+        _statusPopup.VerticalOffset = 8;
+        _statusPopup.Child = _statusHost;
+        _statusPopup.Opened += (_, _) => PopupTopmost.TryElevate(_statusPopup);
+        _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.2) };
+        _statusTimer.Tick += (_, _) =>
+        {
+            _statusTimer.Stop();
+            _statusPopup.IsOpen = false;
+        };
     }
 
     private void PaintPinName()
@@ -1788,14 +1986,14 @@ public sealed class DockWindow : Window, IDockSurface
     {
         if (missing)
         {
-            return "\uE783";
+            return PhosphorIcon.Warning;
         }
 
         return type switch
         {
-            DockItemType.Folder => "\uE8B7",
-            DockItemType.App => "\uE756",
-            _ => "\uE8A5"
+            DockItemType.Folder => PhosphorIcon.Folder,
+            DockItemType.App => PhosphorIcon.AppWindow,
+            _ => PhosphorIcon.File
         };
     }
 
@@ -1993,9 +2191,27 @@ public sealed class DockWindow : Window, IDockSurface
         }
     }
 
+    public void SetTileDragSuspended(bool suspended)
+    {
+        _tileDragSuspended = suspended;
+        if (!_dragging)
+        {
+            DisarmTileDrag();
+        }
+
+        CancelIslandMonitorDrag();
+    }
+
+    private bool IsPointerOutsideDockAxis(Point pos)
+    {
+        var cross = Horizontal ? pos.Y : pos.X;
+        var extent = Horizontal ? _itemsHost.ActualHeight : _itemsHost.ActualWidth;
+        return DockDragConstraints.IsCrossAxisOutside(cross, extent);
+    }
+
     private void OnTileMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (_resizing || e.OriginalSource is Button or TextBox or TextBoxBase)
+        if (_resizing || _tileDragSuspended || e.OriginalSource is Button or TextBox or TextBoxBase)
         {
             return;
         }
@@ -2011,6 +2227,7 @@ public sealed class DockWindow : Window, IDockSurface
             return;
         }
 
+        CancelIslandMonitorDrag();
         _dragSlot = slot;
         _dragFrom = _itemsHost.Children.IndexOf(slot);
         _dragLiveIndex = _dragFrom;
@@ -2098,6 +2315,12 @@ public sealed class DockWindow : Window, IDockSurface
             return;
         }
 
+        if (!_dragging)
+        {
+            DisarmTileDrag();
+            return;
+        }
+
         var from = _dragFrom;
         var to = _dragLiveIndex;
         var dragged = _dragging;
@@ -2135,6 +2358,16 @@ public sealed class DockWindow : Window, IDockSurface
         }
 
         ItemsReordered?.Invoke(this, new DockReorderRequest { From = from, To = to });
+    }
+
+    private void DisarmTileDrag()
+    {
+        _dragArmed = false;
+        _dragging = false;
+        _dragFrom = -1;
+        _dragLiveIndex = -1;
+        _dragSlot = null;
+        _dragLift = null;
     }
 
     private void PreviewLiveOrder(Point positionInHost)
@@ -2356,16 +2589,9 @@ public sealed class DockWindow : Window, IDockSurface
         button.Opacity = !button.IsEnabled ? 0.28 : hovering ? 1 : 0.62;
     }
 
-    private static TextBlock OverflowGlyphText(string glyph) => new()
+    private static PhosphorGlyph OverflowGlyphText(string glyph) => new(glyph, DockTokens.OverflowGlyphSize)
     {
-        Text = glyph,
-        FontFamily = new FontFamily("Segoe MDL2 Assets"),
-        FontSize = DockTokens.OverflowGlyphSize,
-        Padding = new Thickness(0),
         Margin = new Thickness(0),
-        LineHeight = DockTokens.OverflowGlyphSize,
-        LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
-        TextAlignment = TextAlignment.Center,
         HorizontalAlignment = HorizontalAlignment.Center,
         VerticalAlignment = VerticalAlignment.Center,
         IsHitTestVisible = false

@@ -39,4 +39,43 @@ public class NetworkWidgetTests
         Assert.Equal(20, history[0]);
         Assert.Equal(79, history[^1]);
     }
+
+    [Fact]
+    public void NetworkWidget_density_switches_properly()
+    {
+        Exception? error = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var provider = new FakeNetworkProvider(new NetworkSnapshot
+                {
+                    Timestamp = DateTimeOffset.UtcNow,
+                    IsConnected = true,
+                    ReceiveBytesPerSecond = 1024 * 1024,
+                    SendBytesPerSecond = 512 * 1024
+                });
+                var widget = new WinDock.Widgets.NetworkWidget(provider, WidgetDensity.Compact);
+                widget.ApplySettings(new NetworkWidgetSettings { ChartInDock = true });
+
+                var fired = false;
+                widget.IslandLayoutChanged += (_, _) => fired = true;
+                widget.ApplyDensity(WidgetDensity.Expanded);
+                Assert.True(fired);
+
+                fired = false;
+                widget.ApplyDensity(WidgetDensity.Compact);
+                Assert.True(fired);
+            }
+            catch (Exception ex)
+            {
+                error = ex;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        Assert.Null(error);
+    }
 }

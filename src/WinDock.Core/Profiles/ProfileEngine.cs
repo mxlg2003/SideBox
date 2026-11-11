@@ -232,15 +232,17 @@ public sealed class ProfileEngine : IProfileEngine
     private static ProfileDiff ToDiff(AppSettings settings, Profile profile, TriggerReason reason, bool includeWidgets)
     {
         var widgets = includeWidgets
-            ? profile.Widgets.Where(w => w.Visible && BuiltInWidgets.IsKnown(w.Id)).ToArray()
+            ? profile.Widgets.Where(w => w.Visible && BuiltInWidgets.IsOffered(w.Id)).ToArray()
             : [];
 
-        var dock = includeWidgets
-            ? profile.Dock
-            : profile.Dock with
-            {
-                Items = profile.Dock.Items.Where(item => item.Type != DockItemType.WidgetChip).ToArray()
-            };
+        var dock = profile.Dock with
+        {
+            Items = profile.Dock.Items
+                .Where(item => includeWidgets
+                    ? item.Type != DockItemType.WidgetChip || BuiltInWidgets.IsOffered(item.WidgetId)
+                    : item.Type != DockItemType.WidgetChip)
+                .ToArray()
+        };
 
         return new ProfileDiff
         {

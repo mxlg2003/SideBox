@@ -46,6 +46,12 @@ public sealed record PowerWidgetSettings
 
     public IReadOnlyList<string> HiddenDeviceIds { get; init; } = [];
 
+    public bool ShowWatts { get; init; }
+
+    public bool ShowRemaining { get; init; }
+
+    public bool ShowHealth { get; init; }
+
     public static PowerWidgetSettings Default { get; } = new();
 
     public static PowerWidgetSettings Normalize(PowerWidgetSettings? settings)
@@ -90,8 +96,37 @@ public static class PowerFormat
     public static string NoDevices => UiLocale.T("未检测到电池或已连接的蓝牙设备", "No battery or connected Bluetooth devices");
 
     public static string NoBattery => UiLocale.T("未检测到本机电池", "No internal battery detected");
+    public static string NoBatteryShort => UiLocale.T("无电池", "No battery");
 
     public static string Percent(int? percent) => percent is int value ? $"{value}%" : "—";
+
+    public static string Watts(int? milliwatts)
+    {
+        if (milliwatts is null)
+        {
+            return "—";
+        }
+
+        return $"{milliwatts.Value / 1000.0:0.0} W";
+    }
+
+    public static string Remaining(int? seconds)
+    {
+        if (seconds is null or <= 0)
+        {
+            return "—";
+        }
+
+        var span = TimeSpan.FromSeconds(seconds.Value);
+        if (span.TotalHours >= 1)
+        {
+            return UiLocale.T($"{(int)span.TotalHours} 小时 {span.Minutes} 分钟", $"{(int)span.TotalHours}h {span.Minutes}m");
+        }
+
+        return UiLocale.T($"{span.Minutes} 分钟", $"{span.Minutes}m");
+    }
+
+    public static string Health(int? percent) => Percent(percent);
 
     public static bool HasLevel(PowerDeviceSnapshot device) => device.Percent is >= 0 and <= 100;
 
@@ -237,6 +272,9 @@ public static class PowerPoll
         if (left.HasBattery != right.HasBattery
             || left.OnAcPower != right.OnAcPower
             || left.PercentRemaining != right.PercentRemaining
+            || left.ChargeRateMilliwatts != right.ChargeRateMilliwatts
+            || left.RemainingSeconds != right.RemainingSeconds
+            || left.HealthPercent != right.HealthPercent
             || left.Devices.Count != right.Devices.Count)
         {
             return false;

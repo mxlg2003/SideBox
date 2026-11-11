@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using WinDock.Core;
@@ -38,6 +39,9 @@ public static class DockContextMenuBuilder
         if (profiles.Count > 0)
         {
             menu.Items.Add(DockMenu.Divider(isLight));
+            var section = DockMenu.Item(UiText.ProfilesSection);
+            section.IsEnabled = false;
+            menu.Items.Add(section);
             foreach (var profile in profiles)
             {
                 var item = DockMenu.Item(DefaultProfiles.DisplayName(profile), isChecked: profile.Id == activeProfileId);
@@ -54,6 +58,30 @@ public static class DockContextMenuBuilder
 
         return menu;
     }
+
+    [Obsolete("Undo profile has been removed from dock context menu.")]
+    public static ContextMenu BuildProfileMenu(
+        IReadOnlyList<Profile> profiles,
+        string activeProfileId,
+        bool isLight,
+        DockBackdrop backdrop,
+        bool backdropOk,
+        Action<PinPickKind> onPinAdd,
+        Action onSettings,
+        Action<string> onProfileSwitch,
+        Action? onUndo,
+        bool canUndo,
+        Action onExit) =>
+        BuildProfileMenu(
+            profiles,
+            activeProfileId,
+            isLight,
+            backdrop,
+            backdropOk,
+            onPinAdd,
+            onSettings,
+            onProfileSwitch,
+            onExit);
 
     public static ContextMenu BuildWidgetMenu(
         DockItem item,
@@ -176,6 +204,24 @@ public static class DockContextMenuBuilder
                 var closeAll = DockMenu.DangerItem(UiText.CloseAllWindows);
                 closeAll.Click += (_, _) =>
                 {
+                    var owner = Window.GetWindow(menu);
+                    var answer = owner is null
+                        ? MessageBox.Show(
+                            UiText.ConfirmCloseAllWindows(windows.Count),
+                            ProductInfo.Name,
+                            MessageBoxButton.OKCancel,
+                            MessageBoxImage.Warning)
+                        : MessageBox.Show(
+                            owner,
+                            UiText.ConfirmCloseAllWindows(windows.Count),
+                            ProductInfo.Name,
+                            MessageBoxButton.OKCancel,
+                            MessageBoxImage.Warning);
+                    if (answer != MessageBoxResult.OK)
+                    {
+                        return;
+                    }
+
                     foreach (var win in windows)
                     {
                         onCloseWindow(win.Hwnd);

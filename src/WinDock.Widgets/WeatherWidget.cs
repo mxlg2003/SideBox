@@ -10,13 +10,15 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAware, IWeatherConfigurable, IWidgetThemeAware, ILocalizable, IWidgetDetachable
+public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAware, IDockEdgeAware, IWeatherConfigurable, IWidgetThemeAware, ILocalizable, IWidgetDetachable, IIslandLayoutAware
 {
+    public event EventHandler? IslandLayoutChanged;
     private static readonly FontFamily WeatherGlyphFont = new("Segoe UI Emoji, Segoe UI Symbol, Segoe MDL2 Assets");
 
     private readonly IWeatherProvider _provider;
     private WeatherSettings _settings = WeatherSettings.Default;
     private WidgetDensity _density = WidgetDensity.Expanded;
+    private bool _side;
     private bool _isLight;
 
     // Tile controls
@@ -111,6 +113,24 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
     private readonly ScrollViewer _hourlyScroll;
     private readonly StackPanel _hourlyPanel = new() { Orientation = Orientation.Horizontal };
     private readonly TextBlock _hourlyCaption = Caption(UiText.WeatherHourly);
+    private readonly Border _hourlyPrevBtn;
+    private readonly Border _hourlyNextBtn;
+    private readonly PhosphorGlyph _hourlyPrevGlyph = new(PhosphorIcon.CaretLeft, 11)
+    {
+        HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Center
+    };
+    private readonly PhosphorGlyph _hourlyNextGlyph = new(PhosphorIcon.CaretRight, 11)
+    {
+        HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Center
+    };
+    private DispatcherTimer? _scrollAnimTimer;
+    private double _targetScrollOffset;
+    private Point _dragStartPoint;
+    private double _dragStartOffset;
+    private bool _isDraggingHourly;
+    private bool _isMouseDownHourly;
     private readonly TextBlock _hourlySubCaption = new()
     {
         FontFamily = WidgetFonts.Ui,
@@ -126,9 +146,12 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
     // City edit section & autocomplete suggestions
     private readonly TextBox _cityBox = new()
     {
-        Margin = new Thickness(0, 6, 0, 6),
+        FontFamily = WidgetFonts.Ui,
         FontSize = 13,
-        Padding = new Thickness(8, 5, 8, 5)
+        Padding = new Thickness(8, 0, 8, 0),
+        BorderThickness = new Thickness(0),
+        Background = Brushes.Transparent,
+        VerticalContentAlignment = VerticalAlignment.Center
     };
     private readonly StackPanel _citySuggestionsPanel = new();
     private readonly ScrollViewer _citySuggestionsScroll;
@@ -140,9 +163,10 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
 
     public event EventHandler<WeatherSettings>? SettingsChanged;
 
-    public WeatherWidget(IWeatherProvider provider)
+    public WeatherWidget(IWeatherProvider provider, WidgetDensity density = WidgetDensity.Expanded)
     {
         _provider = provider;
+        _density = density;
 
         // Build Compact Tile
         _compactTemp.FontSize = 14;
@@ -280,6 +304,8 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
             _ = _provider.RefreshAsync(_settings, force: true);
         });
 
+        var cityField = WidgetChrome.Field(_cityBox);
+        cityField.Margin = new Thickness(0, 6, 0, 6);
         var cityActions = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -298,7 +324,7 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
                 Children =
                 {
                     Caption(UiText.WeatherEnterCity),
-                    _cityBox,
+                    cityField,
                     _citySuggestionsContainer,
                     cityActions
                 }
@@ -310,14 +336,72 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
             HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
             VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Margin = new Thickness(0, 4, 0, 10),
-            Content = _hourlyPanel
+            Content = _hourlyPanel,
+            Background = Brushes.Transparent,
+            Cursor = Cursors.SizeWE,
+            PanningMode = PanningMode.HorizontalOnly,
+            PanningDeceleration = 0.001,
+            PanningRatio = 1.0,
+            IsManipulationEnabled = true
         };
+
+        _hourlyPrevBtn = CreateHourlyNavButton(_hourlyPrevGlyph, () => AnimateScrollTo(_hourlyScroll.HorizontalOffset - 180));
+        _hourlyPrevBtn.ToolTip = UiText.WeatherPrevHours;
+        _hourlyPrevBtn.Opacity = 0.25;
+        _hourlyPrevBtn.IsEnabled = false;
+
+        _hourlyNextBtn = CreateHourlyNavButton(_hourlyNextGlyph, () => AnimateScrollTo(_hourlyScroll.HorizontalOffset + 180));
+        _hourlyNextBtn.ToolTip = UiText.WeatherNextHours;
+        _hourlyNextBtn.Opacity = 0.85;
         // Enable smooth horizontal scrolling via vertical mouse wheel
         _hourlyScroll.PreviewMouseWheel += (_, e) =>
         {
+            _scrollAnimTimer?.Stop();
             _hourlyScroll.ScrollToHorizontalOffset(_hourlyScroll.HorizontalOffset - e.Delta);
             e.Handled = true;
         };
+        _hourlyScroll.PreviewMouseLeftButtonDown += (_, e) =>
+        {
+            _scrollAnimTimer?.Stop();
+            _isMouseDownHourly = true;
+            _isDraggingHourly = false;
+            _dragStartPoint = e.GetPosition(_hourlyScroll);
+            _dragStartOffset = _hourlyScroll.HorizontalOffset;
+            _hourlyScroll.CaptureMouse();
+        };
+        _hourlyScroll.PreviewMouseMove += (_, e) =>
+        {
+            if (!_isMouseDownHourly) return;
+            var currentPoint = e.GetPosition(_hourlyScroll);
+            var deltaX = currentPoint.X - _dragStartPoint.X;
+            if (!_isDraggingHourly && Math.Abs(deltaX) > 3)
+            {
+                _isDraggingHourly = true;
+            }
+            if (_isDraggingHourly)
+            {
+                _hourlyScroll.ScrollToHorizontalOffset(_dragStartOffset - deltaX);
+            }
+        };
+        _hourlyScroll.PreviewMouseLeftButtonUp += (_, e) =>
+        {
+            if (_hourlyScroll.IsMouseCaptured)
+            {
+                _hourlyScroll.ReleaseMouseCapture();
+            }
+            _isMouseDownHourly = false;
+            if (_isDraggingHourly)
+            {
+                _isDraggingHourly = false;
+                e.Handled = true;
+            }
+        };
+        _hourlyScroll.LostMouseCapture += (_, _) =>
+        {
+            _isMouseDownHourly = false;
+            _isDraggingHourly = false;
+        };
+        _hourlyScroll.ScrollChanged += (_, _) => UpdateHourlyNavButtons();
 
         _popup = new Popup
         {
@@ -345,20 +429,87 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
     public void Detach()
     {
         _provider.Changed -= OnProviderChanged;
+        _scrollAnimTimer?.Stop();
+        _scrollAnimTimer = null;
         _popup.IsOpen = false;
         _searchCts?.Cancel();
     }
 
+    public void ApplyDockEdge(DockEdge edge)
+    {
+        _side = WidgetChrome.IsSide(edge);
+        ApplyDensity(_density);
+    }
+
     public void ApplyDensity(WidgetDensity density)
     {
+        var changed = _density != density;
         _density = density;
         var compact = density == WidgetDensity.Compact;
         _compactPanel.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
         _expandedPanel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        _tile.MinWidth = compact ? 52 : 84;
+        _compactPanel.Orientation = _side ? Orientation.Vertical : Orientation.Horizontal;
+        _compactPanel.HorizontalAlignment = HorizontalAlignment.Center;
+        _expandedPanel.Orientation = _side ? Orientation.Vertical : Orientation.Horizontal;
+        _expandedPanel.HorizontalAlignment = HorizontalAlignment.Center;
+        _compactGlyph.Margin = _side ? new Thickness(0, 0, 0, 2) : new Thickness(0, 0, 4, 0);
+        _compactGlyph.HorizontalAlignment = HorizontalAlignment.Center;
+        _compactTemp.Margin = new Thickness(0);
+        _compactTemp.TextAlignment = _side ? TextAlignment.Center : TextAlignment.Left;
+        _compactStatus.Margin = _side ? new Thickness(0, 1, 0, 0) : new Thickness(4, 0, 0, 0);
+        _compactStatus.TextAlignment = _side ? TextAlignment.Center : TextAlignment.Left;
+        _compactStatus.TextWrapping = _side ? TextWrapping.Wrap : TextWrapping.NoWrap;
+        _compactStatus.MaxWidth = _side ? DockTokens.SideTileWidth - 16 : double.PositiveInfinity;
+        _expandedGlyph.Margin = _side ? new Thickness(0, 0, 0, 2) : new Thickness(0, 0, 8, 0);
+        _expandedGlyph.HorizontalAlignment = HorizontalAlignment.Center;
+        _expandedTemp.TextAlignment = _side ? TextAlignment.Center : TextAlignment.Left;
+        _expandedCityStatus.TextAlignment = _side ? TextAlignment.Center : TextAlignment.Left;
+        _expandedCityStatus.TextWrapping = _side ? TextWrapping.Wrap : TextWrapping.NoWrap;
+        _expandedCityStatus.MaxWidth = _side ? DockTokens.SideTileWidth - 16 : double.PositiveInfinity;
+        if (_expandedPanel.Children.Count > 1
+            && _expandedPanel.Children[1] is StackPanel detail
+            && detail.Children.Count > 0
+            && detail.Children[0] is StackPanel tempRow)
+        {
+            detail.HorizontalAlignment = HorizontalAlignment.Center;
+            tempRow.Orientation = _side ? Orientation.Vertical : Orientation.Horizontal;
+            tempRow.HorizontalAlignment = HorizontalAlignment.Center;
+            _expandedRange.Margin = _side ? new Thickness(0, 1, 0, 0) : new Thickness(5, 1, 0, 0);
+            _expandedRange.HorizontalAlignment = _side ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+            if (detail.Children.Count > 1 && detail.Children[1] is StackPanel cityRow)
+            {
+                cityRow.Orientation = _side ? Orientation.Vertical : Orientation.Horizontal;
+                cityRow.HorizontalAlignment = HorizontalAlignment.Center;
+                _expandedAqiBadge.Margin = _side ? new Thickness(0, 2, 0, 0) : new Thickness(5, 0, 0, 0);
+                _expandedAqiBadge.HorizontalAlignment = _side ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+            }
+        }
+        foreach (UIElement child in _expandedPanel.Children)
+        {
+            if (child is FrameworkElement element)
+            {
+                element.HorizontalAlignment = _side ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+                element.VerticalAlignment = VerticalAlignment.Center;
+            }
+        }
+
+        _expandedTemp.HorizontalAlignment = _side ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        _expandedCityStatus.HorizontalAlignment = _side ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        _compactTemp.HorizontalAlignment = _side ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        _compactStatus.HorizontalAlignment = _side ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        if (!_side)
+        {
+            _tile.MinWidth = compact ? 52 : 84;
+        }
+
+        WidgetChrome.FitEdge(_tile, _side, compact ? 52 : 84);
         RenderSnapshot();
         _tile.InvalidateMeasure();
         InvalidateMeasure();
+        if (changed)
+        {
+            IslandLayoutChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public void ApplySettings(WeatherSettings settings)
@@ -413,6 +564,10 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
 
         WidgetChrome.ApplyTheme(_panel, isLight);
 
+        _hourlyPrevGlyph.Foreground = textBrush;
+        _hourlyNextGlyph.Foreground = textBrush;
+        UpdateHourlyNavButtons();
+
         RenderSnapshot();
     }
 
@@ -420,16 +575,99 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
     {
         _hourlyCaption.Text = UiText.WeatherHourly;
         _dailyCaption.Text = UiText.Weather7Days;
+        _hourlyPrevBtn.ToolTip = UiText.WeatherPrevHours;
+        _hourlyNextBtn.ToolTip = UiText.WeatherNextHours;
         RenderSnapshot();
     }
 
     public void Open()
     {
         _popup.IsOpen = true;
+        _hourlyScroll.ScrollToHorizontalOffset(0);
+        UpdateHourlyNavButtons();
         _ = _provider.RefreshAsync(_settings, force: false);
     }
 
-    private void ClosePopup() => _popup.IsOpen = false;
+    private void ClosePopup()
+    {
+        _scrollAnimTimer?.Stop();
+        _scrollAnimTimer = null;
+        _popup.IsOpen = false;
+    }
+
+    private Border CreateHourlyNavButton(PhosphorGlyph glyph, Action click)
+    {
+        var btn = new Border
+        {
+            Width = 20,
+            Height = 20,
+            CornerRadius = new CornerRadius(4),
+            Background = Brushes.Transparent,
+            Cursor = Cursors.Hand,
+            Margin = new Thickness(2, 0, 0, 0),
+            Child = glyph
+        };
+        btn.MouseEnter += (_, _) =>
+        {
+            if (btn.IsEnabled)
+            {
+                btn.Background = TokenBrushes.From(_isLight ? 0x14000000u : 0x24FFFFFFu);
+            }
+        };
+        btn.MouseLeave += (_, _) =>
+        {
+            btn.Background = Brushes.Transparent;
+        };
+        btn.MouseLeftButtonUp += (_, e) =>
+        {
+            if (btn.IsEnabled)
+            {
+                click();
+                e.Handled = true;
+            }
+        };
+        return btn;
+    }
+
+    private void AnimateScrollTo(double targetOffset)
+    {
+        _targetScrollOffset = Math.Clamp(targetOffset, 0, Math.Max(0, _hourlyScroll.ScrollableWidth));
+        _scrollAnimTimer?.Stop();
+        _scrollAnimTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        _scrollAnimTimer.Tick += (_, _) =>
+        {
+            var current = _hourlyScroll.HorizontalOffset;
+            var diff = _targetScrollOffset - current;
+            if (Math.Abs(diff) < 1.5)
+            {
+                _hourlyScroll.ScrollToHorizontalOffset(_targetScrollOffset);
+                _scrollAnimTimer?.Stop();
+                _scrollAnimTimer = null;
+            }
+            else
+            {
+                _hourlyScroll.ScrollToHorizontalOffset(current + diff * 0.35);
+            }
+        };
+        _scrollAnimTimer.Start();
+    }
+
+    private void UpdateHourlyNavButtons()
+    {
+        var offset = _hourlyScroll.HorizontalOffset;
+        var max = _hourlyScroll.ScrollableWidth;
+
+        var canPrev = offset > 1;
+        var canNext = max > 1 && offset < max - 1;
+
+        _hourlyPrevBtn.IsEnabled = canPrev;
+        _hourlyPrevBtn.Opacity = canPrev ? 0.85 : 0.25;
+        _hourlyPrevBtn.Cursor = canPrev ? Cursors.Hand : Cursors.Arrow;
+
+        _hourlyNextBtn.IsEnabled = canNext;
+        _hourlyNextBtn.Opacity = canNext ? 0.85 : 0.25;
+        _hourlyNextBtn.Cursor = canNext ? Cursors.Hand : Cursors.Arrow;
+    }
 
     private void OnCityInputChanged()
     {
@@ -500,15 +738,13 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
             var item = _suggestions[i];
             var index = i;
 
-            var locIcon = new TextBlock
+            var locIcon = new PhosphorGlyph(PhosphorIcon.MapPin, 10)
             {
-                Text = "\uE81D",
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                FontSize = 10,
                 Foreground = textMutedBrush,
                 Opacity = 0.7,
                 Margin = new Thickness(0, 0, 6, 0),
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center,
+                Tag = "tint"
             };
 
             var nameText = new TextBlock
@@ -615,11 +851,8 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
 
         _badgeBorder.Child = _badgeText;
 
-        var locIcon = new TextBlock
+        var locIcon = new PhosphorGlyph(PhosphorIcon.MapPin, 13)
         {
-            Text = "\uE81D",
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 13,
             Opacity = 0.75,
             Margin = new Thickness(0, 0, 5, 0),
             VerticalAlignment = VerticalAlignment.Center
@@ -632,9 +865,9 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
             Children = { locIcon, _cityLabel, _badgeBorder }
         };
 
-        var refreshBtn = HeaderGlyph("\uE72C", () => _ = _provider.RefreshAsync(_settings, force: true));
+        var refreshBtn = WidgetChrome.HeaderIcon(PhosphorIcon.ArrowsClockwise, () => _ = _provider.RefreshAsync(_settings, force: true), opacity: 0.7);
         refreshBtn.ToolTip = UiText.Refresh;
-        var editCityBtn = HeaderGlyph("\uE70F", () =>
+        var editCityBtn = WidgetChrome.HeaderIcon(PhosphorIcon.PencilSimple, () =>
         {
             _cityEditSection.Visibility = _cityEditSection.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
             if (_cityEditSection.Visibility == Visibility.Visible)
@@ -647,9 +880,9 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
             {
                 _citySuggestionsContainer.Visibility = Visibility.Collapsed;
             }
-        });
+        }, opacity: 0.7);
         editCityBtn.ToolTip = UiText.WeatherChangeCity;
-        var closeBtn = HeaderGlyph("\u00D7", ClosePopup, 16);
+        var closeBtn = WidgetChrome.HeaderClose(ClosePopup, opacity: 0.7);
 
         var header = HeaderRow(cityTitleGroup, editCityBtn, refreshBtn, closeBtn);
 
@@ -684,16 +917,23 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
             Columns = 2,
             Margin = new Thickness(0, 4, 0, 8)
         };
-        metricsGrid.Children.Add(CreateMetricCard("\uE9CA", UiText.WeatherFeelsLike, _cardFeelsLikeVal));
-        metricsGrid.Children.Add(CreateMetricCard("\uE753", UiText.WeatherHumidity, _cardHumidityVal));
-        metricsGrid.Children.Add(CreateMetricCard("\uE758", UiText.WeatherWind, _cardWindVal));
-        metricsGrid.Children.Add(CreateMetricCard("\uE8EC", UiText.WeatherAqi, _cardAqiVal));
+        metricsGrid.Children.Add(CreateMetricCard(PhosphorIcon.Thermometer, UiText.WeatherFeelsLike, _cardFeelsLikeVal));
+        metricsGrid.Children.Add(CreateMetricCard(PhosphorIcon.Drop, UiText.WeatherHumidity, _cardHumidityVal));
+        metricsGrid.Children.Add(CreateMetricCard(PhosphorIcon.Wind, UiText.WeatherWind, _cardWindVal));
+        metricsGrid.Children.Add(CreateMetricCard(PhosphorIcon.Leaf, UiText.WeatherAqi, _cardAqiVal));
 
         // Hourly section header
         var hourlyHeader = new DockPanel { Margin = new Thickness(0, 2, 0, 2) };
         _hourlySubCaption.Text = "24h";
-        DockPanel.SetDock(_hourlySubCaption, Dock.Right);
-        hourlyHeader.Children.Add(_hourlySubCaption);
+        _hourlySubCaption.Margin = new Thickness(6, 0, 0, 0);
+        var hourlyRight = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { _hourlyPrevBtn, _hourlyNextBtn, _hourlySubCaption }
+        };
+        DockPanel.SetDock(hourlyRight, Dock.Right);
+        hourlyHeader.Children.Add(hourlyRight);
         hourlyHeader.Children.Add(_hourlyCaption);
 
         var body = new StackPanel
@@ -727,11 +967,8 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
 
     private Border CreateMetricCard(string glyph, string label, TextBlock valBlock)
     {
-        var icon = new TextBlock
+        var icon = new PhosphorGlyph(glyph, 11)
         {
-            Text = glyph,
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 11,
             Opacity = 0.65,
             Margin = new Thickness(0, 0, 4, 0),
             VerticalAlignment = VerticalAlignment.Center
@@ -774,7 +1011,7 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
         var textBrush = TokenBrushes.From(_isLight ? DockTokens.Light.Text : DockTokens.Dark.Text);
         var textMutedBrush = TokenBrushes.From(_isLight ? 0x99000000u : 0xA6FFFFFFu);
 
-        var snapshot = _provider.Current;
+        var snapshot = _provider.SnapshotFor(_settings);
         if (snapshot == null || snapshot.Error != WeatherError.None)
         {
             var status = snapshot is null
@@ -785,17 +1022,23 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
             var city = string.IsNullOrEmpty(_settings.City)
                 ? (_settings.AutoLocate ? UiText.WeatherCityAuto : UiText.WeatherNeedCity)
                 : _settings.City;
+            var compactStatus = snapshot?.Error switch
+            {
+                WeatherError.NeedCity => UiText.WeatherNoCity,
+                WeatherError.Network => UiText.WeatherUnavailableShort,
+                _ => status
+            };
             _compactGlyph.Text = "\u2600";
             _compactTemp.Text = "--°";
             _compactTemp.Foreground = textBrush;
-            _compactStatus.Text = status;
+            _compactStatus.Text = compactStatus;
             _compactStatus.Foreground = textMutedBrush;
 
             _expandedGlyph.Text = "\u2600";
             _expandedTemp.Text = "--°";
             _expandedTemp.Foreground = textBrush;
             _expandedRange.Text = "";
-            _expandedCityStatus.Text = status;
+            _expandedCityStatus.Text = compactStatus;
             _expandedCityStatus.Foreground = textMutedBrush;
             _expandedAqiBadge.Visibility = Visibility.Collapsed;
 
@@ -964,9 +1207,11 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
 
             var cardBorder = new Border
             {
+                Width = DockTokens.WeatherHourCardWidth,
                 CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(7, 5, 7, 5),
+                Padding = new Thickness(4, 5, 4, 5),
                 Margin = new Thickness(0, 0, 4, 0),
+                Cursor = Cursors.SizeWE,
                 Background = isCurrentHour
                     ? TokenBrushes.From(_isLight ? 0x18000000u : 0x22FFFFFFu)
                     : TokenBrushes.From(_isLight ? 0x06000000u : 0x08FFFFFFu),
@@ -1121,6 +1366,8 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
                 _dailyPanel.Children.Add(row);
             }
         }
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => UpdateHourlyNavButtons());
     }
 
     private static TextBlock Caption(string text) => new()
@@ -1155,35 +1402,22 @@ public sealed class WeatherWidget : UserControl, IWidgetOpenable, IWidgetModeAwa
         return row;
     }
 
-    private static TextBlock HeaderGlyph(string glyph, Action click, double size = 13)
-    {
-        var block = new TextBlock
-        {
-            Text = glyph,
-            FontFamily = glyph == "\u00D7" ? WidgetFonts.Ui : new FontFamily("Segoe MDL2 Assets"),
-            FontSize = size,
-            Opacity = 0.7,
-            Padding = new Thickness(6, 4, 6, 4),
-            Background = Brushes.Transparent,
-            Cursor = Cursors.Hand,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        block.MouseLeftButtonUp += (_, e) =>
-        {
-            click();
-            e.Handled = true;
-        };
-        return block;
-    }
 
     private static Border ActionButton(string label, Action click)
     {
-        var text = new TextBlock { Text = label, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center };
+        var text = new TextBlock
+        {
+            Text = label,
+            FontSize = 12,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
         var border = new Border
         {
+            Height = DockTokens.FlyoutControlHeight,
             Background = TokenBrushes.From(0x22000000u),
-            CornerRadius = new CornerRadius(4),
-            Padding = new Thickness(10, 4, 10, 4),
+            CornerRadius = new CornerRadius(DockTokens.TileCornerRadius),
+            Padding = new Thickness(10, 0, 10, 0),
             Margin = new Thickness(6, 0, 0, 0),
             Cursor = Cursors.Hand,
             Child = text

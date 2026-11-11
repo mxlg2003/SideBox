@@ -7,22 +7,43 @@ public static class WidgetCatalog
 
     public sealed record Category(string Id, string Title, string Glyph, IReadOnlyList<string> WidgetIds);
 
-    public static Category All => new(AllId, UiText.CatalogAll, "\uE8A5", BuiltInWidgets.All);
+    public static Category All => new(
+        AllId,
+        UiText.CatalogAll,
+        PhosphorIcon.SquaresFour,
+        BuiltInWidgets.All.Where(BuiltInWidgets.IsOffered).ToArray());
 
-    public static IReadOnlyList<Category> Groups =>
-    [
-        new("clocks", UiText.CatalogClocks, "\uE823", [BuiltInWidgets.Clock, BuiltInWidgets.Stopwatch, BuiltInWidgets.Countdown, BuiltInWidgets.Alarm, BuiltInWidgets.FocusTimer, BuiltInWidgets.TimeProgress]),
-        new("notes", UiText.CatalogNotes, "\uE70B", [BuiltInWidgets.Notes]),
-        new("media", UiText.CatalogMedia, "\uE8D6", [BuiltInWidgets.NowPlaying]),
-        new("system", UiText.CatalogSystem, "\uE770",
-        [
-            BuiltInWidgets.SysActivity,
-            BuiltInWidgets.Network,
-            BuiltInWidgets.Power
-        ]),
-        new("wallpaper", UiText.CatalogWallpaper, "\uE91B", [BuiltInWidgets.BingWallpaper]),
-        new("lifestyle", UiText.CatalogLifestyle, "\uEC05", [BuiltInWidgets.Weather, BuiltInWidgets.Schedule])
-    ];
+    public static IReadOnlyList<Category> Groups
+    {
+        get
+        {
+            Category[] groups =
+            [
+                new("clocks", UiText.CatalogClocks, PhosphorIcon.Clock, [BuiltInWidgets.Clock, BuiltInWidgets.Stopwatch, BuiltInWidgets.Countdown, BuiltInWidgets.Alarm, BuiltInWidgets.FocusTimer, BuiltInWidgets.TimeProgress]),
+                new("notes", UiText.CatalogNotes, PhosphorIcon.Notepad, [BuiltInWidgets.Notes]),
+                new("media", UiText.CatalogMedia, PhosphorIcon.Headphones, [BuiltInWidgets.NowPlaying]),
+                new("system", UiText.CatalogSystem, PhosphorIcon.Cpu,
+                [
+                    BuiltInWidgets.SysActivity,
+                    BuiltInWidgets.Network,
+                    BuiltInWidgets.Power,
+                    BuiltInWidgets.Disk,
+                    BuiltInWidgets.Gpu,
+                    BuiltInWidgets.Processes
+                ]),
+                new("wallpaper", UiText.CatalogWallpaper, PhosphorIcon.Image, [BuiltInWidgets.Wallpaper, BuiltInWidgets.BingWallpaper]),
+                new("lifestyle", UiText.CatalogLifestyle, PhosphorIcon.Sun, [BuiltInWidgets.Weather, BuiltInWidgets.Schedule, BuiltInWidgets.WhiteNoise]),
+                new("business", UiText.CatalogBusiness, PhosphorIcon.ChartBar, [BuiltInWidgets.Stocks])
+            ];
+            return groups
+                .Select(group => group with
+                {
+                    WidgetIds = group.WidgetIds.Where(BuiltInWidgets.IsOffered).ToArray()
+                })
+                .Where(group => group.WidgetIds.Count > 0)
+                .ToArray();
+        }
+    }
 
     public static IReadOnlyList<Category> Nav => new[] { All }.Concat(Groups).ToArray();
 
@@ -74,6 +95,65 @@ public static class WidgetCatalog
                 || term.Contains("todo", StringComparison.OrdinalIgnoreCase)
                 || term.Contains("calendar", StringComparison.OrdinalIgnoreCase)
                 || term.Contains("countdown", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        if (widgetId == BuiltInWidgets.Disk
+            && (term.Contains("磁盘", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("硬盘", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("disk", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("drive", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("storage", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        if (widgetId == BuiltInWidgets.Gpu
+            && (term.Contains("gpu", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("显卡", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("显存", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("graphics", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("vram", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        if (widgetId == BuiltInWidgets.Stocks
+            && (term.Contains("股票", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("行情", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("自选", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("stock", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("quote", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("商业", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("business", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        if (widgetId == BuiltInWidgets.Processes
+            && (term.Contains("进程", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("process", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("占用", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("task", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        if (widgetId == BuiltInWidgets.WhiteNoise
+            && (term.Contains("白噪音", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("噪音", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("声音", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("专注", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("雨声", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("音效", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("自然", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("whitenoise", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("noise", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("sound", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("ambient", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("rain", StringComparison.OrdinalIgnoreCase)
+                || term.Contains("focus", StringComparison.OrdinalIgnoreCase)))
         {
             return true;
         }

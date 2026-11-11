@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using WinDock.Core;
+using WinDock.Widgets;
 
 namespace WinDock.App;
 
@@ -20,7 +21,7 @@ internal static class TextPrompt
             Owner = owner,
             ResizeMode = ResizeMode.NoResize,
             ShowInTaskbar = false,
-            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable, Segoe UI")
+            FontFamily = UiFont.Family
         };
         SettingsChrome.ApplyWindow(window, isLight);
         var box = new TextBox { Text = initial, MinWidth = 280, Margin = new Thickness(0, DockTokens.Settings.FieldGap, 0, 0) };

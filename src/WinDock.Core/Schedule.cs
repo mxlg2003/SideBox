@@ -55,6 +55,32 @@ public static class ScheduleColors
     };
 }
 
+public static class ScheduleLayouts
+{
+    public const string NextEvent = "nextEvent";
+    public const string DateNext = "dateNext";
+    public const string DateAgenda = "dateAgenda";
+    public const string Date = "date";
+
+    public static readonly IReadOnlyList<string> All = [NextEvent, DateNext, DateAgenda, Date];
+
+    public static string Normalize(string? layout) => layout switch
+    {
+        NextEvent => NextEvent,
+        DateNext => DateNext,
+        Date => Date,
+        _ => DateAgenda
+    };
+
+    public static string Title(string layout) => Normalize(layout) switch
+    {
+        NextEvent => UiText.ScheduleLayoutNext,
+        DateNext => UiText.ScheduleLayoutDateNext,
+        Date => UiText.ScheduleLayoutDate,
+        _ => UiText.ScheduleLayoutAgenda
+    };
+}
+
 public sealed record ScheduleCategory
 {
     public ScheduleColorId ColorId { get; init; } = ScheduleColorId.Orange;
@@ -101,6 +127,8 @@ public sealed record ScheduleSettings
 
     public IReadOnlyList<ScheduleItem> Items { get; init; } = [];
 
+    public string Layout { get; init; } = ScheduleLayouts.DateAgenda;
+
     public static ScheduleSettings Default { get; } = new();
 
     public static ScheduleSettings Normalize(ScheduleSettings? settings)
@@ -141,7 +169,8 @@ public sealed record ScheduleSettings
         return value with
         {
             Categories = cats,
-            Items = list
+            Items = list,
+            Layout = ScheduleLayouts.Normalize(value.Layout)
         };
     }
 
@@ -184,9 +213,22 @@ public sealed record ScheduleSettings
         return ScheduleColors.DefaultTitle(colorId);
     }
 
+    public static string StoredCategoryTitle(ScheduleColorId colorId, string? edited)
+    {
+        var title = (edited ?? "").Trim();
+        if (title.Length == 0 || string.Equals(title, ScheduleColors.DefaultTitle(colorId), StringComparison.Ordinal))
+        {
+            return "";
+        }
+
+        return title;
+    }
+
     public static bool Same(ScheduleSettings left, ScheduleSettings right)
     {
-        if (left.Items.Count != right.Items.Count || left.Categories.Count != right.Categories.Count)
+        if (!string.Equals(ScheduleLayouts.Normalize(left.Layout), ScheduleLayouts.Normalize(right.Layout), StringComparison.Ordinal)
+            || left.Items.Count != right.Items.Count
+            || left.Categories.Count != right.Categories.Count)
         {
             return false;
         }
@@ -305,6 +347,8 @@ public static class ScheduleFormat
 
 public sealed class ScheduleEngine
 {
+    public static readonly TimeSpan DefaultClock = new(9, 0, 0);
+
     public ScheduleSettings Settings { get; private set; }
 
     public ScheduleEngine(ScheduleSettings? settings = null)
@@ -324,8 +368,8 @@ public sealed class ScheduleEngine
 
         return Settings.Items
             .Where(i => i.Kind == ScheduleKind.Event && !i.IsCompleted && i.Date == today)
-            .OrderBy(i => i.IsAllDay ? TimeSpan.FromHours(23.99) : (i.Time ?? TimeSpan.Zero))
-            .FirstOrDefault(i => i.IsAllDay || i.Time == null || i.Time >= currentTime.Subtract(TimeSpan.FromMinutes(30)));
+            .OrderBy(ClockOf)
+            .FirstOrDefault(i => ClockOf(i) >= currentTime.Subtract(TimeSpan.FromMinutes(30)));
     }
 
     public ScheduleItem? GetNearestCountdown(DateOnly today)
@@ -341,16 +385,8 @@ public sealed class ScheduleEngine
         var upcoming = GetNextUpcomingEvent(now);
         if (upcoming != null)
         {
-            string sub;
-            if (upcoming.IsAllDay || upcoming.Time == null)
-            {
-                sub = UiText.ScheduleAllDay;
-            }
-            else
-            {
-                var eventTime = upcoming.Date.ToDateTime(TimeOnly.FromTimeSpan(upcoming.Time.Value));
-                sub = ScheduleFormat.TimeRemaining(eventTime, now);
-            }
+            var eventTime = upcoming.Date.ToDateTime(TimeOnly.FromTimeSpan(ClockOf(upcoming)));
+            var sub = ScheduleFormat.TimeRemaining(eventTime, now);
 
             return (upcoming.Title, sub, false);
         }
@@ -371,7 +407,7 @@ public sealed class ScheduleEngine
         var today = DateOnly.FromDateTime(now);
         return Settings.Items
             .Where(i => i.Kind == ScheduleKind.Event && !i.IsCompleted && i.Date == today)
-            .OrderBy(i => i.IsAllDay ? TimeSpan.FromHours(23.99) : (i.Time ?? TimeSpan.Zero))
+            .OrderBy(ClockOf)
             .Take(limit)
             .ToList();
     }
@@ -397,8 +433,27 @@ public sealed class ScheduleEngine
         return Settings.Items
             .Where(i => i.Kind == ScheduleKind.Event && !i.IsCompleted && i.Date < today)
             .OrderBy(i => i.Date)
-            .ThenBy(i => i.Time ?? TimeSpan.Zero)
+            .ThenBy(ClockOf)
             .ToList();
+    }
+
+    public IReadOnlyList<ScheduleItem> GetUpcomingEvents(DateOnly today)
+    {
+        return Settings.Items
+            .Where(i => i.Kind == ScheduleKind.Event && !i.IsCompleted && i.Date > today)
+            .OrderBy(i => i.Date)
+            .ThenBy(ClockOf)
+            .ToList();
+    }
+
+    public static TimeSpan ClockOf(ScheduleItem item)
+    {
+        if (!item.IsAllDay && item.Time is { } time && time >= TimeSpan.Zero && time < TimeSpan.FromDays(1))
+        {
+            return new TimeSpan(time.Hours, time.Minutes, 0);
+        }
+
+        return DefaultClock;
     }
 
     public ScheduleSettings UpdateCategoryTitle(ScheduleColorId colorId, string newTitle)
@@ -445,5 +500,57 @@ public sealed class ScheduleEngine
         var list = Settings.Items.Where(i => i.Id != id).ToList();
         Settings = ScheduleSettings.Normalize(Settings with { Items = list });
         return Settings;
+    }
+
+    public bool TryUpdate(string id, string title, DateOnly date, TimeSpan? time, bool isAllDay, out ScheduleSettings next)
+    {
+        next = Settings;
+        if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(title))
+        {
+            return false;
+        }
+
+        var found = false;
+        var list = new List<ScheduleItem>(Settings.Items.Count);
+        foreach (var item in Settings.Items)
+        {
+            if (!string.Equals(item.Id, id, StringComparison.Ordinal))
+            {
+                list.Add(item);
+                continue;
+            }
+
+            found = true;
+            if (item.Kind == ScheduleKind.Countdown)
+            {
+                list.Add(item with
+                {
+                    Title = title.Trim(),
+                    Date = date
+                });
+                continue;
+            }
+
+            var timed = !isAllDay
+                && time is { } clock
+                && clock >= TimeSpan.Zero
+                && clock < TimeSpan.FromDays(1);
+            list.Add(item with
+            {
+                Title = title.Trim(),
+                Date = date,
+                Time = timed ? new TimeSpan(time!.Value.Hours, time.Value.Minutes, 0) : null,
+                IsAllDay = !timed
+            });
+        }
+
+        if (!found)
+        {
+            return false;
+        }
+
+        Settings = ScheduleSettings.Normalize(Settings with { Items = list });
+        next = Settings;
+        return true;
     }
 }

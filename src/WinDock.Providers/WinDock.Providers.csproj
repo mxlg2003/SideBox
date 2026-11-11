@@ -8,4 +8,7 @@
     <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.0" />
     <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="WinDock.Core.Tests" />
+  </ItemGroup>
 </Project>

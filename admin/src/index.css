@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --background: 40 33% 98%;
+    --foreground: 210 29% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 210 29% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 29% 14%;
+    --primary: 201 89% 36%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 42 67% 95%;
+    --secondary-foreground: 210 29% 14%;
+    --muted: 40 25% 94%;
+    --muted-foreground: 215 16% 40%;
+    --accent: 33 89% 92%;
+    --accent-foreground: 210 29% 14%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 55% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 33 100% 48%;
+    --warning-foreground: 0 0% 100%;
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+    --border: 32 20% 86%;
+    --input: 32 20% 86%;
+    --ring: 201 89% 36%;
+    --sidebar-background: 212 52% 14%;
+    --sidebar-foreground: 42 39% 95%;
+    --sidebar-primary: 42 100% 67%;
+    --sidebar-primary-foreground: 210 29% 14%;
+    --radius: 1rem;
+    --font-family: "IBM Plex Sans", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --shadow-sm: 0 10px 24px rgba(18, 34, 54, 0.06);
+    --shadow-md: 0 18px 48px rgba(18, 34, 54, 0.1);
+    --sidebar-width: 14rem;
+    --sidebar-collapsed-width: 4.5rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply bg-background;
+  }
+
+  body {
+    @apply min-h-screen bg-background font-sans text-foreground antialiased;
+    margin: 0;
+    background-image:
+      radial-gradient(circle at top left, hsl(var(--secondary)) 0%, transparent 34%),
+      linear-gradient(135deg, rgba(255, 191, 71, 0.08), transparent 38%),
+      linear-gradient(180deg, hsl(var(--background)), hsl(var(--muted)));
+  }
+
+  a {
+    @apply text-inherit no-underline;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+}
+
+@layer utilities {
+  .page-shell {
+    @apply rounded-lg border bg-card/80 shadow-md backdrop-blur;
+  }
+}

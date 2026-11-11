@@ -24,6 +24,22 @@ public static class SettingsEditor
     public static AppSettings WithPrivacy(AppSettings settings, PrivacySettings privacy) =>
         settings with { Privacy = privacy };
 
+    public static AppSettings WithLicense(AppSettings settings, LicenseSettings license) =>
+        settings with { License = license };
+
+    public static AppSettings EnsureLicenseDevice(AppSettings settings)
+    {
+        if (settings.License.DeviceId.Trim().Length >= 8)
+        {
+            return settings;
+        }
+
+        return settings with
+        {
+            License = settings.License with { DeviceId = "sbx-" + Guid.NewGuid().ToString("N") }
+        };
+    }
+
     public static AppSettings GrantPermission(AppSettings settings, string permissionId, string? profileId = null)
     {
         if (string.IsNullOrWhiteSpace(permissionId))
@@ -104,6 +120,68 @@ public static class SettingsEditor
     public static AppSettings ReplaceDockItems(AppSettings settings, string profileId, IReadOnlyList<DockItem> items) =>
         MapProfile(settings, profileId, profile => profile with { Dock = profile.Dock with { Items = items } });
 
+    /// <summary>
+    /// Puts shielded chips back at their saved indexes after a reorder of the visible dock.
+    /// </summary>
+    public static IReadOnlyList<DockItem> RestoreShielded(IReadOnlyList<DockItem> stored, IReadOnlyList<DockItem> visible)
+    {
+        var held = new List<(int Index, DockItem Item)>();
+        for (var i = 0; i < stored.Count; i++)
+        {
+            var item = stored[i];
+            if (item.Type == DockItemType.WidgetChip && BuiltInWidgets.IsShielded(item.WidgetId))
+            {
+                held.Add((i, item));
+            }
+        }
+
+        if (held.Count == 0)
+        {
+            return visible;
+        }
+
+        var present = visible.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        var result = visible.ToList();
+        foreach (var (index, item) in held)
+        {
+            if (present.Contains(item.Id))
+            {
+                continue;
+            }
+
+            result.Insert(Math.Min(index, result.Count), item);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Maps an insert index on the visible dock onto the saved list, which may still hold shielded chips.
+    /// </summary>
+    public static int MapInsertIndex(IReadOnlyList<DockItem> stored, IReadOnlyList<DockItem> visible, int visibleIndex)
+    {
+        if (visibleIndex <= 0)
+        {
+            return 0;
+        }
+
+        if (visibleIndex >= visible.Count)
+        {
+            return stored.Count;
+        }
+
+        var anchorId = visible[visibleIndex].Id;
+        for (var i = 0; i < stored.Count; i++)
+        {
+            if (string.Equals(stored[i].Id, anchorId, StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return stored.Count;
+    }
+
     public static AppSettings WithRevealDockHotkey(AppSettings settings, string? chord) =>
         settings with { Hotkeys = settings.Hotkeys with { RevealDock = chord } };
 
@@ -118,19 +196,10 @@ public static class SettingsEditor
         ProfileSwitchResult result = ProfileSwitchResult.Succeeded,
         string? error = null)
     {
-        var record = new ProfileSwitchRecord
-        {
-            Timestamp = DateTimeOffset.Now,
-            FromProfileId = fromProfileId,
-            ToProfileId = toProfileId,
-            Reason = reason,
-            Result = result,
-            ErrorMessage = error
-        };
         return settings with
         {
             LastProfileId = fromProfileId ?? settings.LastProfileId,
-            SwitchHistory = ProfileSwitchLog.Append(settings.SwitchHistory, record)
+            SwitchHistory = []
         };
     }
 
@@ -368,6 +437,11 @@ public static class SettingsEditor
             throw new InvalidOperationException($"Unknown widget '{widgetId}'.");
         }
 
+        if (BuiltInWidgets.IsShielded(widgetId) || (visible && !BuiltInWidgets.CanAdd(widgetId)))
+        {
+            return settings;
+        }
+
         return MapProfile(settings, profileId, profile =>
         {
             var widgets = profile.Widgets.ToList();
@@ -600,6 +674,66 @@ public static class SettingsEditor
         });
     }
 
+    public static AppSettings WithDiskWidget(AppSettings settings, string profileId, string itemId, DiskWidgetSettings? disk)
+    {
+        var next = DiskWidgetSettings.Normalize(disk);
+        return MapProfile(settings, profileId, profile =>
+        {
+            var items = profile.Dock.Items
+                .Select(item => item.Id == itemId ? item with { Disk = next } : item)
+                .ToArray();
+            return profile with { Dock = profile.Dock with { Items = items } };
+        });
+    }
+
+    public static AppSettings WithGpuWidget(AppSettings settings, string profileId, string itemId, GpuWidgetSettings? gpu)
+    {
+        var next = GpuWidgetSettings.Normalize(gpu);
+        return MapProfile(settings, profileId, profile =>
+        {
+            var items = profile.Dock.Items
+                .Select(item => item.Id == itemId ? item with { Gpu = next } : item)
+                .ToArray();
+            return profile with { Dock = profile.Dock with { Items = items } };
+        });
+    }
+
+    public static AppSettings WithProcessWidget(AppSettings settings, string profileId, string itemId, ProcessWidgetSettings? processes)
+    {
+        var next = ProcessWidgetSettings.Normalize(processes);
+        return MapProfile(settings, profileId, profile =>
+        {
+            var items = profile.Dock.Items
+                .Select(item => item.Id == itemId ? item with { Processes = next } : item)
+                .ToArray();
+            return profile with { Dock = profile.Dock with { Items = items } };
+        });
+    }
+
+    public static AppSettings WithStockWidget(AppSettings settings, string profileId, string itemId, StockWidgetSettings? stocks)
+    {
+        var next = StockWidgetSettings.Normalize(stocks);
+        return MapProfile(settings, profileId, profile =>
+        {
+            var items = profile.Dock.Items
+                .Select(item => item.Id == itemId ? item with { Stocks = next } : item)
+                .ToArray();
+            return profile with { Dock = profile.Dock with { Items = items } };
+        });
+    }
+
+    public static AppSettings WithWhiteNoise(AppSettings settings, string profileId, string itemId, WhiteNoiseSettings? whiteNoise)
+    {
+        var next = WhiteNoiseSettings.Normalize(whiteNoise);
+        return MapProfile(settings, profileId, profile =>
+        {
+            var items = profile.Dock.Items
+                .Select(item => item.Id == itemId ? item with { WhiteNoise = next } : item)
+                .ToArray();
+            return profile with { Dock = profile.Dock with { Items = items } };
+        });
+    }
+
     public static AppSettings WithWidgetPaperColor(AppSettings settings, string profileId, string itemId, string? paperColor)
     {
         var paper = NotePapers.Normalize(paperColor);
@@ -636,6 +770,43 @@ public static class SettingsEditor
         });
     }
 
+    public static AppSettings WithBingWallpaper(AppSettings settings, string profileId, string itemId, BingWallpaperSettings? bing)
+    {
+        var next = BingWallpaperSettings.Normalize(bing);
+        return MapProfile(settings, profileId, profile =>
+        {
+            var items = profile.Dock.Items
+                .Select(item => item.Id == itemId ? item with { BingWallpaper = next } : item)
+                .ToArray();
+            return profile with { Dock = profile.Dock with { Items = items } };
+        });
+    }
+
+    public static AppSettings WithWallpaper(AppSettings settings, string profileId, string itemId, WallpaperSettings? wallpaper)
+    {
+        var next = WallpaperSettings.Normalize(wallpaper);
+        return MapProfile(settings, profileId, profile =>
+        {
+            var items = profile.Dock.Items
+                .Select(item => item.Id == itemId ? item with { Wallpaper = next } : item)
+                .ToArray();
+            return profile with { Dock = profile.Dock with { Items = items } };
+        });
+    }
+
+    public static AppSettings WithBingWallpaperAutoApply(AppSettings settings, bool autoApply)
+    {
+        return MapProfile(settings, settings.ActiveProfileId, profile =>
+        {
+            var items = profile.Dock.Items
+                .Select(item => item.WidgetId == BuiltInWidgets.BingWallpaper
+                    ? item with { BingWallpaper = (item.BingWallpaper ?? BingWallpaperSettings.Default) with { AutoApplyDaily = autoApply } }
+                    : item)
+                .ToArray();
+            return profile with { Dock = profile.Dock with { Items = items } };
+        });
+    }
+
     public static AppSettings MoveDockItem(AppSettings settings, string profileId, int from, int to)
     {
         return MapProfile(settings, profileId, profile =>
@@ -655,6 +826,11 @@ public static class SettingsEditor
 
     public static bool IsWidgetVisible(Profile profile, string widgetId) =>
         profile.Widgets.Any(w => w.Id == widgetId && w.Visible);
+
+    public static bool HasWidgetChip(IEnumerable<DockItem> items, string widgetId) =>
+        items.Any(item =>
+            item.Type == DockItemType.WidgetChip
+            && string.Equals(item.WidgetId, widgetId, StringComparison.Ordinal));
 
     public static bool IsNotesChip(DockItem item) =>
         item.Type == DockItemType.WidgetChip
@@ -732,6 +908,11 @@ public static class SettingsEditor
 
     private static IReadOnlyList<DockItem> AppendChip(IReadOnlyList<DockItem> items, string widgetId)
     {
+        if (BuiltInWidgets.IsSingleton(widgetId) && HasWidgetChip(items, widgetId))
+        {
+            return items;
+        }
+
         var list = items.ToList();
         list.Add(new DockItem
         {
@@ -778,7 +959,12 @@ public static class PerfHistory
         double? cpu,
         double? memory,
         ulong memoryUsedBytes = 0,
-        ulong memoryTotalBytes = 0)
+        ulong memoryTotalBytes = 0,
+        double? frequencyMhz = null,
+        IReadOnlyList<double>? cores = null,
+        ulong commitUsedBytes = 0,
+        ulong commitLimitBytes = 0,
+        bool commitAvailable = false)
     {
         return new PerfSnapshot
         {
@@ -790,7 +976,13 @@ public static class PerfHistory
             CpuHistory = cpu is null ? previous.CpuHistory : Push(previous.CpuHistory, cpu.Value),
             MemoryHistory = memory is null ? previous.MemoryHistory : Push(previous.MemoryHistory, memory.Value),
             MemoryUsedBytes = memory is null ? previous.MemoryUsedBytes : memoryUsedBytes,
-            MemoryTotalBytes = memory is null ? previous.MemoryTotalBytes : memoryTotalBytes
+            MemoryTotalBytes = memory is null ? previous.MemoryTotalBytes : memoryTotalBytes,
+            FrequencyMhz = frequencyMhz ?? 0,
+            FrequencyAvailable = frequencyMhz is not null,
+            CorePercents = cores ?? [],
+            CommitUsedBytes = commitAvailable ? commitUsedBytes : 0,
+            CommitLimitBytes = commitAvailable ? commitLimitBytes : 0,
+            CommitAvailable = commitAvailable
         };
     }
 

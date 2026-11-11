@@ -1,10 +1,15 @@
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using WinDock.Core;
 using WinDock.Core.Permissions;
 using WinDock.Infrastructure;
+using WinDock.Widgets;
 
 namespace WinDock.App;
 
@@ -16,20 +21,42 @@ public partial class SettingsWindow : Window
     private bool _allowClose;
     private bool _listening;
     private bool _pickerDirty = true;
-    private string _page = "modules";
+    private string _page = "general";
     private bool _capturingRevealHotkey;
     private string _revealHotkeyBeforeCapture = "";
+    private bool _capturingProfileHotkey;
+    private string _profileHotkeyBeforeCapture = "";
+
+    private static SettingsWindow? s_activeWindow;
 
     public SettingsWindow(DockSession session)
     {
+        if (s_activeWindow is not null && !ReferenceEquals(s_activeWindow, this))
+        {
+            try
+            {
+                s_activeWindow.AllowClose();
+                s_activeWindow.Close();
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        s_activeWindow = this;
+        Closed += (_, _) =>
+        {
+            if (ReferenceEquals(s_activeWindow, this))
+            {
+                s_activeWindow = null;
+            }
+        };
+
         _session = session;
         _onChanged = (_, _) => Dispatcher.BeginInvoke(OnSessionChanged, DispatcherPriority.Background);
         InitializeComponent();
-        NavColumn.Width = new GridLength(DockTokens.Settings.NavWidth);
+        NavColumn.Width = new GridLength(220);
         NavPane.Padding = new Thickness(DockTokens.Settings.NavPad);
-        var advanced = ProductFeatures.ProfilesEnabled ? Visibility.Visible : Visibility.Collapsed;
-        AdvancedGroup.Visibility = advanced;
-        NavProfiles.Visibility = advanced;
         WidgetPicker.Attach(_session);
         IsVisibleChanged += OnIsVisibleChanged;
         Closing += (_, e) =>
@@ -43,8 +70,8 @@ public partial class SettingsWindow : Window
             Hide();
             _session.NotifyBackgroundRunning();
         };
-        NavModules.IsChecked = true;
-        ShowPage("modules");
+        NavGeneral.IsChecked = true;
+        ShowPage("general");
         ApplyCopy();
         Reload();
     }
@@ -110,11 +137,17 @@ public partial class SettingsWindow : Window
         TransparencySlider.Value = settings.Ui.IslandTransparency;
         TransparencyLabel.Text = $"{settings.Ui.IslandTransparency}%";
         SelectTag(EdgeBox, diff.Dock.Edge.ToString());
+        UpdateEdgeCards(diff.Dock.Edge);
         ReloadMonitors(diff.Dock.Monitor);
+        NavModulesBadge.Text = $"{BuiltInWidgets.All.Count}";
+        MediaPrivacyRow.Visibility = ProductFeatures.NowPlayingEnabled ? Visibility.Visible : Visibility.Collapsed;
+        ProcessPrivacyRow.Visibility = ProductFeatures.ProcessesEnabled ? Visibility.Visible : Visibility.Collapsed;
         MediaCheck.IsChecked = settings.Privacy.MediaRead;
         NetworkCheck.IsChecked = settings.Privacy.NetworkDetails;
+        ProcessCheck.IsChecked = settings.Privacy.ProcessNames;
         LocationCheck.IsChecked = settings.Privacy.PreciseLocation;
         BingCheck.IsChecked = settings.Privacy.BingDownload;
+        BingAutoDailyCheck.IsChecked = _session.Hub.Bing.AutoApplyDaily;
         AutoHideCheck.IsChecked = diff.Dock.AutoHide;
         PeekCheck.IsChecked = diff.Dock.PeekOnPointer;
         RevealHotkeyCheck.IsChecked = diff.Dock.RevealHotkey;
@@ -128,35 +161,34 @@ public partial class SettingsWindow : Window
             RevealHotkeyHint.Text = _session.RevealHotkeyBindError ?? "";
         }
 
+        if (!_capturingProfileHotkey)
+        {
+            NextProfileBox.Text = string.IsNullOrWhiteSpace(settings.Hotkeys.NextProfile)
+                ? "Win+Shift+D"
+                : settings.Hotkeys.NextProfile;
+            PrevProfileBox.Text = settings.Hotkeys.PreviousProfile ?? "";
+            UndoProfileBox.Text = string.IsNullOrWhiteSpace(settings.Hotkeys.UndoProfile)
+                ? "Win+Shift+Z"
+                : settings.Hotkeys.UndoProfile;
+        }
+
         SyncAutoHideDependents();
+        NavProfiles.Visibility = ProductFeatures.ProfilesEnabled ? Visibility.Visible : Visibility.Collapsed;
+        ProfileHotkeysGroup.Visibility = ProductFeatures.ProfilesEnabled ? Visibility.Visible : Visibility.Collapsed;
+        ProfileHotkeysHint.Visibility = ProductFeatures.ProfilesEnabled ? Visibility.Visible : Visibility.Collapsed;
         if (ProductFeatures.ProfilesEnabled)
         {
-            HotkeyText.Text = UiText.ProfileHotkeys(settings.Hotkeys.NextProfile ?? UiText.None, settings.Hotkeys.UndoProfile ?? UiText.None);
-            FocusHint.Text = UiText.FocusProfileHint;
             DeleteProfileButton.IsEnabled = diff.ProfileId != DefaultProfiles.GeneralId;
             DeleteProfileButton.ToolTip = diff.ProfileId == DefaultProfiles.GeneralId
                 ? UiText.CannotDeleteGeneral
                 : UiText.DeleteCurrentProfile;
-            HistoryList.Items.Clear();
-            foreach (var record in settings.SwitchHistory.Reverse().Take(ProfileSwitchLog.MaxRecords))
-            {
-                var line = ProfileSwitchLog.Summarize(record, settings.Profiles);
-                HistoryList.Items.Add(new TextBlock
-                {
-                    Text = line,
-                    TextWrapping = TextWrapping.NoWrap,
-                    TextTrimming = TextTrimming.CharacterEllipsis,
-                    ToolTip = line,
-                    HorizontalAlignment = HorizontalAlignment.Stretch
-                });
-            }
 
             ReloadProfileBox(settings.Profiles, diff.ProfileId);
-            UndoButton.IsEnabled = SettingsEditor.UndoTarget(settings, diff.ProfileId) is not null;
+            ReloadProfileModules(settings.Profiles, diff.ProfileId);
         }
 
         StartupCheck.IsChecked = RunAtStartup.IsEnabled();
-        AboutVersion.Text = $"WinDock {typeof(App).Assembly.GetName().Version?.ToString(3) ?? "1.0"}";
+        AboutVersion.Text = $"{ProductInfo.Name} {typeof(App).Assembly.GetName().Version?.ToString(3) ?? "1.0"}";
         AboutPaths.Text = UiText.AboutConfig(AppPaths.SettingsFile, AppPaths.LogsDirectory);
         var active = settings.Profiles.FirstOrDefault(profile => profile.Id == diff.ProfileId);
         MediaHint.Text = MediaGrantHint(settings, active is null ? diff.ProfileName : DefaultProfiles.DisplayName(active));
@@ -213,6 +245,254 @@ public partial class SettingsWindow : Window
         }
 
         ApplyOverflow(ProfileBox, profiles.FirstOrDefault(profile => profile.Id == activeId)?.Name);
+    }
+
+    private void ReloadProfileModules(IReadOnlyList<Profile> profiles, string activeId)
+    {
+        ProfileModulesHost.Children.Clear();
+        var light = _session.IsLightTheme();
+        var text = SettingsChrome.Brush(DockTokens.Settings.Text(light));
+        var muted = SettingsChrome.Brush(DockTokens.Settings.Muted(light));
+        var card = SettingsChrome.Brush(DockTokens.Settings.Card(light));
+        var stroke = SettingsChrome.Brush(DockTokens.Settings.Stroke(light));
+        var chipFill = SettingsChrome.Brush(DockTokens.Settings.Preview(light));
+        var accent = SettingsChrome.Brush(DockTokens.Settings.Accent);
+
+        var wrap = new WrapPanel { Margin = new Thickness(0, 0, -14, 0) };
+
+        foreach (var profile in profiles)
+        {
+            var name = DefaultProfiles.DisplayName(profile);
+            var current = profile.Id == activeId;
+            var modules = ProfileModules.OnDock(profile);
+
+            var iconName = profile.Id == DefaultProfiles.GeneralId
+                ? PhosphorIcon.Desktop
+                : (profile.Id == DefaultProfiles.DeepWorkId ? PhosphorIcon.Laptop : PhosphorIcon.Stack);
+            var iconBg = profile.Id == DefaultProfiles.GeneralId
+                ? SettingsChrome.Brush(0x268B5CF6)
+                : (profile.Id == DefaultProfiles.DeepWorkId ? SettingsChrome.Brush(0x2610B981) : SettingsChrome.Brush(0x26F59E0B));
+            var iconFg = profile.Id == DefaultProfiles.GeneralId
+                ? SettingsChrome.Brush(0xFFA78BFA)
+                : (profile.Id == DefaultProfiles.DeepWorkId ? SettingsChrome.Brush(0xFF34D399) : SettingsChrome.Brush(0xFFFBBF24));
+
+            var iconBox = new Border
+            {
+                Width = 32,
+                Height = 32,
+                CornerRadius = new CornerRadius(8),
+                Background = iconBg,
+                Margin = new Thickness(0, 0, 10, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = new PhosphorGlyph(iconName, 16)
+                {
+                    Foreground = iconFg,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
+            };
+
+            var titleBlock = new TextBlock
+            {
+                Text = name,
+                FontSize = 14,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = text,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+
+            var subtitleText = profile.Id == DefaultProfiles.GeneralId
+                ? "系统默认情景 · 常驻主屏"
+                : (profile.Id == DefaultProfiles.DeepWorkId ? "极简界面 · 屏蔽干扰" : "会议与演示定制布局");
+            var subBlock = new TextBlock
+            {
+                Text = subtitleText,
+                FontSize = 11,
+                Foreground = muted,
+                Margin = new Thickness(0, 2, 0, 0)
+            };
+
+            var titleStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            titleStack.Children.Add(titleBlock);
+            titleStack.Children.Add(subBlock);
+
+            var header = new DockPanel();
+            if (current)
+            {
+                var badge = new Border
+                {
+                    Background = accent,
+                    CornerRadius = new CornerRadius(10),
+                    Padding = new Thickness(8, 2, 8, 2),
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Child = new TextBlock
+                    {
+                        Text = "当前生效中",
+                        FontSize = 10,
+                        FontWeight = FontWeights.SemiBold,
+                        Foreground = Brushes.White
+                    }
+                };
+                DockPanel.SetDock(badge, Dock.Right);
+                header.Children.Add(badge);
+            }
+
+            var leftHeader = new StackPanel { Orientation = Orientation.Horizontal };
+            leftHeader.Children.Add(iconBox);
+            leftHeader.Children.Add(titleStack);
+            header.Children.Add(leftHeader);
+
+            var hintText = profile.Id == DefaultProfiles.GeneralId
+                ? "触发感知：默认常驻，或外接双屏时自动激活"
+                : (profile.Id == DefaultProfiles.DeepWorkId ? "触发感知：全屏工作或开启专注模式时切入" : "触发感知：投影或断开副屏时推荐使用");
+            var triggerHint = new TextBlock
+            {
+                Text = hintText,
+                FontSize = 11,
+                Foreground = muted,
+                Margin = new Thickness(0, 10, 0, 8),
+                TextWrapping = TextWrapping.Wrap
+            };
+
+            var chipsWrap = new WrapPanel { Margin = new Thickness(0, 0, 0, 10) };
+            if (modules.Count == 0)
+            {
+                chipsWrap.Children.Add(new TextBlock { Text = UiText.ProfileNoModules, FontSize = 11, Foreground = muted });
+            }
+            else
+            {
+                foreach (var module in modules.Take(6))
+                {
+                    chipsWrap.Children.Add(ModuleChip(module, text, chipFill));
+                }
+            }
+
+            var actions = new DockPanel();
+            var profileId = profile.Id;
+
+            if (current)
+            {
+                var activeBtn = new Button
+                {
+                    Content = "使用中",
+                    IsEnabled = false,
+                    Height = 26,
+                    FontSize = 11,
+                    Margin = new Thickness(0, 0, 8, 0)
+                };
+                if (TryFindResource("Settings.Button") is Style btnStyle) activeBtn.Style = btnStyle;
+                actions.Children.Add(activeBtn);
+            }
+            else
+            {
+                var switchBtn = new Button
+                {
+                    Content = "切换到该情景",
+                    Height = 26,
+                    FontSize = 11,
+                    Margin = new Thickness(0, 0, 8, 0),
+                    Cursor = Cursors.Hand
+                };
+                if (TryFindResource("Settings.PrimaryButton") is Style pStyle) switchBtn.Style = pStyle;
+                switchBtn.Click += (_, _) => _session.SwitchProfile(profileId);
+                actions.Children.Add(switchBtn);
+            }
+
+            var renameBtn = new Button
+            {
+                Content = UiText.Rename,
+                Height = 26,
+                FontSize = 11,
+                Margin = new Thickness(0, 0, 6, 0),
+                Cursor = Cursors.Hand
+            };
+            if (TryFindResource("Settings.Button") is Style rStyle) renameBtn.Style = rStyle;
+            DockPanel.SetDock(renameBtn, Dock.Right);
+            renameBtn.Click += (_, _) =>
+            {
+                if (TextPrompt.TryAsk(this, UiText.RenameProfileTitle, UiText.DisplayNameLabel, name, out var newName, _session.IsLightTheme()))
+                {
+                    _session.RenameProfile(profileId, newName);
+                }
+            };
+            actions.Children.Add(renameBtn);
+
+            if (!current && profileId != DefaultProfiles.GeneralId)
+            {
+                var delBtn = new Button
+                {
+                    Content = UiText.Delete,
+                    Height = 26,
+                    FontSize = 11,
+                    Cursor = Cursors.Hand
+                };
+                if (TryFindResource("Settings.DestructiveButton") is Style dStyle) delBtn.Style = dStyle;
+                DockPanel.SetDock(delBtn, Dock.Right);
+                delBtn.Click += (_, _) =>
+                {
+                    var result = MessageBox.Show(this, UiText.DeleteProfileConfirm(name), UiText.DeleteProfileTitle, MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        _session.RemoveProfile(profileId);
+                    }
+                };
+                actions.Children.Add(delBtn);
+            }
+
+            var cardBody = new StackPanel();
+            cardBody.Children.Add(header);
+            cardBody.Children.Add(triggerHint);
+            cardBody.Children.Add(chipsWrap);
+            cardBody.Children.Add(actions);
+
+            var border = new Border
+            {
+                Width = 360,
+                Background = card,
+                BorderBrush = current ? accent : stroke,
+                BorderThickness = new Thickness(current ? 2 : 1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(16),
+                Margin = new Thickness(0, 0, 14, 14),
+                Child = cardBody
+            };
+
+            wrap.Children.Add(border);
+        }
+
+        ProfileModulesHost.Children.Add(wrap);
+    }
+
+    private static Border ModuleChip(ProfileModuleChip module, Brush text, Brush fill)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(new PhosphorGlyph(module.Glyph, DockTokens.GlyphSize)
+        {
+            Width = DockTokens.GlyphSize,
+            Height = DockTokens.GlyphSize,
+            Margin = new Thickness(0, 0, DockTokens.Settings.FieldGap, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = text
+        });
+        row.Children.Add(new TextBlock
+        {
+            Text = module.Label,
+            FontSize = 13,
+            Foreground = text,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextWrapping = TextWrapping.NoWrap,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxWidth = DockTokens.FlyoutUserCopyMaxWidth
+        });
+        return new Border
+        {
+            Background = fill,
+            CornerRadius = new CornerRadius(DockTokens.TileCornerRadius),
+            Padding = new Thickness(DockTokens.Settings.FieldGap, DockTokens.TilePaddingY, DockTokens.Settings.FieldGap, DockTokens.TilePaddingY),
+            Margin = new Thickness(0, DockTokens.Settings.FieldGap, DockTokens.Settings.FieldGap, 0),
+            Child = row,
+            ToolTip = module.Label
+        };
     }
 
     private static string ComboName(ComboBoxItem item) =>
@@ -277,14 +557,15 @@ public partial class SettingsWindow : Window
         IslandPreview.Background = SettingsChrome.Brush(
             DockTokens.ResolveIslandFill(light, true, backdrop, transparency));
         IslandPreview.BorderBrush = SettingsChrome.Brush(light ? DockTokens.Light.Stroke : DockTokens.Dark.Stroke);
-        IslandPreviewTile.Background = SettingsChrome.Brush(DockTokens.ResolveTileFill(light, backdrop));
-        IslandPreviewLabel.Foreground = SettingsChrome.Brush(light ? DockTokens.Light.Text : DockTokens.Dark.Text);
-        IslandPreviewLabel.Text = backdrop switch
+        IslandPreviewTile.Background = SettingsChrome.Brush(DockTokens.Settings.Accent);
+        IslandPreviewLabel.Foreground = System.Windows.Media.Brushes.White;
+        var materialName = backdrop switch
         {
-            DockBackdrop.Frosted => UiText.BackdropFrostedShort,
-            DockBackdrop.Glass => UiText.BackdropGlassShort,
-            _ => UiText.BackdropMicaShort
+            DockBackdrop.Frosted => "磨砂",
+            DockBackdrop.Glass => "通透玻璃",
+            _ => "云母"
         };
+        IslandPreviewLabel.Text = $"{materialName} · {transparency}%";
     }
 
     private void ReloadMonitors(string current)
@@ -322,13 +603,20 @@ public partial class SettingsWindow : Window
 
     private void ShowPage(string id)
     {
+        if (!ProductFeatures.ProfilesEnabled && id == "profiles")
+        {
+            id = "modules";
+        }
+
         _page = id;
-        PageModules.Visibility = VisibleIf(id == "modules");
+        PageGeneral.Visibility = VisibleIf(id == "general");
         PageLayout.Visibility = VisibleIf(id == "layout");
         PageAppearance.Visibility = VisibleIf(id == "appearance");
+        PageModules.Visibility = VisibleIf(id == "modules");
+        PageProfiles.Visibility = VisibleIf(id == "profiles");
+        PageHotkeys.Visibility = VisibleIf(id == "hotkeys");
         PagePrivacy.Visibility = VisibleIf(id == "privacy");
         PageAbout.Visibility = VisibleIf(id == "about");
-        PageProfiles.Visibility = VisibleIf(id == "profiles" && ProductFeatures.ProfilesEnabled);
 
         var modules = IsModulesPage();
         WidgetPicker.SetCatalogActive(IsVisible && modules);
@@ -433,9 +721,20 @@ public partial class SettingsWindow : Window
         {
             MediaRead = MediaCheck.IsChecked == true,
             NetworkDetails = NetworkCheck.IsChecked == true,
+            ProcessNames = ProcessCheck.IsChecked == true,
             PreciseLocation = LocationCheck.IsChecked == true,
             BingDownload = BingCheck.IsChecked == true
         });
+    }
+
+    private void BingAutoDaily_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_suppress)
+        {
+            return;
+        }
+
+        _session.SetBingWallpaperAutoApply(BingAutoDailyCheck.IsChecked == true);
     }
 
     private void AutoHide_OnClick(object sender, RoutedEventArgs e)
@@ -637,8 +936,6 @@ public partial class SettingsWindow : Window
         RunAtStartup.SetEnabled(StartupCheck.IsChecked == true);
     }
 
-    private void Undo_OnClick(object sender, RoutedEventArgs e) => _session.UndoProfile();
-
     private void DuplicateProfile_OnClick(object sender, RoutedEventArgs e) =>
         _session.DuplicateCurrentProfile();
 
@@ -677,36 +974,294 @@ public partial class SettingsWindow : Window
         _session.RemoveProfile(id);
     }
 
+    private void ExportSettings_OnClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "JSON (*.json)|*.json|All files (*.*)|*.*",
+                FileName = $"sidebox-settings-{DateTime.Now:yyyyMMdd}.json",
+                Title = UiText.ExportSettings
+            };
+            if (dialog.ShowDialog(this) == true)
+            {
+                File.WriteAllText(dialog.FileName, _session.ExportSettingsJson());
+                MessageBox.Show(this, UiText.ExportSuccess, ProductInfo.Name, MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, ProductInfo.Name, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void ImportSettings_OnClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "JSON (*.json)|*.json|All files (*.*)|*.*",
+                Title = UiText.ImportSettings
+            };
+            if (dialog.ShowDialog(this) == true)
+            {
+                var json = File.ReadAllText(dialog.FileName);
+                if (_session.ImportSettingsJson(json, out var err))
+                {
+                    MessageBox.Show(this, UiText.ImportSuccess, ProductInfo.Name, MessageBoxButton.OK, MessageBoxImage.Information);
+                    Reload();
+                }
+                else
+                {
+                    MessageBox.Show(this, $"{UiText.ImportFailed}\n{err}", ProductInfo.Name, MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, ProductInfo.Name, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void ResetSettings_OnClick(object sender, RoutedEventArgs e)
+    {
+        var confirm = MessageBox.Show(this, UiText.ResetFactoryConfirm, ProductInfo.Name, MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (confirm == MessageBoxResult.Yes)
+        {
+            _session.ResetSettings();
+            Reload();
+        }
+    }
+
+    private void EdgeTopCard_OnClick(object sender, MouseButtonEventArgs e) => _session.SetDockEdge(DockEdge.Top);
+    private void EdgeLeftCard_OnClick(object sender, MouseButtonEventArgs e) => _session.SetDockEdge(DockEdge.Left);
+    private void EdgeRightCard_OnClick(object sender, MouseButtonEventArgs e) => _session.SetDockEdge(DockEdge.Right);
+
+    private void UpdateEdgeCards(DockEdge edge)
+    {
+        var light = _session.IsLightTheme();
+        var accentBrush = SettingsChrome.Brush(DockTokens.Settings.Accent);
+        var strokeBrush = SettingsChrome.Brush(DockTokens.Settings.Stroke(light));
+        var cardBrush = SettingsChrome.Brush(DockTokens.Settings.Card(light));
+        var activeBrush = SettingsChrome.Brush(DockTokens.Settings.NavSelected(light));
+
+        if (EdgeTopCard is not null)
+        {
+            EdgeTopCard.BorderBrush = edge == DockEdge.Top ? accentBrush : strokeBrush;
+            EdgeTopCard.BorderThickness = new Thickness(edge == DockEdge.Top ? 2 : 1);
+            EdgeTopCard.Background = edge == DockEdge.Top ? activeBrush : cardBrush;
+        }
+
+        if (EdgeLeftCard is not null)
+        {
+            EdgeLeftCard.BorderBrush = edge == DockEdge.Left ? accentBrush : strokeBrush;
+            EdgeLeftCard.BorderThickness = new Thickness(edge == DockEdge.Left ? 2 : 1);
+            EdgeLeftCard.Background = edge == DockEdge.Left ? activeBrush : cardBrush;
+        }
+
+        if (EdgeRightCard is not null)
+        {
+            EdgeRightCard.BorderBrush = edge == DockEdge.Right ? accentBrush : strokeBrush;
+            EdgeRightCard.BorderThickness = new Thickness(edge == DockEdge.Right ? 2 : 1);
+            EdgeRightCard.Background = edge == DockEdge.Right ? activeBrush : cardBrush;
+        }
+    }
+
+    private void RecordReveal_OnClick(object sender, RoutedEventArgs e)
+    {
+        RevealHotkeyBox.Focus();
+    }
+
+    private void RecordProfileHotkey_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string tag })
+        {
+            var target = tag switch
+            {
+                "next" => NextProfileBox,
+                "prev" => PrevProfileBox,
+                "undo" => UndoProfileBox,
+                _ => null
+            };
+            target?.Focus();
+        }
+    }
+
+    private void OpenConfigFolder_OnClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dir = AppPaths.RoamingDirectory;
+            if (Directory.Exists(dir))
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", $"\"{dir}\"") { UseShellExecute = true });
+            }
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private void OpenLogsFolder_OnClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dir = AppPaths.LogsDirectory;
+            if (Directory.Exists(dir))
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", $"\"{dir}\"") { UseShellExecute = true });
+            }
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private void OpenGitHub_OnClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("https://github.com") { UseShellExecute = true });
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private void OpenWebsite_OnClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("https://sidebox.microsoftware.app") { UseShellExecute = true });
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private void ProfileHotkeyBox_OnGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (_suppress || sender is not TextBox box) return;
+        _capturingProfileHotkey = true;
+        _profileHotkeyBeforeCapture = box.Text;
+        box.Text = UiText.PressShortcut;
+        ProfileHotkeysHint.Text = "";
+    }
+
+    private void ProfileHotkeyBox_OnLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (!_capturingProfileHotkey || sender is not TextBox box) return;
+        _capturingProfileHotkey = false;
+        var tag = box.Tag as string;
+        box.Text = tag switch
+        {
+            "next" => _session.Settings.Hotkeys.NextProfile ?? "Win+Shift+D",
+            "prev" => _session.Settings.Hotkeys.PreviousProfile ?? "",
+            "undo" => _session.Settings.Hotkeys.UndoProfile ?? "Win+Shift+Z",
+            _ => ""
+        };
+    }
+
+    private void ProfileHotkeyBox_OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!_capturingProfileHotkey || sender is not TextBox box) return;
+        e.Handled = true;
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.Escape)
+        {
+            _capturingProfileHotkey = false;
+            box.Text = _profileHotkeyBeforeCapture;
+            Keyboard.ClearFocus();
+            return;
+        }
+
+        var tag = box.Tag as string;
+        if (key is Key.Back or Key.Delete)
+        {
+            _capturingProfileHotkey = false;
+            box.Text = "";
+            UpdateProfileHotkeys(tag, null);
+            Keyboard.ClearFocus();
+            return;
+        }
+
+        if (!TryChordFromKeyEvent(e, out var chord)) return;
+
+        if (!UpdateProfileHotkeys(tag, chord))
+        {
+            ProfileHotkeysHint.Text = UiText.HotkeyTaken;
+            box.Text = UiText.PressShortcut;
+            return;
+        }
+
+        _capturingProfileHotkey = false;
+        ProfileHotkeysHint.Text = "";
+        box.Text = chord;
+        Keyboard.ClearFocus();
+    }
+
+    private bool UpdateProfileHotkeys(string? tag, string? chord)
+    {
+        var next = tag == "next" ? chord : _session.Settings.Hotkeys.NextProfile;
+        var prev = tag == "prev" ? chord : _session.Settings.Hotkeys.PreviousProfile;
+        var undo = tag == "undo" ? chord : _session.Settings.Hotkeys.UndoProfile;
+        return _session.TrySetProfileHotkeys(next, prev, undo);
+    }
+
     private void ApplyCopy()
     {
-        Title = $"WinDock {UiText.Settings}";
+        Title = $"{ProductInfo.Name} {UiText.Settings}";
         NavTitle.Text = UiText.Settings;
-        NavModulesLabel.Text = UiText.Modules;
-        System.Windows.Automation.AutomationProperties.SetName(NavModules, UiText.Modules);
-        NavLayoutLabel.Text = UiText.Layout;
-        System.Windows.Automation.AutomationProperties.SetName(NavLayout, UiText.Layout);
-        NavGroupDisplay.Text = UiText.Display;
-        NavAppearanceLabel.Text = UiText.Appearance;
-        System.Windows.Automation.AutomationProperties.SetName(NavAppearance, UiText.Appearance);
-        NavGroupSystem.Text = UiText.System;
-        NavPrivacyLabel.Text = UiText.Privacy;
-        System.Windows.Automation.AutomationProperties.SetName(NavPrivacy, UiText.Privacy);
-        NavAboutLabel.Text = UiText.About;
-        System.Windows.Automation.AutomationProperties.SetName(NavAbout, UiText.About);
-        NavExitLabel.Text = UiText.ExitWinDock;
-        AboutExitButton.Content = UiText.ExitWinDock;
-        NavGroupAdvanced.Text = UiText.Advanced;
-        NavProfilesLabel.Text = UiText.Profiles;
-        System.Windows.Automation.AutomationProperties.SetName(NavProfiles, UiText.Profiles);
+        NavGroupBasic.Text = UiText.NavGroupBasic;
+        NavGeneralLabel.Text = UiText.NavGeneral;
+        System.Windows.Automation.AutomationProperties.SetName(NavGeneral, UiText.NavGeneral);
+        NavLayoutLabel.Text = UiText.NavLayout;
+        System.Windows.Automation.AutomationProperties.SetName(NavLayout, UiText.NavLayout);
+        NavAppearanceLabel.Text = UiText.NavAppearance;
+        System.Windows.Automation.AutomationProperties.SetName(NavAppearance, UiText.NavAppearance);
 
-        ModulesTitle.Text = UiText.Modules;
+        NavGroupCore.Text = UiText.NavGroupCore;
+        NavModulesLabel.Text = UiText.NavModules;
+        System.Windows.Automation.AutomationProperties.SetName(NavModules, UiText.NavModules);
+        NavProfilesLabel.Text = UiText.NavProfiles;
+        System.Windows.Automation.AutomationProperties.SetName(NavProfiles, UiText.NavProfiles);
+        NavHotkeysLabel.Text = UiText.NavHotkeys;
+        System.Windows.Automation.AutomationProperties.SetName(NavHotkeys, UiText.NavHotkeys);
+
+        NavGroupSystem.Text = UiText.NavGroupSystemAndSupport;
+        NavPrivacyLabel.Text = UiText.NavPrivacy;
+        System.Windows.Automation.AutomationProperties.SetName(NavPrivacy, UiText.NavPrivacy);
+        NavAboutLabel.Text = UiText.NavAbout;
+        System.Windows.Automation.AutomationProperties.SetName(NavAbout, UiText.NavAbout);
+        NavExitLabel.Text = UiText.ExitWinDock;
+
+        GeneralTitle.Text = UiText.General;
+        GeneralIntro.Text = UiText.GeneralIntro;
+        SystemAndStartupLabel.Text = UiText.SystemAndStartup;
+        StartupTitle.Text = UiText.RunAtStartup;
+        StartupHelp.Text = UiText.RunAtStartupHelp;
+        System.Windows.Automation.AutomationProperties.SetName(StartupCheck, UiText.RunAtStartup);
+        LanguageLabel.Text = UiText.Language;
+        LanguageSystem.Content = UiText.LanguageSystem;
+        LanguageChinese.Content = UiText.LanguageChinese;
+        LanguageEnglish.Content = UiText.LanguageEnglish;
+        LanguageHelp.Text = UiText.LanguageHelp;
+        BackupSectionTitle.Text = UiText.BackupSection;
+        BackupSectionHelp.Text = UiText.BackupHelp;
+        ExportSettingsButton.Content = UiText.ExportSettings;
+        ImportSettingsButton.Content = UiText.ImportSettings;
+        ResetSettingsButton.Content = UiText.ResetFactory;
+
+        ModulesTitle.Text = UiText.NavModules;
         ModulesHelp.Text = UiText.ModulesIntro;
-        LayoutTitle.Text = UiText.Layout;
+        LayoutTitle.Text = UiText.NavLayout;
         LayoutIntro.Text = UiText.LayoutIntro;
         EdgeLabel.Text = UiText.Edge;
-        EdgeTop.Content = UiText.EdgeTop;
-        EdgeLeft.Content = UiText.EdgeLeft;
-        EdgeRight.Content = UiText.EdgeRight;
+        EdgeTop.Text = UiText.EdgeTop;
+        EdgeLeft.Text = UiText.EdgeLeft;
+        EdgeRight.Text = UiText.EdgeRight;
         MonitorLabel.Text = UiText.Monitor;
         AutoHideTitle.Text = UiText.AutoHide;
         AutoHideHelp.Text = UiText.AutoHideHelp;
@@ -714,10 +1269,6 @@ public partial class SettingsWindow : Window
         PeekTitle.Text = UiText.Peek;
         PeekHelp.Text = UiText.PeekHelp;
         System.Windows.Automation.AutomationProperties.SetName(PeekCheck, UiText.Peek);
-        RevealHotkeyTitle.Text = UiText.RevealHotkey;
-        RevealHotkeyHelp.Text = UiText.RevealHotkeyHelp;
-        System.Windows.Automation.AutomationProperties.SetName(RevealHotkeyCheck, UiText.RevealHotkey);
-        System.Windows.Automation.AutomationProperties.SetName(RevealHotkeyBox, UiText.RevealHotkeyName);
         CollapseAppsTitle.Text = UiText.CollapseApps;
         CollapseAppsHelp.Text = UiText.CollapseAppsHelp;
         System.Windows.Automation.AutomationProperties.SetName(CollapseAppsCheck, UiText.CollapseApps);
@@ -726,7 +1277,7 @@ public partial class SettingsWindow : Window
         System.Windows.Automation.AutomationProperties.SetName(CollapseFoldersCheck, UiText.CollapseFolders);
         LayoutHelp.Text = UiText.LayoutFooter;
 
-        AppearanceTitle.Text = UiText.Appearance;
+        AppearanceTitle.Text = UiText.NavAppearance;
         AppearanceIntro.Text = UiText.AppearanceIntro;
         ThemeLabel.Text = UiText.Theme;
         ThemeSystem.Content = UiText.ThemeSystem;
@@ -736,44 +1287,60 @@ public partial class SettingsWindow : Window
         BackdropMica.Content = UiText.BackdropMica;
         BackdropFrosted.Content = UiText.BackdropFrosted;
         BackdropGlass.Content = UiText.BackdropGlass;
-        LanguageLabel.Text = UiText.Language;
-        LanguageSystem.Content = UiText.LanguageSystem;
-        LanguageChinese.Content = UiText.LanguageChinese;
-        LanguageEnglish.Content = UiText.LanguageEnglish;
-        LanguageHelp.Text = UiText.LanguageHelp;
         TransparencyCaption.Text = UiText.IslandTransparency;
         AppearanceHelp.Text = UiText.AppearanceFooter;
 
-        PrivacyTitle.Text = UiText.Privacy;
+        HotkeysTitle.Text = UiText.NavHotkeys;
+        HotkeysIntro.Text = UiText.HotkeysIntro;
+        RevealHotkeyTitle.Text = UiText.RevealHotkey;
+        RevealHotkeyHelp.Text = UiText.RevealHotkeyHelp;
+        System.Windows.Automation.AutomationProperties.SetName(RevealHotkeyCheck, UiText.RevealHotkey);
+        System.Windows.Automation.AutomationProperties.SetName(RevealHotkeyBox, UiText.RevealHotkeyName);
+        NextProfileLabel.Text = UiText.NextProfileShortcut;
+        PrevProfileLabel.Text = UiText.PrevProfileShortcut;
+        UndoProfileLabel.Text = UiText.UndoProfileShortcut;
+
+        PrivacyTitle.Text = UiText.NavPrivacy;
         PrivacyIntro.Text = UiText.PrivacyIntro;
         MediaPrivacyTitle.Text = UiText.MediaPrivacy;
         System.Windows.Automation.AutomationProperties.SetName(MediaCheck, UiText.MediaPrivacy);
         NetworkPrivacyTitle.Text = UiText.NetworkPrivacy;
         NetworkPrivacyHelp.Text = UiText.NetworkPrivacyHelp;
         System.Windows.Automation.AutomationProperties.SetName(NetworkCheck, UiText.NetworkPrivacy);
+        ProcessPrivacyTitle.Text = UiText.ProcessNamesPrivacy;
+        ProcessPrivacyHelp.Text = UiText.ProcessNamesPrivacyHelp;
+        System.Windows.Automation.AutomationProperties.SetName(ProcessCheck, UiText.ProcessNamesPrivacy);
         BingPrivacyTitle.Text = UiText.BingPrivacy;
         BingPrivacyHelp.Text = UiText.BingPrivacyHelp;
         System.Windows.Automation.AutomationProperties.SetName(BingCheck, UiText.BingPrivacy);
+        BingAutoDailyTitle.Text = UiText.BingAutoDaily;
+        BingAutoDailyHelp.Text = UiText.BingAutoDailyHint;
+        System.Windows.Automation.AutomationProperties.SetName(BingAutoDailyCheck, UiText.BingAutoDaily);
         LocationPrivacyTitle.Text = UiText.LocationPrivacy;
         LocationPrivacyHelp.Text = UiText.LocationPrivacyHelp;
         System.Windows.Automation.AutomationProperties.SetName(LocationCheck, UiText.LocationPrivacy);
         PrivacyHelp.Text = UiText.PrivacyFooter;
 
-        AboutTitle.Text = UiText.About;
+        AboutTitle.Text = UiText.NavAbout;
         AboutBlurb.Text = UiText.AboutIntro;
-        StartupTitle.Text = UiText.RunAtStartup;
-        StartupHelp.Text = UiText.RunAtStartupHelp;
-        System.Windows.Automation.AutomationProperties.SetName(StartupCheck, UiText.RunAtStartup);
+        AboutCheckUpdateButton.Content = UiText.CheckForUpdates;
+        AboutLicenseLabel.Text = UiText.LicenseFree;
+        UpdateNowButton.Content = UiText.UpdateNow;
+        UpdateChangelogTitle.Text = $"{UiText.UpdateChangelog}：";
+        OpenConfigFolderButton.Content = UiText.OpenConfigFolder;
+        OpenLogsFolderButton.Content = UiText.OpenLogsFolder;
+        CommunitySectionTitle.Text = UiText.CommunitySection;
+        OpenGitHubButton.Content = UiText.GitHubRepo;
+        OpenWebsiteButton.Content = UiText.OfficialWebsite;
 
-        ProfilesTitle.Text = UiText.Profiles;
+        ProfilesTitle.Text = UiText.NavProfiles;
         ProfilesIntro.Text = UiText.ProfilesIntro;
         CurrentProfileLabel.Text = UiText.CurrentProfile;
         System.Windows.Automation.AutomationProperties.SetName(ProfileBox, UiText.CurrentProfile);
-        UndoButton.Content = UiText.UndoLast;
         DuplicateProfileButton.Content = UiText.DuplicateProfile;
         RenameProfileButton.Content = UiText.Rename;
         DeleteProfileButton.Content = UiText.Delete;
-        RecentSwitchesTitle.Text = UiText.RecentSwitches;
+        ProfileModulesTitle.Text = UiText.ProfileModulesTitle;
     }
 
     private static void SelectTag(ComboBox box, string tag)

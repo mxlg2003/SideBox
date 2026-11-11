@@ -1,4 +1,6 @@
 using System.IO;
+using System.Media;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -30,6 +32,7 @@ public sealed class DockSession : IDisposable
     private readonly ShellHost _shell;
     private readonly DispatcherTimer _hostPulse = new() { Interval = TimeSpan.FromSeconds(2) };
     private readonly DispatcherTimer _schedulePulse = new() { Interval = TimeSpan.FromSeconds(30) };
+    private readonly DispatcherTimer _alarmPulse = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _transparencyDebounce = new() { Interval = TimeSpan.FromMilliseconds(200) };
     private readonly Dictionary<string, UIElement> _widgetViews = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ImageSource> _pinIcons = new(StringComparer.OrdinalIgnoreCase);
@@ -42,6 +45,8 @@ public sealed class DockSession : IDisposable
     private int _runningBusy;
     private string _itemKey = string.Empty;
     private DockZorderState _zorderState;
+    private bool _samplingQuiet;
+    private bool _samplingQuietSet;
     private DateTimeOffset? _leftHostAt;
     private DateTimeOffset? _wakeUntil;
     private string? _appliedProfileId;
@@ -70,7 +75,7 @@ public sealed class DockSession : IDisposable
             }
         }
         _gate = new PermissionGate(Settings.Privacy);
-        Hub = new ProviderHub(_gate, new FileNotesStore(), AppPaths.BingWallpaperDirectory, AppPaths.IconCacheDirectory);
+        Hub = new ProviderHub(_gate, new FileNotesStore(), AppPaths.BingWallpaperDirectory, AppPaths.IconCacheDirectory, AppPaths.WallpaperDirectory);
         Hub.Media.CaptureMetadata = _gate.Allows(PermissionIds.MediaRead);
         _display = new Win32DisplayService();
         _shell = new ShellHost();
@@ -101,7 +106,7 @@ public sealed class DockSession : IDisposable
         _notifiedBackground = true;
         if (Application.Current is App app)
         {
-            app.ShowTrayBalloon("WinDock", UiText.BackgroundRunningNotice);
+            app.ShowTrayBalloon(ProductInfo.Name, UiText.BackgroundRunningNotice);
         }
     }
 
@@ -136,7 +141,12 @@ public sealed class DockSession : IDisposable
                 dock.CollapseFolders,
                 reorder.From,
                 reorder.To);
-            Commit(SettingsEditor.ReplaceDockItems(Settings, CurrentDiff.ProfileId, next));
+            var stored = Settings.Profiles.FirstOrDefault(profile => profile.Id == CurrentDiff.ProfileId)?.Dock.Items
+                ?? dock.Items;
+            Commit(SettingsEditor.ReplaceDockItems(
+                Settings,
+                CurrentDiff.ProfileId,
+                SettingsEditor.RestoreShielded(stored, next)));
         };
         _dock.WidgetOpenRequested += (_, itemId) =>
         {
@@ -164,6 +174,7 @@ public sealed class DockSession : IDisposable
         _dock.IslandMouseWheel += OnIslandMouseWheel;
         _hostPulse.Tick += (_, _) => PulseZorder();
         _schedulePulse.Tick += (_, _) => Apply(Settings);
+        _alarmPulse.Tick += (_, _) => PulseAlarms();
         _display.Changed += (_, _) => Dispatch(() => Apply(Settings));
         Hub.Focus.IsFocusActiveChanged += (_, _) => Dispatch(() => Apply(Settings));
         _shell.DisplayChanged += (_, _) => _display.RequestRefresh();
@@ -187,6 +198,7 @@ public sealed class DockSession : IDisposable
         };
         Apply(Settings);
         _hostPulse.Start();
+        _alarmPulse.Start();
         if (ProductFeatures.AutoProfileTriggersEnabled)
         {
             _schedulePulse.Start();
@@ -195,23 +207,59 @@ public sealed class DockSession : IDisposable
         _dock.Show();
         if (!string.IsNullOrWhiteSpace(_loadMessage))
         {
-            MessageBox.Show(_loadMessage, "WinDock", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(_loadMessage, ProductInfo.Name, MessageBoxButton.OK, MessageBoxImage.Information);
             _loadMessage = null;
         }
+    }
+
+    public void ToggleSettings()
+    {
+        if (_options.SafeMode)
+        {
+            MessageBox.Show(UiText.SafeModeBlock, ProductInfo.Name, MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (_settings is not null && _settings.IsVisible)
+        {
+            if (_settings.IsActive)
+            {
+                _settings.Hide();
+                PulseZorder();
+                return;
+            }
+
+            if (_settings.WindowState == WindowState.Minimized)
+            {
+                _settings.WindowState = WindowState.Normal;
+            }
+
+            _settings.Activate();
+            PulseZorder();
+            return;
+        }
+
+        ShowSettings();
     }
 
     public void ShowSettings()
     {
         if (_options.SafeMode)
         {
-            MessageBox.Show(UiText.SafeModeBlock, "WinDock", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(UiText.SafeModeBlock, ProductInfo.Name, MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
         if (_settings is null)
         {
             _settings = new SettingsWindow(this);
+            _settings.Closed += (_, _) => _settings = null;
             _settings.IsVisibleChanged += (_, _) => Dispatch(PulseZorder);
+        }
+
+        if (_settings.WindowState == WindowState.Minimized)
+        {
+            _settings.WindowState = WindowState.Normal;
         }
 
         _settings.Reload();
@@ -275,7 +323,7 @@ public sealed class DockSession : IDisposable
         }
 
         var next = string.IsNullOrWhiteSpace(monitor) ? "primary" : monitor.Trim();
-        if (string.Equals(CurrentDiff.Dock.Monitor, next, StringComparison.OrdinalIgnoreCase))
+        if (DockLayoutCalculator.SameMonitor(_display.Current, CurrentDiff.Dock.Monitor, next))
         {
             return;
         }
@@ -428,6 +476,18 @@ public sealed class DockSession : IDisposable
 
     public void AddWidget(string widgetId)
     {
+        if (CurrentDiff is null || !BuiltInWidgets.CanAdd(widgetId))
+        {
+            return;
+        }
+
+        if (BuiltInWidgets.IsSingleton(widgetId)
+            && SettingsEditor.HasWidgetChip(CurrentDiff.Dock.Items, widgetId))
+        {
+            UserAlerts.Show(ProductInfo.Name, UiText.AlreadyOnDock);
+            return;
+        }
+
         if (!TryConsentForWidget(widgetId, out var next))
         {
             return;
@@ -449,6 +509,16 @@ public sealed class DockSession : IDisposable
     public void DiscardHiddenNote(string itemId)
     {
         if (CurrentDiff is null || string.IsNullOrWhiteSpace(itemId))
+        {
+            return;
+        }
+
+        var confirm = MessageBox.Show(
+            UiText.ConfirmDeleteHiddenNote,
+            UiText.NotesHistory,
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.OK)
         {
             return;
         }
@@ -529,6 +599,7 @@ public sealed class DockSession : IDisposable
         {
             BuiltInWidgets.NowPlaying => UiText.ConsentNowPlaying,
             BuiltInWidgets.Network => UiText.ConsentNetwork,
+            BuiltInWidgets.Processes => UiText.ConsentProcesses,
             BuiltInWidgets.BingWallpaper => UiText.ConsentBing,
             BuiltInWidgets.Weather => UiText.ConsentWeather,
             _ => null
@@ -545,6 +616,11 @@ public sealed class DockSession : IDisposable
         }
 
         if (widgetId == BuiltInWidgets.Network && settings.Privacy.NetworkDetails)
+        {
+            return true;
+        }
+
+        if (widgetId == BuiltInWidgets.Processes && settings.Privacy.ProcessNames)
         {
             return true;
         }
@@ -570,6 +646,11 @@ public sealed class DockSession : IDisposable
         else if (widgetId == BuiltInWidgets.Network)
         {
             settings = SettingsEditor.WithPrivacy(settings, settings.Privacy with { NetworkDetails = true });
+            _gate.UpdatePrivacy(settings.Privacy);
+        }
+        else if (widgetId == BuiltInWidgets.Processes)
+        {
+            settings = SettingsEditor.WithPrivacy(settings, settings.Privacy with { ProcessNames = true });
             _gate.UpdatePrivacy(settings.Privacy);
         }
         else if (widgetId == BuiltInWidgets.BingWallpaper)
@@ -607,6 +688,21 @@ public sealed class DockSession : IDisposable
             case BuiltInWidgets.SysActivity:
                 Hub.Perf.Start();
                 break;
+            case BuiltInWidgets.Disk:
+                Hub.Disk.Start();
+                break;
+            case BuiltInWidgets.Gpu:
+                Hub.Gpu.Start();
+                break;
+            case BuiltInWidgets.Processes:
+                if (Settings.Privacy.ProcessNames)
+                {
+                    Hub.Processes.Start();
+                }
+                break;
+            case BuiltInWidgets.Stocks:
+                Hub.Stocks.Start();
+                break;
         }
     }
 
@@ -622,6 +718,16 @@ public sealed class DockSession : IDisposable
         Hub.Media.CaptureMetadata = _gate.Allows(PermissionIds.MediaRead);
         Hub.Weather.AllowAutoLocate = privacy.PreciseLocation;
         Commit(next);
+    }
+
+    public void SetBingWallpaperAutoApply(bool autoApply)
+    {
+        Hub.Bing.AutoApplyDaily = autoApply;
+        Commit(SettingsEditor.WithBingWallpaperAutoApply(Settings, autoApply));
+        if (autoApply)
+        {
+            _ = Hub.Bing.CheckAndAutoApplyAsync();
+        }
     }
 
     public void SwitchProfile(string profileId)
@@ -682,6 +788,130 @@ public sealed class DockSession : IDisposable
         Commit(SettingsEditor.RemoveProfile(Settings, profileId));
     }
 
+    public void RemoveDockItem(string itemId) => OnWidgetRemove(itemId);
+
+    public void MoveDockItem(int fromIndex, int toIndex)
+    {
+        if (_options.SafeMode || CurrentDiff is null)
+        {
+            return;
+        }
+
+        var profileId = CurrentDiff.ProfileId;
+        Commit(SettingsEditor.MoveDockItem(Settings, profileId, fromIndex, toIndex));
+    }
+
+    public void ReplaceDockItems(IReadOnlyList<DockItem> items)
+    {
+        if (_options.SafeMode || CurrentDiff is null)
+        {
+            return;
+        }
+
+        var profileId = CurrentDiff.ProfileId;
+        Commit(SettingsEditor.ReplaceDockItems(Settings, profileId, items));
+    }
+
+    public void UpdateWidgetWeather(string itemId, WeatherSettings weather)
+    {
+        if (CurrentDiff is null) return;
+        Commit(SettingsEditor.WithWeather(Settings, CurrentDiff.ProfileId, itemId, weather));
+        if (_widgetViews.TryGetValue(itemId, out var view) && view is IWeatherConfigurable w)
+        {
+            w.ApplySettings(weather);
+        }
+    }
+
+    public void UpdateWidgetStock(string itemId, StockWidgetSettings stocks)
+    {
+        if (CurrentDiff is null) return;
+        Commit(SettingsEditor.WithStockWidget(Settings, CurrentDiff.ProfileId, itemId, stocks));
+        if (_widgetViews.TryGetValue(itemId, out var view) && view is IStockConfigurable s)
+        {
+            s.ApplySettings(stocks);
+        }
+    }
+
+    public void UpdateWidgetWhiteNoise(string itemId, WhiteNoiseSettings noise)
+    {
+        if (CurrentDiff is null) return;
+        Commit(SettingsEditor.WithWhiteNoise(Settings, CurrentDiff.ProfileId, itemId, noise));
+    }
+
+    public void UpdateWidgetClockTimeZone(string itemId, string? timeZoneId)
+    {
+        if (CurrentDiff is null) return;
+        Commit(SettingsEditor.WithClockTimeZone(Settings, CurrentDiff.ProfileId, itemId, timeZoneId));
+    }
+
+    public void UpdateWidgetSysActivity(string itemId, SysActivitySettings activity)
+    {
+        if (CurrentDiff is null) return;
+        Commit(SettingsEditor.WithSysActivity(Settings, CurrentDiff.ProfileId, itemId, activity));
+    }
+
+    public void SetWidgetDensity(string itemId, WidgetDensity density)
+    {
+        ApplyWidgetDensity(new WidgetDensityRequest { ItemId = itemId, Density = density });
+    }
+
+    public void ResetSettings() => Commit(DefaultProfiles.CreateFactorySettings());
+
+    public string ExportSettingsJson()
+    {
+        return JsonSerializer.Serialize(Settings, new JsonSerializerOptions
+        {
+            WriteIndented = true
+        });
+    }
+
+    public bool ImportSettingsJson(string json, out string? error)
+    {
+        error = null;
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<AppSettings>(json);
+            if (parsed is null)
+            {
+                error = "Empty settings content.";
+                return false;
+            }
+
+            var validated = SettingsValidator.EnsureInvariants(parsed);
+            Commit(validated);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public bool TrySetProfileHotkeys(string? next, string? previous, string? undo)
+    {
+        string? Fmt(string? c) => string.IsNullOrWhiteSpace(c) || !HotkeyParser.TryParse(c, out var m, out var vk)
+            ? null
+            : HotkeyParser.Format(m, vk);
+
+        var candidate = Settings.Hotkeys with
+        {
+            NextProfile = Fmt(next),
+            PreviousProfile = Fmt(previous),
+            UndoProfile = Fmt(undo)
+        };
+
+        var nextSettings = Settings with { Hotkeys = candidate };
+        if (!_shell.BindHotkeys(EffectiveHotkeys(nextSettings, CurrentDiff.Dock)))
+        {
+            _shell.BindHotkeys(EffectiveHotkeys(Settings, CurrentDiff.Dock));
+            return false;
+        }
+
+        Commit(nextSettings);
+        return true;
+    }
+
     public bool IsLightTheme() => ThemeResolver.IsLight(Settings.Ui.Theme);
 
     public void Dispose()
@@ -694,6 +924,7 @@ public sealed class DockSession : IDisposable
         _disposing = true;
         _hostPulse.Stop();
         _schedulePulse.Stop();
+        _alarmPulse.Stop();
         _transparencyDebounce.Stop();
         _runningPins.Dispose();
         _stackFlyout.Hide();
@@ -731,10 +962,11 @@ public sealed class DockSession : IDisposable
         catch (Exception ex)
         {
             AppLog.Write("Failed to save settings.", ex);
-            UserAlerts.Show("WinDock", UiText.SaveFailed);
+            UserAlerts.Show(ProductInfo.Name, UiText.SaveFailed);
             Apply(Settings);
         }
     }
+
 
     private void Apply(AppSettings settings)
     {
@@ -745,8 +977,14 @@ public sealed class DockSession : IDisposable
             var snapshot = ContextAssembler.Create(_options, Settings, Hub, _display.Current);
             CurrentDiff = _engine.Evaluate(Settings, snapshot);
             var switched = ProductFeatures.ProfilesEnabled && _appliedProfileId != CurrentDiff.ProfileId;
+            string? announceProfileId = null;
             if (switched)
             {
+                if (_appliedProfileId is not null)
+                {
+                    announceProfileId = CurrentDiff.ProfileId;
+                }
+
                 Settings = SettingsEditor.RecordSwitch(Settings, _appliedProfileId, CurrentDiff.ProfileId, CurrentDiff.Reason);
                 try
                 {
@@ -795,77 +1033,14 @@ public sealed class DockSession : IDisposable
                     && !string.IsNullOrWhiteSpace(item.WidgetId)
                     && _widgetViews.TryGetValue(item.Id, out var view))
                 {
-                    if (view is IWidgetModeAware mode)
+                    try
                     {
-                        mode.ApplyDensity(item.Density);
+                        ApplyWidget(view, item, isLight);
                     }
-
-                    if (view is IWidgetCustomizable paper)
+                    catch (Exception ex)
                     {
-                        paper.ApplyPaper(item.PaperColor);
+                        AppLog.Write($"Failed to apply widget '{item.WidgetId}'.", ex);
                     }
-
-                    if (view is IClockConfigurable clock)
-                    {
-                        clock.ApplyTimeZone(item.TimeZoneId);
-                    }
-
-                    if (view is IFocusTimerConfigurable timer)
-                    {
-                        timer.ApplySettings(item.FocusTimer ?? FocusTimerSettings.Default);
-                    }
-
-                    if (view is ICountdownConfigurable countdown)
-                    {
-                        countdown.ApplySettings(item.Countdown ?? CountdownSettings.Default);
-                    }
-
-                    if (view is IAlarmConfigurable alarm)
-                    {
-                        alarm.ApplySettings(item.Alarm ?? AlarmSettings.Default);
-                    }
-
-                    if (view is IPowerWidgetConfigurable power)
-                    {
-                        power.ApplySettings(item.Power ?? PowerWidgetSettings.Default);
-                    }
-
-                    if (view is ITimeProgressConfigurable progress)
-                    {
-                        progress.ApplySettings(item.TimeProgress ?? TimeProgressSettings.Default);
-                    }
-
-                    if (view is ISysActivityConfigurable activity)
-                    {
-                        activity.ApplySettings(item.SysActivity ?? SysActivitySettings.Default);
-                    }
-
-                    if (view is INetworkConfigurable net)
-                    {
-                        net.ApplySettings(item.Network ?? NetworkWidgetSettings.Default);
-                    }
-
-                    if (view is IWeatherConfigurable weather)
-                    {
-                        weather.ApplySettings(item.Weather ?? WeatherSettings.Default);
-                    }
-
-                    if (view is IScheduleConfigurable schedule)
-                    {
-                        schedule.ApplySettings(item.Schedule ?? ScheduleSettings.Default);
-                    }
-
-                    if (view is INotesHistory history)
-                    {
-                        history.ApplyHistory(NotesHistory(exceptId: item.Id));
-                    }
-
-                    if (view is IPrivacyAware privacy)
-                    {
-                        privacy.OnPrivacyChanged();
-                    }
-
-                    WidgetChrome.ApplyTree(view, isLight, Settings.Ui.Backdrop);
                 }
             }
 
@@ -875,6 +1050,12 @@ public sealed class DockSession : IDisposable
             _dock.ApplyProfileMenu(
                 ProductFeatures.ProfilesEnabled ? Settings.Profiles : [],
                 CurrentDiff.ProfileId);
+            if (announceProfileId is not null)
+            {
+                var profile = Settings.Profiles.FirstOrDefault(item => item.Id == announceProfileId);
+                var name = profile is null ? announceProfileId : DefaultProfiles.DisplayName(profile);
+                _dock.ShowStatus(UiText.ProfileNow(name));
+            }
             RevealHotkeyBindError = _shell.BindHotkeys(EffectiveHotkeys(Settings, CurrentDiff.Dock))
                 ? null
                 : UiText.HotkeyTaken;
@@ -894,8 +1075,123 @@ public sealed class DockSession : IDisposable
         catch (Exception ex)
         {
             AppLog.Write("Failed to apply settings.", ex);
-            UserAlerts.Show("WinDock", UiText.DockUpdateFailed);
+            UserAlerts.Show(ProductInfo.Name, UiText.DockUpdateFailed);
         }
+    }
+
+    private void ApplyWidget(UIElement view, DockItem item, bool isLight)
+    {
+        if (view is IWidgetModeAware mode)
+        {
+            mode.ApplyDensity(item.Density);
+        }
+
+        if (view is IDockEdgeAware edgeAware)
+        {
+            edgeAware.ApplyDockEdge(CurrentDiff?.Dock.Edge ?? DockEdge.Top);
+        }
+
+        if (view is IWidgetCustomizable paper)
+        {
+            paper.ApplyPaper(item.PaperColor);
+        }
+
+        if (view is IClockConfigurable clock)
+        {
+            clock.ApplyTimeZone(item.TimeZoneId);
+        }
+
+        if (view is IFocusTimerConfigurable timer)
+        {
+            timer.ApplySettings(item.FocusTimer ?? FocusTimerSettings.Default);
+        }
+
+        if (view is ICountdownConfigurable countdown)
+        {
+            countdown.ApplySettings(item.Countdown ?? CountdownSettings.Default);
+        }
+
+        if (view is IAlarmConfigurable alarm)
+        {
+            alarm.ApplySettings(item.Alarm ?? AlarmSettings.Default);
+        }
+
+        if (view is IPowerWidgetConfigurable power)
+        {
+            power.ApplySettings(item.Power ?? PowerWidgetSettings.Default);
+        }
+
+        if (view is ITimeProgressConfigurable progress)
+        {
+            progress.ApplySettings(item.TimeProgress ?? TimeProgressSettings.Default);
+        }
+
+        if (view is ISysActivityConfigurable activity)
+        {
+            activity.ApplySettings(item.SysActivity ?? SysActivitySettings.Default);
+        }
+
+        if (view is INetworkConfigurable net)
+        {
+            net.ApplySettings(item.Network ?? NetworkWidgetSettings.Default);
+        }
+
+        if (view is IDiskConfigurable disk)
+        {
+            disk.ApplySettings(item.Disk ?? DiskWidgetSettings.Default);
+        }
+
+        if (view is IGpuConfigurable gpu)
+        {
+            gpu.ApplySettings(item.Gpu ?? GpuWidgetSettings.Default);
+        }
+
+        if (view is IProcessConfigurable processes)
+        {
+            processes.ApplySettings(item.Processes ?? ProcessWidgetSettings.Default);
+        }
+
+        if (view is IWeatherConfigurable weather)
+        {
+            weather.ApplySettings(item.Weather ?? WeatherSettings.Default);
+        }
+
+        if (view is IStockConfigurable stocks)
+        {
+            stocks.ApplySettings(item.Stocks ?? StockWidgetSettings.Default);
+        }
+
+        if (view is IWhiteNoiseConfigurable whiteNoise)
+        {
+            whiteNoise.ApplySettings(item.WhiteNoise ?? WhiteNoiseSettings.Default);
+        }
+
+        if (view is IScheduleConfigurable schedule)
+        {
+            schedule.ApplySettings(item.Schedule ?? ScheduleSettings.Default);
+        }
+
+        if (view is IWallpaperConfigurable wallpaperConfig)
+        {
+            wallpaperConfig.ApplySettings(item.Wallpaper ?? WallpaperSettings.Default);
+        }
+
+        if (view is IBingWallpaperConfigurable bingConfig)
+        {
+            bingConfig.ApplySettings(item.BingWallpaper ?? BingWallpaperSettings.Default);
+        }
+
+        if (view is INotesHistory history)
+        {
+            history.ApplyHistory(NotesHistory(exceptId: item.Id));
+        }
+
+        if (view is IPrivacyAware privacy)
+        {
+            privacy.OnPrivacyChanged();
+        }
+
+        WidgetChrome.ApplyTree(view, isLight, Settings.Ui.Backdrop);
     }
 
     private UIElement GetOrCreateWidget(DockItem item)
@@ -914,7 +1210,7 @@ public sealed class DockSession : IDisposable
                 Hub.Notes.TryAdoptLegacy(item.Id);
             }
 
-            view = _views.Create(item, Hub, ApplyBingWallpaperAsync);
+            view = _views.Create(item, Hub, ApplyBingWallpaperAsync, ApplyWallpaperDesktopAsync);
         }
         catch (Exception ex)
         {
@@ -972,14 +1268,49 @@ public sealed class DockSession : IDisposable
             net.SettingsChanged += OnNetworkWidgetChanged;
         }
 
+        if (view is IDiskConfigurable disk)
+        {
+            disk.SettingsChanged += OnDiskWidgetChanged;
+        }
+
+        if (view is IGpuConfigurable gpu)
+        {
+            gpu.SettingsChanged += OnGpuWidgetChanged;
+        }
+
+        if (view is IProcessConfigurable processes)
+        {
+            processes.SettingsChanged += OnProcessWidgetChanged;
+        }
+
         if (view is IWeatherConfigurable weather)
         {
             weather.SettingsChanged += OnWeatherChanged;
         }
 
+        if (view is IStockConfigurable stocks)
+        {
+            stocks.SettingsChanged += OnStockWidgetChanged;
+        }
+
+        if (view is IWhiteNoiseConfigurable whiteNoise)
+        {
+            whiteNoise.SettingsChanged += OnWhiteNoiseChanged;
+        }
+
         if (view is IScheduleConfigurable schedule)
         {
             schedule.SettingsChanged += OnScheduleChanged;
+        }
+
+        if (view is IWallpaperConfigurable wallpaperConfig)
+        {
+            wallpaperConfig.SettingsChanged += OnWallpaperChanged;
+        }
+
+        if (view is IBingWallpaperConfigurable bingConfig)
+        {
+            bingConfig.SettingsChanged += OnBingWallpaperChanged;
         }
 
         if (view is IClockConfigurable clock)
@@ -996,6 +1327,15 @@ public sealed class DockSession : IDisposable
         {
             history.RestoreRequested += OnNotesRestoreRequested;
             history.DiscardRequested += OnNotesHistoryDiscardRequested;
+        }
+
+        try
+        {
+            ApplyWidget(view, item, ThemeResolver.IsLight(Settings.Ui.Theme));
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write("Failed to apply widget   + item.WidgetId +  .", ex);
         }
 
         return view;
@@ -1054,9 +1394,15 @@ public sealed class DockSession : IDisposable
         }
 
         var dock = CurrentDiff.Dock;
-        var insertAt = drop.InsertAt is int visible
-            ? DockPinCollapse.InsertIndex(dock.Items, dock.CollapseApps, dock.CollapseFolders, visible)
-            : (int?)null;
+        int? insertAt = null;
+        if (drop.InsertAt is int visible)
+        {
+            var visibleIndex = DockPinCollapse.InsertIndex(dock.Items, dock.CollapseApps, dock.CollapseFolders, visible);
+            var stored = Settings.Profiles.FirstOrDefault(profile => profile.Id == CurrentDiff.ProfileId)?.Dock.Items
+                ?? dock.Items;
+            insertAt = SettingsEditor.MapInsertIndex(stored, dock.Items, visibleIndex);
+        }
+
         CommitPins(SettingsEditor.AddPins(Settings, CurrentDiff.ProfileId, Hub.Shell.CreatePins(drop.Paths), insertAt));
     }
 
@@ -1064,11 +1410,11 @@ public sealed class DockSession : IDisposable
     {
         if (result.Skipped > 0 && result.Added == 0)
         {
-            UserAlerts.Show("WinDock", UiText.AlreadyOnDock);
+            UserAlerts.Show(ProductInfo.Name, UiText.AlreadyOnDock);
         }
         else if (result.Skipped > 0)
         {
-            UserAlerts.Show("WinDock", UiText.AlreadyOnDockSkipped(result.Skipped));
+            UserAlerts.Show(ProductInfo.Name, UiText.AlreadyOnDockSkipped(result.Skipped));
         }
 
         if (result.Added > 0)
@@ -1126,7 +1472,8 @@ public sealed class DockSession : IDisposable
             return;
         }
 
-        _runningPins.Change(TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+        var period = _samplingQuiet ? TimeSpan.FromSeconds(8) : TimeSpan.FromSeconds(3);
+        _runningPins.Change(period, period);
     }
 
     private void SampleRunning()
@@ -1249,6 +1596,15 @@ public sealed class DockSession : IDisposable
             _dock.ApplyZorder(state);
         }
 
+        var quiet = state is DockZorderState.AutoHidden or DockZorderState.FullscreenYield;
+        if (!_samplingQuietSet || quiet != _samplingQuiet)
+        {
+            _samplingQuietSet = true;
+            _samplingQuiet = quiet;
+            Hub.SetQuietSampling(quiet);
+            SyncRunningSampler();
+        }
+
         if (!CurrentDiff.Dock.AutoHide)
         {
             _hostPulse.Interval = TimeSpan.FromSeconds(2);
@@ -1264,6 +1620,7 @@ public sealed class DockSession : IDisposable
 
     private void OnFlyoutOpenStateChanged(object? sender, EventArgs e) => Dispatch(() =>
     {
+        _dock.SetTileDragSuspended(WidgetFlyout.AnyOpen());
         PulseZorder();
         WidgetFlyout.RelayoutOpen();
     });
@@ -1365,8 +1722,14 @@ public sealed class DockSession : IDisposable
             settings = Settings;
         }
 
-        var ok = await Hub.Bing.TryApplyTodayAsync();
-        UserAlerts.Show("WinDock", ok ? UiText.BingApplied : UiText.BingApplyFailed);
+        var ok = await Hub.Bing.TryApplyCurrentAsync();
+        UserAlerts.Show(ProductInfo.Name, ok ? UiText.BingApplied : UiText.BingApplyFailed);
+    }
+
+    public async Task ApplyWallpaperDesktopAsync()
+    {
+        var ok = await Hub.Wallpaper.TryApplyCurrentDesktopAsync();
+        UserAlerts.Show(ProductInfo.Name, ok ? UiText.WallpaperApplied : UiText.WallpaperApplyFailed);
     }
 
     private void SyncProviders()
@@ -1378,6 +1741,10 @@ public sealed class DockSession : IDisposable
             Hub.Media.Stop();
             Hub.Power.Stop();
             Hub.Weather.Stop();
+            Hub.Disk.Stop();
+            Hub.Gpu.Stop();
+            Hub.Processes.Stop();
+            Hub.Stocks.Stop();
             return;
         }
 
@@ -1385,12 +1752,37 @@ public sealed class DockSession : IDisposable
             .Where(item => item.Type == DockItemType.WidgetChip)
             .Select(item => item.WidgetId)
             .ToHashSet(StringComparer.Ordinal);
+        var weatherSettings = CurrentDiff.Dock.Items
+            .Where(item =>
+                item.Type == DockItemType.WidgetChip
+                && string.Equals(item.WidgetId, BuiltInWidgets.Weather, StringComparison.Ordinal))
+            .Select(item => item.Weather ?? WeatherSettings.Default)
+            .ToArray();
         Hub.Weather.AllowAutoLocate = Settings.Privacy.PreciseLocation;
+        Hub.Weather.Watch(weatherSettings);
+        var stockSymbols = CurrentDiff.Dock.Items
+            .Where(item =>
+                item.Type == DockItemType.WidgetChip
+                && string.Equals(item.WidgetId, BuiltInWidgets.Stocks, StringComparison.Ordinal))
+            .SelectMany(item => StockWidgetSettings.AllSymbols(item.Stocks ?? StockWidgetSettings.Default))
+            .ToArray();
+        Hub.Stocks.Watch(stockSymbols);
         Toggle(ids.Contains(BuiltInWidgets.SysActivity), Hub.Perf.Start, Hub.Perf.Stop);
         Toggle(ids.Contains(BuiltInWidgets.Network), Hub.Network.Start, Hub.Network.Stop);
         Toggle(ids.Contains(BuiltInWidgets.NowPlaying), Hub.Media.Start, Hub.Media.Stop);
         Toggle(ids.Contains(BuiltInWidgets.Power), Hub.Power.Start, Hub.Power.Stop);
-        Toggle(ids.Contains(BuiltInWidgets.Weather), Hub.Weather.Start, Hub.Weather.Stop);
+        Toggle(ids.Contains(BuiltInWidgets.Disk), Hub.Disk.Start, Hub.Disk.Stop);
+        Toggle(ids.Contains(BuiltInWidgets.Gpu), Hub.Gpu.Start, Hub.Gpu.Stop);
+        Toggle(ids.Contains(BuiltInWidgets.Processes) && Settings.Privacy.ProcessNames, Hub.Processes.Start, Hub.Processes.Stop);
+        Toggle(weatherSettings.Length > 0, Hub.Weather.Start, Hub.Weather.Stop);
+        Toggle(stockSymbols.Length > 0, Hub.Stocks.Start, Hub.Stocks.Stop);
+        var bingItem = CurrentDiff.Dock.Items.FirstOrDefault(item =>
+            item.Type == DockItemType.WidgetChip
+            && string.Equals(item.WidgetId, BuiltInWidgets.BingWallpaper, StringComparison.Ordinal));
+        if (bingItem?.BingWallpaper is not null)
+        {
+            Hub.Bing.AutoApplyDaily = bingItem.BingWallpaper.AutoApplyDaily;
+        }
     }
 
     private static void Toggle(bool on, Action start, Action stop)
@@ -1410,6 +1802,14 @@ public sealed class DockSession : IDisposable
         string.Join(";", items.Select(item =>
             $"{item.Id}|{item.Type}|{item.Path}|{item.ShortcutPath}|{item.Url}|{item.WidgetId}|{item.Title}|{item.Density}|{item.TimeZoneId}"));
 
+    private RectLogical IslandBounds()
+    {
+        static double Finite(double value) => double.IsFinite(value) ? value : 0;
+        var width = _dock.ActualWidth > 1 ? _dock.ActualWidth : _dock.Width;
+        var height = _dock.ActualHeight > 1 ? _dock.ActualHeight : _dock.Height;
+        return new RectLogical(Finite(_dock.Left), Finite(_dock.Top), Finite(width), Finite(height));
+    }
+
     private void TogglePinStack(PinStackToggleRequest request)
     {
         if (_options.SafeMode || CurrentDiff is null || request.Members.Count < 2)
@@ -1418,6 +1818,7 @@ public sealed class DockSession : IDisposable
             return;
         }
 
+        var monitor = _layout.ResolveMonitor(Topology, CurrentDiff.Dock.Monitor);
         _stackFlyout.Toggle(
             request.Target,
             request.Kind,
@@ -1425,7 +1826,9 @@ public sealed class DockSession : IDisposable
             PinIcon,
             ThemeResolver.IsLight(Settings.Ui.Theme),
             Settings.Ui.Backdrop,
-            _runningIds);
+            _runningIds,
+            monitor.WorkArea,
+            IslandBounds());
     }
 
     private ImageSource? StockIcon(DockPinStackKind kind)
@@ -1509,6 +1912,16 @@ public sealed class DockSession : IDisposable
 
             if (NotesText.IsBlank(Hub.Notes.Load(itemId)))
             {
+                var deleteBlank = MessageBox.Show(
+                    UiText.ConfirmDeleteBlankNote,
+                    BuiltInWidgets.DisplayName(BuiltInWidgets.Notes),
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Question);
+                if (deleteBlank != MessageBoxResult.OK)
+                {
+                    return;
+                }
+
                 if (_widgetViews.TryGetValue(itemId, out var empty) && empty is NotesWidget blank)
                 {
                     blank.Discard();
@@ -1535,8 +1948,35 @@ public sealed class DockSession : IDisposable
                 return;
             }
         }
+        else if (item is not null)
+        {
+            var confirm = MessageBox.Show(
+                UiText.ConfirmRemoveFromDock(RemoveLabel(item)),
+                ProductInfo.Name,
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Question);
+            if (confirm != MessageBoxResult.OK)
+            {
+                return;
+            }
+        }
 
         Commit(SettingsEditor.RemoveDockItem(Settings, CurrentDiff.ProfileId, itemId));
+    }
+
+    private static string RemoveLabel(DockItem item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.WidgetId))
+        {
+            return BuiltInWidgets.DisplayName(item.WidgetId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(item.Title))
+        {
+            return item.Title;
+        }
+
+        return UiText.PinFallback;
     }
 
     private void OnNotesDeleteRequested(object? sender, EventArgs e)
@@ -1599,6 +2039,12 @@ public sealed class DockSession : IDisposable
 
         var itemId = _widgetViews.FirstOrDefault(pair => ReferenceEquals(pair.Value, sender)).Key;
         if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return;
+        }
+
+        var currentItem = CurrentDiff.Dock.Items.FirstOrDefault(i => i.Id == itemId);
+        if (currentItem is not null && string.Equals(currentItem.PaperColor, paper, StringComparison.Ordinal))
         {
             return;
         }
@@ -1720,6 +2166,8 @@ public sealed class DockSession : IDisposable
         }
 
         SaveWithoutRelayout(SettingsEditor.WithSysActivity(Settings, CurrentDiff.ProfileId, itemId, settings));
+        RelayoutIsland();
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnNetworkWidgetChanged(object? sender, NetworkWidgetSettings settings)
@@ -1736,6 +2184,106 @@ public sealed class DockSession : IDisposable
         }
 
         SaveWithoutRelayout(SettingsEditor.WithNetworkWidget(Settings, CurrentDiff.ProfileId, itemId, settings));
+        RelayoutIsland();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnDiskWidgetChanged(object? sender, DiskWidgetSettings settings)
+    {
+        if (CurrentDiff is null)
+        {
+            return;
+        }
+
+        var itemId = _widgetViews.FirstOrDefault(pair => ReferenceEquals(pair.Value, sender)).Key;
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return;
+        }
+
+        SaveWithoutRelayout(SettingsEditor.WithDiskWidget(Settings, CurrentDiff.ProfileId, itemId, settings));
+        RelayoutIsland();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnGpuWidgetChanged(object? sender, GpuWidgetSettings settings)
+    {
+        if (CurrentDiff is null)
+        {
+            return;
+        }
+
+        var itemId = _widgetViews.FirstOrDefault(pair => ReferenceEquals(pair.Value, sender)).Key;
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return;
+        }
+
+        SaveWithoutRelayout(SettingsEditor.WithGpuWidget(Settings, CurrentDiff.ProfileId, itemId, settings));
+        RelayoutIsland();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnProcessWidgetChanged(object? sender, ProcessWidgetSettings settings)
+    {
+        if (CurrentDiff is null)
+        {
+            return;
+        }
+
+        var itemId = _widgetViews.FirstOrDefault(pair => ReferenceEquals(pair.Value, sender)).Key;
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return;
+        }
+
+        SaveWithoutRelayout(SettingsEditor.WithProcessWidget(Settings, CurrentDiff.ProfileId, itemId, settings));
+    }
+
+    private void OnStockWidgetChanged(object? sender, StockWidgetSettings settings)
+    {
+        if (CurrentDiff is null)
+        {
+            return;
+        }
+
+        var itemId = _widgetViews.FirstOrDefault(pair => ReferenceEquals(pair.Value, sender)).Key;
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return;
+        }
+
+        SaveWithoutRelayout(SettingsEditor.WithStockWidget(Settings, CurrentDiff.ProfileId, itemId, settings));
+        if (CurrentDiff is not null)
+        {
+            var symbols = CurrentDiff.Dock.Items
+                .Where(item =>
+                    item.Type == DockItemType.WidgetChip
+                    && string.Equals(item.WidgetId, BuiltInWidgets.Stocks, StringComparison.Ordinal))
+                .SelectMany(item => StockWidgetSettings.AllSymbols(item.Stocks ?? StockWidgetSettings.Default))
+                .ToArray();
+            Hub.Stocks.Watch(symbols);
+            Hub.Stocks.Start();
+        }
+
+        RelayoutIsland();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnWhiteNoiseChanged(object? sender, WhiteNoiseSettings settings)
+    {
+        if (CurrentDiff is null)
+        {
+            return;
+        }
+
+        var itemId = _widgetViews.FirstOrDefault(pair => ReferenceEquals(pair.Value, sender)).Key;
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return;
+        }
+
+        SaveWithoutRelayout(SettingsEditor.WithWhiteNoise(Settings, CurrentDiff.ProfileId, itemId, settings));
         RelayoutIsland();
         Changed?.Invoke(this, EventArgs.Empty);
     }
@@ -1801,6 +2349,41 @@ public sealed class DockSession : IDisposable
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    private void OnBingWallpaperChanged(object? sender, BingWallpaperSettings settings)
+    {
+        if (CurrentDiff is null)
+        {
+            return;
+        }
+
+        var itemId = _widgetViews.FirstOrDefault(pair => ReferenceEquals(pair.Value, sender)).Key;
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return;
+        }
+
+        Hub.Bing.AutoApplyDaily = settings.AutoApplyDaily;
+        SaveWithoutRelayout(SettingsEditor.WithBingWallpaper(Settings, CurrentDiff.ProfileId, itemId, settings));
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnWallpaperChanged(object? sender, WallpaperSettings settings)
+    {
+        if (CurrentDiff is null)
+        {
+            return;
+        }
+
+        var itemId = _widgetViews.FirstOrDefault(pair => ReferenceEquals(pair.Value, sender)).Key;
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return;
+        }
+
+        SaveWithoutRelayout(SettingsEditor.WithWallpaper(Settings, CurrentDiff.ProfileId, itemId, settings));
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     private void ApplyWidgetDensity(WidgetDensityRequest request)
     {
         if (_options.SafeMode || CurrentDiff is null)
@@ -1818,6 +2401,11 @@ public sealed class DockSession : IDisposable
         if (_widgetViews.TryGetValue(request.ItemId, out var view) && view is IWidgetModeAware mode)
         {
             mode.ApplyDensity(request.Density);
+        }
+
+        if (_widgetViews.TryGetValue(request.ItemId, out var edged) && edged is IDockEdgeAware edgeAware && CurrentDiff is not null)
+        {
+            edgeAware.ApplyDockEdge(CurrentDiff.Dock.Edge);
         }
 
         _dock.ApplyWidgetDensity(request.ItemId, request.Density);
@@ -1885,7 +2473,7 @@ public sealed class DockSession : IDisposable
         catch (Exception ex)
         {
             AppLog.Write("Failed to save settings.", ex);
-            UserAlerts.Show("WinDock", UiText.SaveFailed);
+            UserAlerts.Show(ProductInfo.Name, UiText.SaveFailed);
             Apply(Settings);
         }
     }
@@ -1929,7 +2517,7 @@ public sealed class DockSession : IDisposable
             {
                 if (action.Kind == ActionKind.Notify)
                 {
-                    UserAlerts.Show("WinDock", string.IsNullOrWhiteSpace(action.Message) ? UiText.ProfileSwitched : action.Message);
+                    UserAlerts.Show(ProductInfo.Name, string.IsNullOrWhiteSpace(action.Message) ? UiText.ProfileSwitched : action.Message);
                     continue;
                 }
 
@@ -1943,7 +2531,7 @@ public sealed class DockSession : IDisposable
                 {
                     var confirm = MessageBox.Show(
                         UiText.ProfileWantsLaunch(target),
-                        "WinDock",
+                        ProductInfo.Name,
                         MessageBoxButton.OKCancel,
                         MessageBoxImage.Question);
                     if (confirm != MessageBoxResult.OK)
@@ -1958,7 +2546,7 @@ public sealed class DockSession : IDisposable
                 if (!Hub.Shell.TryLaunch(pin))
                 {
                     AppLog.Write($"Profile launch failed: {target}");
-                    UserAlerts.Show("WinDock", UiText.ProfileLaunchFailed);
+                    UserAlerts.Show(ProductInfo.Name, UiText.ProfileLaunchFailed);
                     try
                     {
                         Settings = SettingsEditor.RecordSwitch(
@@ -1980,6 +2568,71 @@ public sealed class DockSession : IDisposable
             {
                 AppLog.Write("Profile action failed.", ex);
             }
+        }
+    }
+
+    private void PulseAlarms()
+    {
+        if (_disposing || _options.SafeMode)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.Now;
+        var settings = Settings;
+        var changed = false;
+        var messages = new List<string>();
+        foreach (var profile in Settings.Profiles)
+        {
+            foreach (var item in profile.Dock.Items)
+            {
+                if (!string.Equals(item.WidgetId, BuiltInWidgets.Alarm, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var alarm = AlarmSettings.Normalize(item.Alarm);
+                if (!alarm.Armed)
+                {
+                    continue;
+                }
+
+                if (_widgetViews.TryGetValue(item.Id, out var view) && view is AlarmWidget widget && widget.IsAlive)
+                {
+                    continue;
+                }
+
+                var updated = AlarmEngine.Resolve(alarm, now, TimeZoneInfo.Local, out var ring);
+                if (!ring && AlarmSettings.Same(updated, alarm))
+                {
+                    continue;
+                }
+
+                settings = SettingsEditor.WithAlarm(settings, profile.Id, item.Id, updated);
+                changed = true;
+                if (ring)
+                {
+                    messages.Add(AlarmFormat.FinishedMessage(alarm.Label));
+                }
+            }
+        }
+
+        if (!changed)
+        {
+            return;
+        }
+
+        Commit(settings);
+        if (messages.Count == 0)
+        {
+            return;
+        }
+
+        SystemSounds.Asterisk.Play();
+        var title = BuiltInWidgets.DisplayName(BuiltInWidgets.Alarm);
+        foreach (var message in messages)
+        {
+            UserAlerts.Show(title, message);
         }
     }
 
@@ -2055,14 +2708,44 @@ public sealed class DockSession : IDisposable
                     net.SettingsChanged -= OnNetworkWidgetChanged;
                 }
 
+                if (view is IDiskConfigurable disk)
+                {
+                    disk.SettingsChanged -= OnDiskWidgetChanged;
+                }
+
+                if (view is IGpuConfigurable gpu)
+                {
+                    gpu.SettingsChanged -= OnGpuWidgetChanged;
+                }
+
+                if (view is IProcessConfigurable processes)
+                {
+                    processes.SettingsChanged -= OnProcessWidgetChanged;
+                }
+
                 if (view is IWeatherConfigurable weather)
                 {
                     weather.SettingsChanged -= OnWeatherChanged;
                 }
 
+                if (view is IStockConfigurable stocks)
+                {
+                    stocks.SettingsChanged -= OnStockWidgetChanged;
+                }
+
+                if (view is IWhiteNoiseConfigurable whiteNoise)
+                {
+                    whiteNoise.SettingsChanged -= OnWhiteNoiseChanged;
+                }
+
                 if (view is IScheduleConfigurable schedule)
                 {
                     schedule.SettingsChanged -= OnScheduleChanged;
+                }
+
+                if (view is IBingWallpaperConfigurable bingConfig)
+                {
+                    bingConfig.SettingsChanged -= OnBingWallpaperChanged;
                 }
 
                 if (view is NotesWidget notes)

@@ -105,12 +105,20 @@ public static class SettingsValidator
             ? settings.ActiveProfileId
             : DefaultProfiles.GeneralId;
 
+        var license = settings.License;
+
         return new AppSettings
         {
             SchemaVersion = settings.SchemaVersion == 0 ? SettingsSchema.CurrentVersion : settings.SchemaVersion,
             Ui = settings.Ui,
             Privacy = settings.Privacy,
-            Hotkeys = settings.Hotkeys,
+            License = license,
+            Hotkeys = settings.Hotkeys with
+            {
+                NextProfile = null,
+                PreviousProfile = null,
+                UndoProfile = null
+            },
             ManualOverride = settings.ManualOverride,
             ActiveProfileId = active,
             LastProfileId = settings.LastProfileId,
@@ -118,7 +126,7 @@ public static class SettingsValidator
             ManualOverrideFocusActive = settings.ManualOverrideFocusActive,
             ManualOverrideTopologyKey = settings.ManualOverrideTopologyKey,
             Profiles = profiles,
-            SwitchHistory = settings.SwitchHistory
+            SwitchHistory = []
         };
     }
 
@@ -145,7 +153,7 @@ public static class SettingsValidator
             }
 
             var widgets = profile.Widgets.Where(widget => BuiltInWidgets.IsKnown(widget.Id)).ToArray();
-            var items = profile.Dock.Items.Where(IsValidDockItem).ToArray();
+            var items = DedupSingletons(profile.Dock.Items.Where(IsValidDockItem));
             var dockIds = items.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
             var hidden = (profile.HiddenWidgets ?? [])
                 .Where(item => SettingsEditor.IsNotesChip(item) && IsValidDockItem(item) && dockIds.Add(item.Id))
@@ -168,6 +176,26 @@ public static class SettingsValidator
                 Dock = profile.Dock with { Items = items }
             };
         }
+    }
+
+    private static DockItem[] DedupSingletons(IEnumerable<DockItem> items)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<DockItem>();
+        foreach (var item in items)
+        {
+            if (item.Type == DockItemType.WidgetChip
+                && !string.IsNullOrWhiteSpace(item.WidgetId)
+                && BuiltInWidgets.IsSingleton(item.WidgetId)
+                && !seen.Add(item.WidgetId))
+            {
+                continue;
+            }
+
+            result.Add(item);
+        }
+
+        return result.ToArray();
     }
 
     private static bool IsValidDockItem(DockItem item) => item.Type switch

@@ -185,35 +185,17 @@ public sealed class Win32ShellLaunch : IShellLaunch
             return paths;
         }
 
-        Process[] processes;
-        try
+        foreach (var process in SystemProcessTable.ReadRecent())
         {
-            processes = Process.GetProcesses();
-        }
-        catch (Exception)
-        {
-            return paths;
-        }
+            if (!processNames.Contains(process.Name))
+            {
+                continue;
+            }
 
-        foreach (var process in processes)
-        {
-            try
+            var image = NativeMethods.QueryProcessImage(process.Pid);
+            if (!string.IsNullOrWhiteSpace(image))
             {
-                if (processNames.Contains(process.ProcessName))
-                {
-                    var image = NativeMethods.QueryProcessImage(process.Id);
-                    if (!string.IsNullOrWhiteSpace(image))
-                    {
-                        paths.Add(DockPins.NormalizePath(image));
-                    }
-                }
-            }
-            catch (Exception)
-            {
-            }
-            finally
-            {
-                process.Dispose();
+                paths.Add(DockPins.NormalizePath(image));
             }
         }
 

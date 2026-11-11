@@ -139,7 +139,7 @@ public static partial class WidgetChrome
 
     public static Style CreateScrollBarStyle(bool isLight)
     {
-        if (ScrollBarStyles.TryGetValue(isLight, out var cached))
+        if (ScrollBarStyles.TryGetValue(isLight, out var cached) && (cached.Dispatcher == null || cached.Dispatcher.CheckAccess()))
         {
             return cached;
         }

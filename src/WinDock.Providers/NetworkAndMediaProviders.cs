@@ -26,6 +26,14 @@ public sealed class NetworkInterfaceSampler : INetworkProvider, IDisposable
     public event EventHandler<NetworkSnapshot>? Updated;
 
     private bool _collectDetails = true;
+    private bool _collectWifi;
+    private bool _quiet;
+
+    public void SetQuiet(bool quiet)
+    {
+        _quiet = quiet;
+        ApplySamplingMode();
+    }
 
     public bool CollectDetails
     {
@@ -33,6 +41,16 @@ public sealed class NetworkInterfaceSampler : INetworkProvider, IDisposable
         set
         {
             _collectDetails = value;
+            ApplySamplingMode();
+        }
+    }
+
+    public bool CollectWifi
+    {
+        get => _collectWifi;
+        set
+        {
+            _collectWifi = value;
             ApplySamplingMode();
         }
     }
@@ -92,9 +110,10 @@ public sealed class NetworkInterfaceSampler : INetworkProvider, IDisposable
             return;
         }
 
-        if (CollectDetails)
+        if (CollectDetails || CollectWifi)
         {
-            _timer.Change(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+            var period = _quiet ? TimeSpan.FromSeconds(10) : TimeSpan.FromSeconds(1);
+            _timer.Change(period, period);
             return;
         }
 
@@ -133,10 +152,13 @@ public sealed class NetworkInterfaceSampler : INetworkProvider, IDisposable
     {
         if (!CollectDetails)
         {
+            var wifi = CollectWifi ? TryWifi() : default;
             return new NetworkSnapshot
             {
                 Timestamp = DateTimeOffset.UtcNow,
-                IsConnected = NetworkInterface.GetIsNetworkAvailable()
+                IsConnected = NetworkInterface.GetIsNetworkAvailable(),
+                IsWifi = wifi.IsWifi,
+                WifiSignalPercent = wifi.Percent
             };
         }
 
@@ -192,6 +214,7 @@ public sealed class NetworkInterfaceSampler : INetworkProvider, IDisposable
             best ??= candidates.FirstOrDefault();
             _recvHistory = NetworkHistory.Push(_recvHistory, recvRate);
             _sendHistory = NetworkHistory.Push(_sendHistory, sendRate);
+            var wifi = CollectWifi ? TryWifi() : default;
 
             return new NetworkSnapshot
             {
@@ -201,7 +224,9 @@ public sealed class NetworkInterfaceSampler : INetworkProvider, IDisposable
                 ReceiveBytesPerSecond = recvRate,
                 SendBytesPerSecond = sendRate,
                 ReceiveHistory = _recvHistory,
-                SendHistory = _sendHistory
+                SendHistory = _sendHistory,
+                IsWifi = wifi.IsWifi,
+                WifiSignalPercent = wifi.Percent
             };
         }
         catch (Exception)
@@ -213,6 +238,25 @@ public sealed class NetworkInterfaceSampler : INetworkProvider, IDisposable
                 ReceiveHistory = _recvHistory,
                 SendHistory = _sendHistory
             };
+        }
+    }
+
+    private static (bool IsWifi, int? Percent) TryWifi()
+    {
+        try
+        {
+            var profile = Windows.Networking.Connectivity.NetworkInformation.GetInternetConnectionProfile();
+            if (profile?.IsWlanConnectionProfile != true)
+            {
+                return (false, null);
+            }
+
+            var bars = profile.GetSignalBars();
+            return (true, bars is null ? null : Math.Clamp(bars.Value * 20, 0, 100));
+        }
+        catch (Exception)
+        {
+            return (false, null);
         }
     }
 
@@ -252,7 +296,7 @@ public sealed class GsmtcMediaProvider : IMediaProvider, IDisposable
     {
         _poll = new System.Threading.Timer(_ => _ = TickAsync(), null, Timeout.Infinite, Timeout.Infinite);
         _thumbDirectory = thumbDirectory
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WinDock", "media-thumbs");
+            ?? ProductInfo.LocalData("media-thumbs");
     }
 
     public MediaSessionSnapshot? Current { get; private set; }
@@ -361,7 +405,11 @@ public sealed class GsmtcMediaProvider : IMediaProvider, IDisposable
         try
         {
             InspectGsm(out var playing, out var idle);
-            var local = MediaTransportFallback.TrySnapshot(_transportPlaying);
+            MediaSessionSnapshot? local = null;
+            if (playing is null)
+            {
+                local = MediaTransportFallback.TrySnapshot(_transportPlaying);
+            }
             var choice = MediaPlaybackPolicy.Choose(
                 gsmPlaying: playing is not null,
                 localTitled: MediaPlaybackPolicy.IsLocalTitled(local),

@@ -209,3 +209,15 @@ public static class BingWallpaperArchive
         return chars.Length == 0 ? "bing" : new string(chars);
     }
 }
+
+public sealed record BingWallpaperSettings
+{
+    public bool AutoApplyDaily { get; init; }
+
+    public string? LastAppliedKey { get; init; }
+
+    public static BingWallpaperSettings Default { get; } = new();
+
+    public static BingWallpaperSettings Normalize(BingWallpaperSettings? settings) =>
+        settings ?? Default;
+}

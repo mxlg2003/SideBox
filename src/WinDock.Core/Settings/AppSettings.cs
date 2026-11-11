@@ -8,6 +8,8 @@ public sealed record AppSettings
 
     public PrivacySettings Privacy { get; init; } = new();
 
+    public LicenseSettings License { get; init; } = new();
+
     public HotkeySettings Hotkeys { get; init; } = new();
 
     public ManualOverrideSettings ManualOverride { get; init; } = new();
@@ -40,6 +42,27 @@ public sealed record UiSettings
     public DockMode DockMode { get; init; } = DockMode.Overlay;
 }
 
+public sealed record LicenseSettings
+{
+    public string ApiBase { get; init; } = "https://sidebox.microsoftware.app";
+
+    public string DeviceId { get; init; } = "";
+
+    public string? Code { get; init; }
+
+    public string Edition { get; init; } = "free";
+
+    public bool Permanent { get; init; }
+
+    public DateTimeOffset? ExpiresAt { get; init; }
+
+    public string? Email { get; init; }
+
+    public int DeviceLimit { get; init; }
+
+    public int DeviceCount { get; init; }
+}
+
 public sealed record PrivacySettings
 {
     public bool MediaRead { get; init; }
@@ -57,11 +80,11 @@ public sealed record PrivacySettings
 
 public sealed record HotkeySettings
 {
-    public string? NextProfile { get; init; } = "Win+Shift+D";
+    public string? NextProfile { get; init; }
 
     public string? PreviousProfile { get; init; }
 
-    public string? UndoProfile { get; init; } = "Win+Shift+Z";
+    public string? UndoProfile { get; init; }
 
     public string? RevealDock { get; init; } = "Win+Shift+A";
 }

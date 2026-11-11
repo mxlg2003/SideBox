@@ -22,9 +22,24 @@ public interface IProviderHub : IDisposable
 
     IBingWallpaperProvider Bing { get; }
 
+    IWallpaperProvider Wallpaper { get; }
+
     IWeatherProvider Weather { get; }
 
+    IStockProvider Stocks { get; }
+
+    IDiskProvider Disk { get; }
+
+    IGpuProvider Gpu { get; }
+
+    IProcessListProvider Processes { get; }
+
     IShellLaunch Shell { get; }
+
+    /// <summary>
+    /// Stretch heavy samplers while the dock is auto-hidden or yielding to fullscreen.
+    /// </summary>
+    void SetQuietSampling(bool quiet);
 }
 
 public interface IFocusProvider
@@ -108,6 +123,19 @@ public interface IPerfSampler
     void Start();
 
     void Stop();
+
+    void SetOptions(PerfSampleOptions options);
+}
+
+public sealed record PerfSampleOptions
+{
+    public bool PerCore { get; init; }
+
+    public bool Frequency { get; init; }
+
+    public bool Commit { get; init; }
+
+    public static PerfSampleOptions Default { get; } = new();
 }
 
 public sealed class PerfSnapshot
@@ -129,6 +157,18 @@ public sealed class PerfSnapshot
     public ulong MemoryUsedBytes { get; init; }
 
     public ulong MemoryTotalBytes { get; init; }
+
+    public double FrequencyMhz { get; init; }
+
+    public bool FrequencyAvailable { get; init; }
+
+    public IReadOnlyList<double> CorePercents { get; init; } = [];
+
+    public ulong CommitUsedBytes { get; init; }
+
+    public ulong CommitLimitBytes { get; init; }
+
+    public bool CommitAvailable { get; init; }
 }
 
 public interface INetworkProvider
@@ -143,6 +183,9 @@ public interface INetworkProvider
 
     /// <summary>When false, sample connectivity only — do not enumerate adapters or rates.</summary>
     bool CollectDetails { get; set; }
+
+    /// <summary>When true, query Wi-Fi signal quality for the current connection.</summary>
+    bool CollectWifi { get; set; }
 }
 
 public sealed class NetworkSnapshot
@@ -160,6 +203,10 @@ public sealed class NetworkSnapshot
     public IReadOnlyList<double> ReceiveHistory { get; init; } = [];
 
     public IReadOnlyList<double> SendHistory { get; init; } = [];
+
+    public bool IsWifi { get; init; }
+
+    public int? WifiSignalPercent { get; init; }
 }
 
 public interface IPowerProvider
@@ -173,6 +220,19 @@ public interface IPowerProvider
     void Stop();
 
     void Refresh();
+
+    void SetOptions(PowerSampleOptions options);
+}
+
+public sealed record PowerSampleOptions
+{
+    public bool Watts { get; init; }
+
+    public bool Remaining { get; init; }
+
+    public bool Health { get; init; }
+
+    public static PowerSampleOptions Default { get; } = new();
 }
 
 public sealed record PowerSnapshot
@@ -184,6 +244,12 @@ public sealed record PowerSnapshot
     public bool OnAcPower { get; init; }
 
     public int? PercentRemaining { get; init; }
+
+    public int? ChargeRateMilliwatts { get; init; }
+
+    public int? RemainingSeconds { get; init; }
+
+    public int? HealthPercent { get; init; }
 
     public IReadOnlyList<PowerDeviceSnapshot> Devices { get; init; } = [];
 }
@@ -220,6 +286,16 @@ public interface IBingWallpaperProvider
 
     Task SelectRelativeAsync(int delta, CancellationToken cancellationToken = default);
 
+    Task SelectIndexAsync(int index, CancellationToken cancellationToken = default);
+
+    string? GetLocalPath(BingWallpaperImage? image);
+
+    bool AutoApplyDaily { get; set; }
+
+    string? LastAppliedKey { get; set; }
+
+    Task<bool> CheckAndAutoApplyAsync(CancellationToken cancellationToken = default);
+
     Task<bool> TryApplyCurrentAsync(CancellationToken cancellationToken = default);
 
     Task<bool> TryApplyTodayAsync(CancellationToken cancellationToken = default);
@@ -227,6 +303,31 @@ public interface IBingWallpaperProvider
     bool CanRestorePreviousWallpaper { get; }
 
     Task<bool> TryRestorePreviousAsync(CancellationToken cancellationToken = default);
+}
+
+public interface IWallpaperProvider
+{
+    WallpaperSnapshot Current { get; }
+
+    event EventHandler? Changed;
+
+    Task RefreshAsync(CancellationToken cancellationToken = default);
+
+    Task SelectNextAsync(CancellationToken cancellationToken = default);
+
+    Task SelectPreviousAsync(CancellationToken cancellationToken = default);
+
+    Task SelectIndexAsync(int index, CancellationToken cancellationToken = default);
+
+    Task ApplySettingsAsync(WallpaperSettings settings, CancellationToken cancellationToken = default);
+
+    Task<bool> TryApplyCurrentDesktopAsync(CancellationToken cancellationToken = default);
+
+    bool CanRestoreOriginalWallpaper { get; }
+
+    Task<bool> TryRestoreOriginalDesktopAsync(CancellationToken cancellationToken = default);
+
+    string? GetLocalPath(WallpaperItem? item);
 }
 
 public sealed class BingWallpaperImage
@@ -297,6 +398,10 @@ public interface IWeatherProvider
 
     bool AllowAutoLocate { get; set; }
 
+    WeatherSnapshot? SnapshotFor(WeatherSettings settings);
+
+    void Watch(IReadOnlyList<WeatherSettings> settings);
+
     void Start();
 
     void Stop();
@@ -304,4 +409,67 @@ public interface IWeatherProvider
     Task<WeatherSnapshot?> RefreshAsync(WeatherSettings settings, bool force = false, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<WeatherCityItem>> SearchCitiesAsync(string query, CancellationToken cancellationToken = default);
+}
+
+public interface IStockProvider
+{
+    event EventHandler? Changed;
+
+    StockQuote? QuoteFor(string id);
+
+    StockSeries? SeriesFor(string id, StockRange range);
+
+    void Watch(IReadOnlyList<StockSymbol> symbols);
+
+    void Start();
+
+    void Stop();
+
+    void SetQuiet(bool quiet);
+
+    Task RefreshQuotesAsync(CancellationToken cancellationToken = default);
+
+    Task<StockSeries?> LoadSeriesAsync(StockSymbol symbol, StockRange range, bool force = false, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<StockSymbol>> SearchAsync(string query, CancellationToken cancellationToken = default);
+}
+
+public interface IDiskProvider
+{
+    DiskSnapshot Current { get; }
+
+    event EventHandler<DiskSnapshot>? Updated;
+
+    void Start();
+
+    void Stop();
+
+    void SetOptions(DiskSampleOptions options);
+}
+
+public interface IGpuProvider
+{
+    GpuSnapshot Current { get; }
+
+    event EventHandler<GpuSnapshot>? Updated;
+
+    void Start();
+
+    void Stop();
+
+    void SetOptions(GpuSampleOptions options);
+}
+
+public interface IProcessListProvider
+{
+    ProcessListSnapshot Current { get; }
+
+    event EventHandler<ProcessListSnapshot>? Updated;
+
+    void Start();
+
+    void Stop();
+
+    /// <summary>When true, the process list flyout is open and samples stay on the short interval.</summary>
+    void SetLive(bool live);
 }

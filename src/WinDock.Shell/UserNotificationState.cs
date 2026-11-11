@@ -32,10 +32,7 @@ public static class UserNotificationState
         {
             if (SHQueryUserNotificationState(out var state) == 0)
             {
-                if (state is QunsD3dFullscreen or QunsPresentation)
-                {
-                    return true;
-                }
+                return state is QunsD3dFullscreen or QunsPresentation;
             }
         }
         catch (Exception)

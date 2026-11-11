@@ -8,25 +8,41 @@ public sealed class ProviderHub : IProviderHub
     private readonly GsmtcMediaProvider _media;
     private readonly NetworkInterfaceSampler _network;
     private readonly BingWallpaperProvider _bing;
+    private readonly WallpaperService _wallpaper;
     private readonly WeatherProvider _weather;
+    private readonly PerformanceCounterSampler _perf;
+    private readonly DiskSampler _disk;
+    private readonly GpuSampler _gpu;
+    private readonly ProcessListSampler _processes;
+    private readonly StockProvider _stocks;
 
-    public ProviderHub(IPermissionGate permissions, INotesStore notes, string? bingCacheDirectory = null, string? iconCacheDirectory = null)
+    public ProviderHub(IPermissionGate permissions, INotesStore notes, string? bingCacheDirectory = null, string? iconCacheDirectory = null, string? wallpaperCacheDirectory = null)
     {
         Permissions = permissions;
         Focus = new WinRtFocusProvider();
         _media = new GsmtcMediaProvider();
         Media = new GatedMediaProvider(permissions, _media);
-        Perf = new PerformanceCounterSampler();
+        Perf = _perf = new PerformanceCounterSampler();
         _network = new NetworkInterfaceSampler();
         Network = new GatedNetworkProvider(permissions, _network);
         Power = new Win32PowerProvider();
         Clock = new LocalClockProvider();
         Notes = notes;
         Bing = _bing = new BingWallpaperProvider(bingCacheDirectory
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WinDock", "bing-wallpaper"));
+            ?? ProductInfo.LocalData("bing-wallpaper"));
+        Wallpaper = _wallpaper = new WallpaperService(wallpaperCacheDirectory
+            ?? ProductInfo.LocalData("wallpapers"), _bing);
         Weather = _weather = new WeatherProvider();
+        _disk = new DiskSampler();
+        Disk = _disk;
+        _gpu = new GpuSampler();
+        Gpu = _gpu;
+        _processes = new ProcessListSampler(iconCacheDirectory
+            ?? ProductInfo.LocalData("icon-cache"));
+        Processes = new GatedProcessListProvider(permissions, _processes);
+        Stocks = _stocks = new StockProvider();
         Shell = new Win32ShellLaunch(iconCacheDirectory
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WinDock", "icon-cache"));
+            ?? ProductInfo.LocalData("icon-cache"));
     }
 
     public IPermissionGate Permissions { get; }
@@ -47,9 +63,29 @@ public sealed class ProviderHub : IProviderHub
 
     public IBingWallpaperProvider Bing { get; }
 
+    public IWallpaperProvider Wallpaper { get; }
+
     public IWeatherProvider Weather { get; }
 
+    public IDiskProvider Disk { get; }
+
+    public IGpuProvider Gpu { get; }
+
+    public IProcessListProvider Processes { get; }
+
+    public IStockProvider Stocks { get; }
+
     public IShellLaunch Shell { get; }
+
+    public void SetQuietSampling(bool quiet)
+    {
+        _perf.SetQuiet(quiet);
+        _network.SetQuiet(quiet);
+        _disk.SetQuiet(quiet);
+        _gpu.SetQuiet(quiet);
+        _processes.SetQuiet(quiet);
+        _stocks.SetQuiet(quiet);
+    }
 
     public void Dispose()
     {
@@ -71,7 +107,12 @@ public sealed class ProviderHub : IProviderHub
         _media.Dispose();
         _network.Dispose();
         _bing.Dispose();
+        _wallpaper.Dispose();
         _weather.Dispose();
+        _disk.Dispose();
+        _gpu.Dispose();
+        _processes.Dispose();
+        _stocks.Dispose();
     }
 }
 
@@ -81,22 +122,46 @@ public sealed class WinRtFocusProvider : IFocusProvider, IDisposable
 
     public WinRtFocusProvider()
     {
-        try
-        {
-            IsSupported = Windows.UI.Shell.FocusSessionManager.IsSupported;
-            if (!IsSupported)
-            {
-                return;
-            }
-
-            _manager = Windows.UI.Shell.FocusSessionManager.GetDefault();
-            IsFocusActive = _manager.IsFocusActive;
-            _manager.IsFocusActiveChanged += OnIsFocusActiveChanged;
-        }
-        catch (Exception)
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621))
         {
             IsSupported = false;
             IsFocusActive = false;
+            return;
+        }
+
+        try
+        {
+            InitFocusSession(out _manager, out var isSupported, out var isFocusActive);
+            IsSupported = isSupported;
+            IsFocusActive = isFocusActive;
+        }
+        catch (Exception)
+        {
+            _manager = null;
+            IsSupported = false;
+            IsFocusActive = false;
+        }
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void InitFocusSession(
+        out Windows.UI.Shell.FocusSessionManager? manager,
+        out bool isSupported,
+        out bool isFocusActive)
+    {
+        manager = null;
+        isSupported = Windows.UI.Shell.FocusSessionManager.IsSupported;
+        if (!isSupported)
+        {
+            isFocusActive = false;
+            return;
+        }
+
+        manager = Windows.UI.Shell.FocusSessionManager.GetDefault();
+        isFocusActive = manager?.IsFocusActive ?? false;
+        if (manager is not null)
+        {
+            manager.IsFocusActiveChanged += OnIsFocusActiveChanged;
         }
     }
 
@@ -225,6 +290,10 @@ public sealed class StubPerfSampler : IPerfSampler
     public void Stop()
     {
     }
+
+    public void SetOptions(PerfSampleOptions options)
+    {
+    }
 }
 
 public sealed class StubNetworkProvider : INetworkProvider
@@ -250,6 +319,8 @@ public sealed class StubNetworkProvider : INetworkProvider
     }
 
     public bool CollectDetails { get; set; }
+
+    public bool CollectWifi { get; set; }
 }
 
 public sealed class StubPowerProvider : IPowerProvider
@@ -276,6 +347,10 @@ public sealed class StubPowerProvider : IPowerProvider
     }
 
     public void Refresh()
+    {
+    }
+
+    public void SetOptions(PowerSampleOptions options)
     {
     }
 }

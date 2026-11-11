@@ -6,11 +6,79 @@ namespace WinDock.Infrastructure;
 
 public static class AppPaths
 {
-    public static string RoamingDirectory { get; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WinDock");
+    static AppPaths()
+    {
+        RoamingDirectory = Resolve(Environment.SpecialFolder.ApplicationData);
+        LocalDirectory = Resolve(Environment.SpecialFolder.LocalApplicationData);
+    }
 
-    public static string LocalDirectory { get; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WinDock");
+    public static string RoamingDirectory { get; }
+
+    public static string LocalDirectory { get; }
+
+    private static string Resolve(Environment.SpecialFolder folder)
+    {
+        var root = Environment.GetFolderPath(folder);
+        var current = Path.Combine(root, ProductInfo.DataFolderName);
+        var legacy = Path.Combine(root, ProductInfo.LegacyDataFolderName);
+        var legacy2 = Path.Combine(root, ProductInfo.LegacyDataFolderName2);
+        TryMigrateDirectory(legacy, current);
+        TryMigrateDirectory(legacy2, current);
+        return current;
+    }
+
+    private static void TryMigrateDirectory(string from, string to)
+    {
+        try
+        {
+            if (!Directory.Exists(from))
+            {
+                return;
+            }
+
+            var fromFull = Path.GetFullPath(from);
+            var toFull = Path.GetFullPath(to);
+            if (string.Equals(fromFull, toFull, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (!Directory.Exists(to))
+            {
+                var parent = Path.GetDirectoryName(to);
+                if (!string.IsNullOrWhiteSpace(parent))
+                {
+                    Directory.CreateDirectory(parent);
+                }
+
+                Directory.Move(from, to);
+                return;
+            }
+
+            CopyMissing(from, to);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private static void CopyMissing(string from, string to)
+    {
+        Directory.CreateDirectory(to);
+        foreach (var file in Directory.EnumerateFiles(from))
+        {
+            var dest = Path.Combine(to, Path.GetFileName(file));
+            if (!File.Exists(dest))
+            {
+                File.Copy(file, dest);
+            }
+        }
+
+        foreach (var directory in Directory.EnumerateDirectories(from))
+        {
+            CopyMissing(directory, Path.Combine(to, Path.GetFileName(directory)));
+        }
+    }
 
     public static string SettingsFile => Path.Combine(RoamingDirectory, "settings.json");
 
@@ -25,6 +93,8 @@ public static class AppPaths
     public static string IconCacheDirectory => Path.Combine(LocalDirectory, "icon-cache");
 
     public static string BingWallpaperDirectory => Path.Combine(LocalDirectory, "bing-wallpaper");
+
+    public static string WallpaperDirectory => Path.Combine(LocalDirectory, "wallpapers");
 
     public static string MediaThumbDirectory => Path.Combine(LocalDirectory, "media-thumbs");
 }
@@ -46,7 +116,7 @@ public static class AppLog
 
             lock (Gate)
             {
-                File.AppendAllText(Path.Combine(AppPaths.LogsDirectory, $"windock-{DateTime.Now:yyyyMMdd}.log"), line + Environment.NewLine);
+                File.AppendAllText(Path.Combine(AppPaths.LogsDirectory, $"sidebox-{DateTime.Now:yyyyMMdd}.log"), line + Environment.NewLine);
             }
         }
         catch (Exception)
@@ -286,6 +356,7 @@ public sealed class JsonSettingsStore : ISettingsStore
                 SchemaVersion = SettingsSchema.CurrentVersion,
                 Ui = settings.Ui,
                 Privacy = settings.Privacy,
+                License = settings.License,
                 Hotkeys = settings.Hotkeys,
                 ManualOverride = settings.ManualOverride,
                 ActiveProfileId = settings.ActiveProfileId,

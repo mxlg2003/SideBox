@@ -13,20 +13,30 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
     private readonly HttpClient _http;
     private readonly string _cacheDirectory;
     private readonly string _backupFile;
+    private readonly string _autoFile;
     private readonly SemaphoreSlim _mutex = new(1, 1);
     private readonly object _gate = new();
+    private readonly System.Threading.Timer _autoTimer;
     private BingWallpaperSnapshot _current = new();
     private DateTimeOffset _catalogFetchedAt;
+    private bool _autoApplyDaily;
+    private string? _lastAppliedKey;
     private bool _disposed;
 
     public BingWallpaperProvider(string cacheDirectory)
     {
         _cacheDirectory = cacheDirectory;
-        _backupFile = Path.Combine(
-            Path.GetDirectoryName(cacheDirectory) ?? cacheDirectory,
-            "wallpaper-backup.json");
+        var parent = Path.GetDirectoryName(cacheDirectory) ?? cacheDirectory;
+        _backupFile = Path.Combine(parent, "wallpaper-backup.json");
+        _autoFile = Path.Combine(parent, "wallpaper-auto.json");
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
-        _http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "WinDock/1.0 (Windows; Bing wallpaper)");
+        _http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", $"{ProductInfo.Name}/1.0 (Windows; Bing wallpaper)");
+        LoadAutoState();
+        _autoTimer = new System.Threading.Timer(
+            _ => _ = CheckAndAutoApplyAsync(CancellationToken.None),
+            null,
+            TimeSpan.FromMinutes(2),
+            TimeSpan.FromMinutes(30));
     }
 
     public BingWallpaperSnapshot Current
@@ -48,6 +58,135 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
     public Task SelectRelativeAsync(int delta, CancellationToken cancellationToken = default) =>
         WithLock(() => SelectCore(delta, cancellationToken), cancellationToken);
 
+    public Task SelectIndexAsync(int index, CancellationToken cancellationToken = default) =>
+        WithLock(() => SelectIndexCore(index, cancellationToken), cancellationToken);
+
+    public string? GetLocalPath(BingWallpaperImage? image)
+    {
+        if (image is null)
+        {
+            return null;
+        }
+
+        var uhdPath = Path.Combine(_cacheDirectory, BingWallpaperArchive.FileStem(image) + "-uhd.jpg");
+        if (File.Exists(uhdPath))
+        {
+            return uhdPath;
+        }
+
+        var stdPath = Path.Combine(_cacheDirectory, BingWallpaperArchive.FileStem(image) + ".jpg");
+        if (File.Exists(stdPath))
+        {
+            return stdPath;
+        }
+
+        return null;
+    }
+
+    public bool AutoApplyDaily
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _autoApplyDaily;
+            }
+        }
+        set
+        {
+            var changed = false;
+            lock (_gate)
+            {
+                if (_autoApplyDaily != value)
+                {
+                    _autoApplyDaily = value;
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                SaveAutoState();
+                if (value)
+                {
+                    _ = CheckAndAutoApplyAsync(CancellationToken.None);
+                }
+            }
+        }
+    }
+
+    public string? LastAppliedKey
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _lastAppliedKey;
+            }
+        }
+        set
+        {
+            lock (_gate)
+            {
+                _lastAppliedKey = value;
+            }
+            SaveAutoState();
+        }
+    }
+
+    public Task<bool> CheckAndAutoApplyAsync(CancellationToken cancellationToken = default) =>
+        WithLock(() => CheckAndAutoApplyCore(cancellationToken), cancellationToken);
+
+    private async Task<bool> CheckAndAutoApplyCore(CancellationToken cancellationToken)
+    {
+        if (!AutoApplyDaily)
+        {
+            return false;
+        }
+
+        if (Current.Images.Count == 0)
+        {
+            await RefreshCore(force: false, cancellationToken).ConfigureAwait(false);
+        }
+
+        var snapshot = Current;
+        if (snapshot.Images.Count == 0 || snapshot.Images[0] is not { } todayImage)
+        {
+            return false;
+        }
+
+        if (string.Equals(LastAppliedKey, todayImage.Key, StringComparison.Ordinal)
+            || string.Equals(snapshot.AppliedKey, todayImage.Key, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var todayStem = BingWallpaperArchive.FileStem(todayImage);
+        if (Win32DesktopWallpaper.TryCapture(out var currentBackup)
+            && !string.IsNullOrWhiteSpace(currentBackup.Wallpaper)
+            && currentBackup.Wallpaper.Contains(todayStem, StringComparison.OrdinalIgnoreCase))
+        {
+            lock (_gate)
+            {
+                _lastAppliedKey = todayImage.Key;
+            }
+            SaveAutoState();
+            return true;
+        }
+
+        var ok = await ApplyCore(today: true, cancellationToken).ConfigureAwait(false);
+        if (ok)
+        {
+            lock (_gate)
+            {
+                _lastAppliedKey = todayImage.Key;
+            }
+            SaveAutoState();
+        }
+
+        return ok;
+    }
+
     public Task<bool> TryApplyCurrentAsync(CancellationToken cancellationToken = default) =>
         WithLock(() => ApplyCore(today: false, cancellationToken), cancellationToken);
 
@@ -67,6 +206,7 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
         }
 
         _disposed = true;
+        _autoTimer.Dispose();
         _http.Dispose();
         _mutex.Dispose();
     }
@@ -128,6 +268,12 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
             };
             Publish(next);
             await EnsureLocalAsync(next, cancellationToken).ConfigureAwait(false);
+            PrefetchCatalog(images);
+
+            if (AutoApplyDaily)
+            {
+                _ = CheckAndAutoApplyCore(cancellationToken);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -144,6 +290,29 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
                 Error = UiText.BingLoadFailed
             });
         }
+    }
+
+    private void PrefetchCatalog(IReadOnlyList<BingWallpaperImage> images)
+    {
+        _ = Task.Run(async () =>
+        {
+            foreach (var img in images)
+            {
+                try
+                {
+                    var stdPath = Path.Combine(_cacheDirectory, BingWallpaperArchive.FileStem(img) + ".jpg");
+                    if (!File.Exists(stdPath))
+                    {
+                        await EnsureFileAsync(img.ImageUrl, stdPath, CancellationToken.None).ConfigureAwait(false);
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            Publish(Current);
+        });
     }
 
     private async Task SelectCore(int delta, CancellationToken cancellationToken)
@@ -163,6 +332,36 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
         {
             Images = snapshot.Images,
             SelectedIndex = BingWallpaperArchive.WrapIndex(snapshot.SelectedIndex + delta, snapshot.Images.Count),
+            AppliedKey = snapshot.AppliedKey,
+            IsBusy = true
+        };
+        Publish(next);
+        await EnsureLocalAsync(next, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task SelectIndexCore(int index, CancellationToken cancellationToken)
+    {
+        if (Current.Images.Count == 0)
+        {
+            await RefreshCore(force: false, cancellationToken).ConfigureAwait(false);
+        }
+
+        var snapshot = Current;
+        if (snapshot.Images.Count == 0)
+        {
+            return;
+        }
+
+        var clamped = Math.Clamp(index, 0, snapshot.Images.Count - 1);
+        if (clamped == snapshot.SelectedIndex && !string.IsNullOrWhiteSpace(snapshot.LocalPath))
+        {
+            return;
+        }
+
+        var next = new BingWallpaperSnapshot
+        {
+            Images = snapshot.Images,
+            SelectedIndex = clamped,
             AppliedKey = snapshot.AppliedKey,
             IsBusy = true
         };
@@ -214,12 +413,21 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
 
             TryWriteBackup(previous);
 
+            if (snapshot.Selected is not null)
+            {
+                lock (_gate)
+                {
+                    _lastAppliedKey = snapshot.Selected.Key;
+                }
+                SaveAutoState();
+            }
+
             Publish(new BingWallpaperSnapshot
             {
                 Images = snapshot.Images,
                 SelectedIndex = snapshot.SelectedIndex,
                 LocalPath = local,
-                AppliedKey = snapshot.Selected.Key
+                AppliedKey = snapshot.Selected?.Key
             });
             return true;
         }
@@ -357,9 +565,34 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
         }
     }
 
+    private bool IsCachedBingWallpaper(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            var full = Path.GetFullPath(path);
+            var cache = Path.GetFullPath(_cacheDirectory);
+            return full.StartsWith(cache, StringComparison.OrdinalIgnoreCase)
+                   || full.Contains("bing-wallpaper", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     private void TryWriteBackup(WallpaperBackup backup)
     {
         if (string.IsNullOrWhiteSpace(backup.Wallpaper))
+        {
+            return;
+        }
+
+        if (IsCachedBingWallpaper(backup.Wallpaper) && File.Exists(_backupFile))
         {
             return;
         }
@@ -379,6 +612,51 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
         }
     }
 
+    private void LoadAutoState()
+    {
+        try
+        {
+            if (!File.Exists(_autoFile))
+            {
+                return;
+            }
+
+            var json = File.ReadAllText(_autoFile);
+            var state = JsonSerializer.Deserialize<AutoWallpaperState>(json);
+            if (state is not null)
+            {
+                _autoApplyDaily = state.AutoApplyDaily;
+                _lastAppliedKey = state.LastAppliedKey;
+            }
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private void SaveAutoState()
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(_autoFile);
+            if (!string.IsNullOrWhiteSpace(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            AutoWallpaperState state;
+            lock (_gate)
+            {
+                state = new AutoWallpaperState(_autoApplyDaily, _lastAppliedKey);
+            }
+
+            File.WriteAllText(_autoFile, JsonSerializer.Serialize(state));
+        }
+        catch (Exception)
+        {
+        }
+    }
+
     private void TrimCache(string keepPath)
     {
         try
@@ -387,7 +665,7 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
                 .GetFiles("*.jpg")
                 .OrderByDescending(file => file.LastWriteTimeUtc)
                 .ToList();
-            foreach (var extra in files.Skip(8))
+            foreach (var extra in files.Skip(24))
             {
                 if (!string.Equals(extra.FullName, keepPath, StringComparison.OrdinalIgnoreCase))
                 {
@@ -444,6 +722,8 @@ public sealed class BingWallpaperProvider : IBingWallpaperProvider, IDisposable
 }
 
 internal sealed record WallpaperBackup(string Wallpaper, string Style, string Tile);
+
+internal sealed record AutoWallpaperState(bool AutoApplyDaily, string? LastAppliedKey);
 
 internal static class Win32DesktopWallpaper
 {

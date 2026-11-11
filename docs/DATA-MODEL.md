@@ -1,4 +1,4 @@
-# WinDock 数据模型
+# Sidebox 数据模型
 
 本文是配置与领域对象的唯一说明。C# 类型放在 `WinDock.Core`，JSON 由 `WinDock.Infrastructure` 读写。改字段必须同时改 `schemaVersion` 迁移。
 
@@ -6,13 +6,13 @@
 
 | 用途 | 路径 |
 |---|---|
-| 设置 | `%AppData%\WinDock\settings.json` |
-| 上一份成功设置 | `%AppData%\WinDock\settings.bak` |
-| 便笺 | `%AppData%\WinDock\notes\{id}.txt`；首次打开时若仍有旧版 `notes.txt` 则迁入第一份 |
-| 日志 | `%LocalAppData%\WinDock\logs\` |
-| 图标缓存 | `%LocalAppData%\WinDock\icon-cache\` |
-| Bing 壁纸缓存 | `%LocalAppData%\WinDock\bing-wallpaper\` |
-| 媒体封面 | `%LocalAppData%\WinDock\media-thumbs\` |
+| 设置 | `%AppData%\Sidebox\settings.json` |
+| 上一份成功设置 | `%AppData%\Sidebox\settings.bak` |
+| 便笺 | `%AppData%\Sidebox\notes\{id}.txt`；首次打开时若仍有旧版 `notes.txt` 则迁入第一份 |
+| 日志 | `%LocalAppData%\Sidebox\logs\` |
+| 图标缓存 | `%LocalAppData%\Sidebox\icon-cache\` |
+| Bing 壁纸缓存 | `%LocalAppData%\Sidebox\bing-wallpaper\` |
+| 媒体封面 | `%LocalAppData%\Sidebox\media-thumbs\` |
 
 ## settings.json
 
@@ -80,9 +80,9 @@
 
 - `mediaRead`：允许 Now Playing 显示标题 / 封面 / 播放器名。关闭时仍可尝试播放控制（若会话存在），但不展示元数据。
 - `networkDetails`：允许显示适配器名、速率。关闭则 Network widget 显示「已连接（详情已关）」，并停止枚举适配器。
-- `processNames`：预留。MVP 的 CPU widget 只显示总量，不列出进程。此开关为将来进程列表准备，默认关。
+- `processNames`：进程模块的实验开关打开后，列出名称和占用前必须为 true。默认关，且 `ProcessesEnabled = false` 时模块不在目录和岛面上。系统状态模块仍然只显示 CPU 和内存总量。
 - `crashReports`：预留，默认关。MVP 不上传。
-- `preciseLocation`：天气 stretch 用。默认关，只用手动城市。
+- `preciseLocation`：天气自动定位。默认关，只用手动城市。打开后按出口 IP 估计城市，不是 GPS。
 - `bingDownload`：允许访问 bing.com 下载壁纸并设为桌面。模块首次使用会征求同意。
 
 `IPermissionGate` 在订阅对应 provider 之前检查这些开关。widget 不得自行读取设置文件绕过门闩。`networkDetails=false` 时网络采样只查是否联通，不枚举适配器。`mediaRead=false` 时不抓标题 / 封面。
@@ -109,7 +109,7 @@
   "dock": {
     "edge": "top",
     "monitor": "primary",
-    "autoHide": true,
+    "autoHide": false,
     "peekOnPointer": true,
     "revealHotkey": false,
     "islandLength": null,
@@ -155,13 +155,13 @@
 
 旧配置里的 `url`、`separator` 加载时丢弃；产品暂不提供网址钉和分隔符。
 
-可选：`id`、`title`、`iconPath`、`shortcutPath`（原 `.lnk`，启动时优先 ShellExecute 该快捷方式以保留参数；圆点仍看 `path` 解析出的 exe）、`density`（`expanded` 默认 / `compact`）、`paperColor`（便笺纸色：`yellow` 默认 / `orange` / `pink` / `magenta` / `blue` / `green`）、`timeZoneId`（时钟第二时区，Windows 或 IANA id；缺省仅本地）、`focusTimer`（专注计时器：颜色、专注/短休息/长休息分钟、每几段长休息、结束通知）、`countdown`（倒计时：上次时/分/秒、名称、最多 12 条命名预设）、`alarm`（闹钟：时/分、标签、是否已设定、`ringsAt` UTC 响铃时刻）、`power`（电源：`layout` 为 `status` / `percentageRing` / `iconOnly`，`hiddenDeviceIds` 为岛上隐藏的设备）、`timeProgress`（时间进度：`period` 为 `year` / `month` / `day`，`layout` 为 `bars` / `percentage` / `ring`）、`sysActivity`（系统状态：`layout` 为 `numbers` / `rings` / `bars`）、`network`（网络：`show` 为 `both` / `download` / `upload`，`chartInDock` / `chartInPopup`）。`density` 只对有两种内容模式的模块生效（时钟紧凑为短日期、展开带表盘与星期；正在播放紧凑为播放键、展开为封面与进度；时间进度紧凑为百分比在上、展开为周期与百分比左右排列；网络紧凑为速率、展开带折线；Bing 壁纸紧凑为圆角方形缩略图加前后/应用按钮，展开带较窄标题与日期），不是改卡片高度。`paperColor` 只对便笺生效。`timeZoneId` 只对时钟生效；未知 id 忽略。`focusTimer` 只对专注计时器生效。`countdown` 只对倒计时生效。`alarm` 只对闹钟生效。`power` 只对电源模块生效。`timeProgress` 只对时间进度生效。`sysActivity` 只对系统状态生效。`network` 只对网络模块生效。`id` 缺省时由 store 生成稳定 GUID；同一 `widgetId` 可出现多份，用 `id` 区分。右键：有点击动作才出现「打开模块」；有自定义才出现「自定义」；有双模式才出现「紧凑 / 展开」；均可从 Dock 移除。设置目录点预览或 + 始终追加一份，不切换成移除。文件夹徽标显示标题而不是条目数。
+可选：`id`、`title`、`iconPath`、`shortcutPath`（原 `.lnk`，启动时优先 ShellExecute 该快捷方式以保留参数；圆点仍看 `path` 解析出的 exe）、`density`（`expanded` 默认 / `compact`）、`paperColor`（便笺纸色：`yellow` 默认 / `orange` / `pink` / `magenta` / `blue` / `green`）、`timeZoneId`（时钟第二时区，Windows 或 IANA id；缺省仅本地）、`focusTimer`（专注计时器：颜色、专注/短休息/长休息分钟、每几段长休息、结束通知）、`countdown`（倒计时：上次时/分/秒、名称、最多 12 条命名预设）、`alarm`（闹钟：时/分、标签、是否已设定、`ringsAt` UTC 响铃时刻）、`power`（电源：`layout` 为 `status` / `percentageRing` / `iconOnly`，`hiddenDeviceIds` 为岛上隐藏的设备）、`timeProgress`（时间进度：`period` 为 `year` / `month` / `day`，`layout` 为 `bars` / `percentage` / `ring`）、`sysActivity`（系统状态：`layout` 为 `numbers` / `rings` / `bars`）、`network`（网络：`show` 为 `both` / `download` / `upload`，`chartInDock` / `chartInPopup`）、`whiteNoise`（白噪音：主音量、预设场景、定时关闭分钟数、多轨音量与起停开关）。`density` 只对有两种内容模式的模块生效（时钟紧凑为短日期、展开带表盘与星期；正在播放紧凑为播放键、展开为封面与进度；时间进度紧凑为百分比在上、展开为周期与百分比左右排列；网络紧凑为速率、展开带折线；Bing 壁纸紧凑为圆角方形缩略图加前后/应用按钮，展开带较窄标题与日期；白噪音紧凑为跳动声波与音量、展开带场景名与快捷起停按钮），不是改卡片高度。`paperColor` 只对便笺生效。`timeZoneId` 只对时钟生效；未知 id 忽略。`focusTimer` 只对专注计时器生效。`countdown` 只对倒计时生效。`alarm` 只对闹钟生效。`power` 只对电源生效。`timeProgress` 只对时间进度生效。`sysActivity` 只对系统状态生效。`network` 只对网络生效。`whiteNoise` 只对白噪音生效。`id` 缺省时由 store 生成稳定 GUID；同一 `widgetId` 可出现多份，用 `id` 区分。右键：有点击动作才出现「打开模块」；有自定义才出现「自定义」；有双模式才出现「紧凑 / 展开」；均可从 Dock 移除。设置目录点预览或 + 始终追加一份，不切换成移除。文件夹徽标显示标题而不是条目数。
 
 `dock.islandLength`：可选，岛沿长边的逻辑像素长度。缺省（`null`）按内容自适应；用户拖动两端后写入。双击边缘恢复自适应。长度小于内容时，岛内滚动，右侧（左右条则底部）出现箭头平移模块。
 
 ### Widget 布局
 
-`id` 必须是内置 ID 之一：`clock` `notes` `sysactivity` `network` `power` `nowplaying` `bing` `stopwatch` `countdown` `alarm` `focustimer` `timeprogress`。旧配置里的 `battery` 在加载时改为 `power`（若该 profile 还没有电源）或删除。旧的 `cpu` / `memory` 卡片合并为一份 `sysactivity`。
+`id` 必须是内置 ID 之一：`clock` `notes` `sysactivity` `network` `power` `nowplaying` `bing` `stopwatch` `countdown` `alarm` `focustimer` `timeprogress` `weather` `schedule` `disk` `gpu` `processes` `stocks` `whitenoise`。`nowplaying` 仍是合法 id，但 `NowPlayingEnabled = false` 时目录和岛面不提供。旧配置里的 `battery` 在加载时改为 `power`（若该 profile 还没有电源）或删除。旧的 `cpu` / `memory` 卡片合并为一份 `sysactivity`。
 
 `visible` 表示该类型至少有一份在当前 profile 的 Dock 上（与 `dock.items` 里对应的 `widgetChip` 同步）。同一 `widgetId` 可以有多份卡片。`monitor` / `x` / `y` 保留兼容，模块本身不再使用独立窗口坐标。
 
@@ -230,8 +230,8 @@ Engine 输出，供 Shell / Widgets 应用：
 
 全新安装写入两条：
 
-1. `general`（显示名「日常」）：主屏顶边 Overlay 悬浮岛；新安装默认钉时钟与便笺，并 `autoHide=true`。电源 / 网络 / 正在播放 / Bing / 系统状态在模块目录里。无自动触发器（作为兜底）。**已有用户配置不会被改回出厂布局。** 显示名可改，id 仍是 `general`，不能删除。
-2. `deep-work`（显示名「深度工作」）：JSON 里仍带 Focus 触发器，但产品自动触发关闭时不会自己切过去。显示 `focustimer` 与 `notes`；出厂 `autoHide=true`。可以删除。
+1. `general`（显示名「日常」）：主屏顶边 Overlay 悬浮岛；新安装默认钉时钟与便笺，并 `autoHide=false`。模块目录另有电源、网络、Bing、系统状态、天气、日程、磁盘、GPU、进程、股票。正在播放未上架。无自动触发器（作为兜底）。**已有用户配置不会被改回出厂布局。** 显示名可改，id 仍是 `general`，不能删除。
+2. `deep-work`（显示名「深度工作」）：JSON 里仍带 Focus 触发器，但产品自动触发关闭时不会自己切过去。显示 `focustimer` 与 `notes`；出厂 `autoHide=false`。可以删除。
 
 用户可在设置「高级 → 情景」里复制 / 重命名 / 删除（仅 `ProfilesEnabled` 打开时）。复制后的情景只能手动选中。
 

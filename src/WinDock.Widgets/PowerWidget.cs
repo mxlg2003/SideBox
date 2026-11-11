@@ -9,7 +9,7 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IPowerWidgetConfigurable, IWidgetThemeAware, IIslandLayoutAware, ILocalizable
+public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IPowerWidgetConfigurable, IWidgetThemeAware, IIslandLayoutAware, ILocalizable, IDockEdgeAware
 {
     private const uint Accent = 0xFF0078D4;
     private const uint QuietFill = 0x14000000;
@@ -27,11 +27,11 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         HorizontalAlignment = HorizontalAlignment.Center
     };
     private readonly TextBlock _empty = WidgetCopy.Secondary();
-    private readonly TextBlock _emptyBattery = EmptyBatteryIcon();
+    private readonly PhosphorGlyph _emptyBattery = EmptyBatteryIcon();
     private readonly StackPanel _list = new();
     private readonly StackPanel _layoutOptions = new();
     private readonly StackPanel _deviceChecks = new();
-    private readonly List<(string Layout, Border Row, TextBlock Check)> _layoutMarks = [];
+    private readonly List<(string Layout, Border Row, PhosphorGlyph Check)> _layoutMarks = [];
     private readonly Border _tile;
     private readonly Border _panel;
     private readonly Grid _editorPage;
@@ -43,11 +43,24 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
     private TextBlock _layoutCaption = null!;
     private TextBlock _dockCaption = null!;
     private TextBlock _showAllLabel = null!;
+    private readonly TextBlock _wattsLabel = WidgetCopy.Secondary();
+    private readonly TextBlock _wattsValue = WidgetCopy.Primary();
+    private readonly TextBlock _remainingLabel = WidgetCopy.Secondary();
+    private readonly TextBlock _remainingValue = WidgetCopy.Primary();
+    private readonly TextBlock _healthLabel = WidgetCopy.Secondary();
+    private readonly TextBlock _healthValue = WidgetCopy.Primary();
+    private readonly Grid _wattsRow = new();
+    private readonly Grid _remainingRow = new();
+    private readonly Grid _healthRow = new();
+    private readonly CheckBox _wattsBox = new();
+    private readonly CheckBox _remainingBox = new();
+    private readonly CheckBox _healthBox = new();
     private readonly Dictionary<string, TextBlock> _layoutTitles = new(StringComparer.Ordinal);
     private PowerWidgetSettings _settings = PowerWidgetSettings.Default;
     private IReadOnlyList<PowerDeviceSnapshot> _devices = [];
     private bool _applying;
     private bool _isLight;
+    private bool _side;
     private bool _hidden;
     private bool _hasBattery;
 
@@ -60,6 +73,9 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         _empty.FontSize = 13;
         _empty.HorizontalAlignment = HorizontalAlignment.Center;
         _empty.VerticalAlignment = VerticalAlignment.Center;
+        _wattsLabel.Text = UiText.BatteryWatts;
+        _remainingLabel.Text = UiText.BatteryRemaining;
+        _healthLabel.Text = UiText.BatteryHealth;
         _updated = UiPump.Coalesce<PowerSnapshot>(Dispatcher, Render);
 
         _tile = WidgetChrome.Wrap(new Grid
@@ -110,6 +126,7 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         Loaded += (_, _) =>
         {
             _power.Updated += _updated;
+            ApplyOptions();
             Render(_power.Current);
         };
         Unloaded += (_, _) =>
@@ -133,6 +150,15 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
 
     public event EventHandler<PowerWidgetSettings>? SettingsChanged;
 
+    public void ApplyDockEdge(DockEdge edge)
+    {
+        _side = WidgetChrome.IsSide(edge);
+        _dockDevices.Orientation = _side ? Orientation.Vertical : Orientation.Horizontal;
+        _empty.TextAlignment = _side ? TextAlignment.Center : TextAlignment.Left;
+        _empty.TextWrapping = _side ? TextWrapping.Wrap : TextWrapping.NoWrap;
+        WidgetChrome.FitEdge(_tile, _side, 0, _side ? null : new Thickness(8, 4, 8, 4));
+    }
+
     public void ApplyPaper(string? paper)
     {
     }
@@ -151,6 +177,12 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         _layoutCaption.Text = UiText.Layout;
         _dockCaption.Text = UiText.ShowOnDock;
         _showAllLabel.Text = UiText.ShowAllDevices;
+        _wattsLabel.Text = UiText.BatteryWatts;
+        _remainingLabel.Text = UiText.BatteryRemaining;
+        _healthLabel.Text = UiText.BatteryHealth;
+        _wattsBox.Content = UiText.BatteryWatts;
+        _remainingBox.Content = UiText.BatteryRemaining;
+        _healthBox.Content = UiText.BatteryHealth;
         foreach (var (layout, title) in _layoutTitles)
         {
             title.Text = PowerFormat.LayoutTitle(layout);
@@ -167,6 +199,7 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
     {
         _applying = true;
         _settings = PowerWidgetSettings.Normalize(settings);
+        ApplyOptions();
         Render(_power.Current);
         if (_customizePage.Visibility == Visibility.Visible)
         {
@@ -198,6 +231,41 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         }
 
         SettingsChanged?.Invoke(this, _settings);
+    }
+
+    private void SetExtra(bool? watts = null, bool? remaining = null, bool? health = null)
+    {
+        if (_applying)
+        {
+            return;
+        }
+
+        _settings = _settings with
+        {
+            ShowWatts = watts ?? _settings.ShowWatts,
+            ShowRemaining = remaining ?? _settings.ShowRemaining,
+            ShowHealth = health ?? _settings.ShowHealth
+        };
+        ApplyOptions();
+        Persist();
+        Render(_power.Current);
+    }
+
+    private static void PlaceMetric(Grid row, TextBlock label, TextBlock value)
+    {
+        row.Margin = new Thickness(0, 10, 0, 0);
+        if (row.ColumnDefinitions.Count == 0)
+        {
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        }
+
+        if (row.Children.Count == 0)
+        {
+            row.Children.Add(label);
+            Grid.SetColumn(value, 1);
+            row.Children.Add(value);
+        }
     }
 
     private void Render(PowerSnapshot snapshot)
@@ -236,7 +304,27 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
                 _list.Children.Add(ListRow(device));
             }
         }
+
+        PaintExtras(snapshot);
     }
+
+    private void PaintExtras(PowerSnapshot snapshot)
+    {
+        _wattsValue.Text = PowerFormat.Watts(snapshot.ChargeRateMilliwatts);
+        _remainingValue.Text = PowerFormat.Remaining(snapshot.RemainingSeconds);
+        _healthValue.Text = PowerFormat.Health(snapshot.HealthPercent);
+        _wattsRow.Visibility = _settings.ShowWatts ? Visibility.Visible : Visibility.Collapsed;
+        _remainingRow.Visibility = _settings.ShowRemaining ? Visibility.Visible : Visibility.Collapsed;
+        _healthRow.Visibility = _settings.ShowHealth ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ApplyOptions() =>
+        _power.SetOptions(new PowerSampleOptions
+        {
+            Watts = _settings.ShowWatts,
+            Remaining = _settings.ShowRemaining,
+            Health = _settings.ShowHealth
+        });
 
     private UIElement DockCell(PowerDeviceSnapshot device, string layout)
     {
@@ -337,9 +425,12 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
     private Grid BuildEditor()
     {
         _flyoutTitle = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.Power));
-        var customize = HeaderGlyph("\uE8FD", OpenCustomize);
-        var close = HeaderGlyph("\u00D7", ClosePopup, 18);
+        var customize = WidgetChrome.HeaderIcon(PhosphorIcon.SlidersHorizontal, OpenCustomize);
+        var close = WidgetChrome.HeaderClose(ClosePopup, 18);
         var header = HeaderRow(_flyoutTitle, customize, close);
+        PlaceMetric(_wattsRow, _wattsLabel, _wattsValue);
+        PlaceMetric(_remainingRow, _remainingLabel, _remainingValue);
+        PlaceMetric(_healthRow, _healthLabel, _healthValue);
         var page = new StackPanel
         {
             Children =
@@ -350,7 +441,10 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
                     MaxHeight = 360,
                     VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                     Content = _list
-                }
+                },
+                _wattsRow,
+                _remainingRow,
+                _healthRow
             }
         };
         var grid = new Grid();
@@ -368,7 +462,7 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
             Cursor = Cursors.Hand,
             Children =
             {
-                HeaderGlyph("\uE76B", ShowEditor, 12),
+                WidgetChrome.HeaderIcon(PhosphorIcon.CaretLeft, ShowEditor, 12),
                 _backLabel
             }
         };
@@ -380,7 +474,7 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         _customizeTitle = HeaderLabel(UiText.Customize);
         _customizeTitle.Margin = new Thickness(8, 0, 0, 0);
         _customizeTitle.FontWeight = FontWeights.SemiBold;
-        var close = HeaderGlyph("\u00D7", ClosePopup, 18);
+        var close = WidgetChrome.HeaderClose(ClosePopup, 18);
         var header = HeaderRow(new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -405,7 +499,7 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         };
         var showAll = new Border
         {
-            Height = 34,
+            Height = DockTokens.FlyoutControlHeight,
             CornerRadius = new CornerRadius(DockTokens.IslandCornerRadius),
             Background = TokenBrushes.From(QuietFill),
             Cursor = Cursors.Hand,
@@ -419,6 +513,19 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
             e.Handled = true;
         };
 
+        _wattsBox.Content = UiText.BatteryWatts;
+        _wattsBox.Margin = new Thickness(0, 14, 0, 4);
+        _wattsBox.Checked += (_, _) => SetExtra(watts: true);
+        _wattsBox.Unchecked += (_, _) => SetExtra(watts: false);
+        _remainingBox.Content = UiText.BatteryRemaining;
+        _remainingBox.Margin = new Thickness(0, 4, 0, 4);
+        _remainingBox.Checked += (_, _) => SetExtra(remaining: true);
+        _remainingBox.Unchecked += (_, _) => SetExtra(remaining: false);
+        _healthBox.Content = UiText.BatteryHealth;
+        _healthBox.Margin = new Thickness(0, 4, 0, 4);
+        _healthBox.Checked += (_, _) => SetExtra(health: true);
+        _healthBox.Unchecked += (_, _) => SetExtra(health: false);
+
         var page = new StackPanel
         {
             Children =
@@ -428,7 +535,10 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
                 _layoutOptions,
                 _dockCaption,
                 checks,
-                showAll
+                showAll,
+                _wattsBox,
+                _remainingBox,
+                _healthBox
             }
         };
         var grid = new Grid();
@@ -438,26 +548,24 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
 
     private Border LayoutRow(string layout)
     {
-        var check = new TextBlock
-        {
-            Text = "\uE73E",
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 13,
-            Tag = "tint",
-            Foreground = TokenBrushes.From(Accent),
-            VerticalAlignment = VerticalAlignment.Center,
-            Visibility = Visibility.Collapsed
-        };
-        var glyph = new TextBlock
-        {
-            Text = LayoutGlyph(layout),
-            FontFamily = layout == PowerLayouts.PercentageRing ? WidgetFonts.Ui : new FontFamily("Segoe MDL2 Assets"),
-            FontSize = layout == PowerLayouts.PercentageRing ? 14 : 14,
-            Width = 22,
-            TextAlignment = TextAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 10, 0)
-        };
+        var check = WidgetChrome.AccentCheck(Accent);
+        UIElement glyph = layout == PowerLayouts.PercentageRing
+            ? new TextBlock
+            {
+                Text = "%",
+                FontFamily = WidgetFonts.Ui,
+                FontSize = 14,
+                Width = 22,
+                TextAlignment = TextAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 10, 0)
+            }
+            : new PhosphorGlyph(LayoutGlyph(layout), 14)
+            {
+                Width = 22,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 10, 0)
+            };
         var title = HeaderLabel(PowerFormat.LayoutTitle(layout));
         _layoutTitles[layout] = title;
         var content = new Grid();
@@ -524,6 +632,9 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
 
     private void PaintCustomize()
     {
+        _wattsBox.IsChecked = _settings.ShowWatts;
+        _remainingBox.IsChecked = _settings.ShowRemaining;
+        _healthBox.IsChecked = _settings.ShowHealth;
         foreach (var (layout, row, check) in _layoutMarks)
         {
             var selected = string.Equals(layout, _settings.Layout, StringComparison.Ordinal);
@@ -603,9 +714,13 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
     private void PaintDockEmpty(bool noDevices, bool noneVisible)
     {
         var noBattery = noDevices && !_hasBattery;
-        _emptyBattery.Visibility = noBattery ? Visibility.Visible : Visibility.Collapsed;
-        _empty.Visibility = !noBattery && (noDevices || noneVisible) ? Visibility.Visible : Visibility.Collapsed;
-        if (!noBattery)
+        _emptyBattery.Visibility = Visibility.Collapsed;
+        _empty.Visibility = noBattery || noDevices || noneVisible ? Visibility.Visible : Visibility.Collapsed;
+        if (noBattery)
+        {
+            _empty.Text = PowerFormat.NoBatteryShort;
+        }
+        else if (noDevices || noneVisible)
         {
             _empty.Text = noDevices ? PowerFormat.NoDevices : UiText.AllHidden;
         }
@@ -627,7 +742,7 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         return label;
     }
 
-    private static UIElement ChargingIcon(PowerDeviceSnapshot device, TextBlock icon)
+    private static UIElement ChargingIcon(PowerDeviceSnapshot device, PhosphorGlyph icon)
     {
         if (!device.Charging)
         {
@@ -636,11 +751,8 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
             return icon;
         }
 
-        var bolt = new TextBlock
+        var bolt = new PhosphorGlyph(PhosphorIcon.Lightning, Math.Max(7, icon.IconSize - 3))
         {
-            Text = "\uEC1B",
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = Math.Max(7, icon.FontSize - 3),
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(0, 0, -1, -1),
@@ -654,28 +766,19 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         };
     }
 
-    private static TextBlock DeviceGlyph(PowerDeviceKind kind, double size) => new()
+    private static PhosphorGlyph DeviceGlyph(PowerDeviceKind kind, double size) => new(Glyph(kind), size)
     {
-        Text = Glyph(kind),
-        FontFamily = new FontFamily("Segoe MDL2 Assets"),
-        FontSize = size,
         HorizontalAlignment = HorizontalAlignment.Center,
         VerticalAlignment = VerticalAlignment.Center
     };
 
-    private static TextBlock EmptyBatteryIcon()
+    private static PhosphorGlyph EmptyBatteryIcon()
     {
-        var icon = new TextBlock
+        var icon = new PhosphorGlyph(PhosphorIcon.BatteryEmpty, 28)
         {
-            Text = "\uE850",
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 28,
-            LineHeight = 28,
-            LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
             Opacity = 0.5,
             Width = 32,
             Height = 32,
-            TextAlignment = TextAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             Visibility = Visibility.Collapsed
@@ -686,20 +789,19 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
 
     private static string Glyph(PowerDeviceKind kind) => kind switch
     {
-        PowerDeviceKind.Laptop => "\uE7F8",
-        PowerDeviceKind.Headphones => "\uE7F6",
-        PowerDeviceKind.Case => "\uE83F",
-        PowerDeviceKind.Keyboard => "\uE92E",
-        PowerDeviceKind.Mouse => "\uE962",
-        PowerDeviceKind.Phone => "\uE8EA",
-        _ => "\uE83F"
+        PowerDeviceKind.Laptop => PhosphorIcon.Laptop,
+        PowerDeviceKind.Headphones => PhosphorIcon.Headphones,
+        PowerDeviceKind.Case => PhosphorIcon.ComputerTower,
+        PowerDeviceKind.Keyboard => PhosphorIcon.Keyboard,
+        PowerDeviceKind.Mouse => PhosphorIcon.Mouse,
+        PowerDeviceKind.Phone => PhosphorIcon.DeviceMobile,
+        _ => PhosphorIcon.ComputerTower
     };
 
     private static string LayoutGlyph(string layout) => PowerLayouts.Normalize(layout) switch
     {
-        PowerLayouts.PercentageRing => "%",
-        PowerLayouts.IconOnly => "\uE7F8",
-        _ => "\uE7F4"
+        PowerLayouts.IconOnly => PhosphorIcon.Laptop,
+        _ => PhosphorIcon.BatteryMedium
     };
 
     private static TextBlock Centered(string text)
@@ -743,23 +845,4 @@ public sealed class PowerWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         VerticalAlignment = VerticalAlignment.Center
     };
 
-    private static TextBlock HeaderGlyph(string glyph, Action click, double size = 13)
-    {
-        var block = new TextBlock
-        {
-            Text = glyph,
-            FontFamily = glyph == "\u00D7" ? WidgetFonts.Ui : new FontFamily("Segoe MDL2 Assets"),
-            FontSize = size,
-            Opacity = 0.45,
-            Padding = new Thickness(8, 4, 0, 4),
-            Cursor = Cursors.Hand,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        block.MouseLeftButtonUp += (_, e) =>
-        {
-            click();
-            e.Handled = true;
-        };
-        return block;
-    }
 }

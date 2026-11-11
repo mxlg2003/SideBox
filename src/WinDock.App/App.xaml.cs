@@ -17,10 +17,10 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        _mutex = new Mutex(true, @"Local\WinDock.SingleInstance", out var created);
+        _mutex = new Mutex(true, ProductInfo.MutexName, out var created);
         if (!created)
         {
-            MessageBox.Show(UiText.AlreadyRunning, "WinDock", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(UiText.AlreadyRunning, ProductInfo.Name, MessageBoxButton.OK, MessageBoxImage.Information);
             Shutdown();
             return;
         }
@@ -35,9 +35,11 @@ public partial class App : Application
             {
                 AppLog.Write("Dispatcher unhandled exception.", args.Exception);
                 args.Handled = true;
-                _tray?.ShowBalloon("WinDock", UiText.LoggedToFile, isWarning: true);
+                _tray?.ShowBalloon(ProductInfo.Name, UiText.LoggedToFile, isWarning: true);
             };
             UserAlerts.Raised += OnAlert;
+            AppIcon.AttachToWindows();
+            RunAtStartup.Migrate();
             AppLog.Write("Initializing DockSession...");
             _session = new DockSession(StartupOptions.Parse(e.Args));
             _session.Changed += (_, _) => Dispatcher.Invoke(RefreshTray);
@@ -53,7 +55,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             AppLog.Write("Fatal startup exception.", ex);
-            MessageBox.Show(ex.ToString(), "WinDock Startup Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(ex.ToString(), $"{ProductInfo.Name} Startup Error", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown();
         }
     }
@@ -80,12 +82,14 @@ public partial class App : Application
         base.OnExit(e);
     }
 
+    private long _lastTrayClickTime;
+
     private void InitTray()
     {
         _tray?.Dispose();
-        _tray = new NativeTrayIcon { Text = "WinDock" };
-        _tray.LeftClick += (_, _) => _session?.ShowSettings();
-        _tray.DoubleClick += (_, _) => _session?.ShowSettings();
+        _tray = new NativeTrayIcon { Text = ProductInfo.Name };
+        _tray.LeftClick += (_, _) => OnTrayLeftClick();
+        _tray.DoubleClick += (_, _) => OnTrayDoubleClick();
         _tray.RightClick += (_, _) => Dispatcher.Invoke(() =>
         {
             if (_trayMenu is not null)
@@ -95,6 +99,24 @@ public partial class App : Application
             }
         });
         RefreshTray();
+    }
+
+    private void OnTrayLeftClick()
+    {
+        var now = Environment.TickCount64;
+        if (now - _lastTrayClickTime < 250)
+        {
+            return;
+        }
+
+        _lastTrayClickTime = now;
+        _session?.ToggleSettings();
+    }
+
+    private void OnTrayDoubleClick()
+    {
+        _lastTrayClickTime = Environment.TickCount64;
+        _session?.ShowSettings();
     }
 
     private void RefreshTray()
@@ -110,8 +132,8 @@ public partial class App : Application
         var text = _session.IsSafeMode
             ? UiText.SafeModeTray
             : ProductFeatures.ProfilesEnabled
-                ? $"WinDock — {profileName}"
-                : "WinDock";
+                ? $"{ProductInfo.Name} — {profileName}"
+                : ProductInfo.Name;
         _tray.Text = text;
 
         var menu = new ContextMenu();

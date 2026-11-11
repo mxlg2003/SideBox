@@ -9,6 +9,9 @@ public static class DockLayoutConstants
     public const double MinIslandLength = 160;
 
     public const double TileHeight = 50;
+
+    /// <summary>Left/right island thickness. Wide enough for a vertical stamp.</summary>
+    public const double SideIslandWidth = 120;
     public const double TileGap = 3;
     public const double TilePaddingX = 10;
     public const double TilePaddingY = 6;

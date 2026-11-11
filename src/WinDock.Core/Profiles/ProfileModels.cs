@@ -118,6 +118,27 @@ public sealed record DockItem
 
     /// <summary>Schedule widget events and countdown items.</summary>
     public ScheduleSettings? Schedule { get; init; }
+
+    /// <summary>Disk volumes, island metric, and optional activity sparkline.</summary>
+    public DiskWidgetSettings? Disk { get; init; }
+
+    /// <summary>GPU adapter, VRAM, engines, and island sparkline.</summary>
+    public GpuWidgetSettings? Gpu { get; init; }
+
+    /// <summary>High-usage process ranking.</summary>
+    public ProcessWidgetSettings? Processes { get; init; }
+
+    /// <summary>The one symbol this chip follows, plus the chart range.</summary>
+    public StockWidgetSettings? Stocks { get; init; }
+
+    /// <summary>White noise volume, active preset, sleep timer, and track mixers.</summary>
+    public WhiteNoiseSettings? WhiteNoise { get; init; }
+
+    /// <summary>Bing wallpaper settings: auto-switch daily and last applied key.</summary>
+    public BingWallpaperSettings? BingWallpaper { get; init; }
+
+    /// <summary>Wallpaper hub settings: source, rotation, auto-apply desktop, local folder, unsplash query.</summary>
+    public WallpaperSettings? Wallpaper { get; init; }
 }
 
 public sealed record WidgetPlacement

@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WinDock (Sidebox) 设置中心 - 聚焦模块中心 & 移除情景模式 (Interactive Demo)</title>
+  <style>
+    :root {
+      --bg-canvas: #f3f3f5;
+      --bg-card: #ffffff;
+      --bg-card-subtle: #f9f9fa;
+      --bg-hover: #ececed;
+      --bg-active: #e3e3e5;
+      --border-color: #e5e5ea;
+      --border-strong: #d1d1d6;
+      --text-main: #1c1c1e;
+      --text-muted: #6e6e73;
+      --text-dim: #8e8e93;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-light: rgba(37, 99, 235, 0.1);
+      --danger: #ef4444;
+      --danger-light: rgba(239, 68, 68, 0.1);
+      --success: #10b981;
+      --success-light: rgba(16, 185, 129, 0.1);
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+      --shadow-lg: 0 12px 28px rgba(0,0,0,0.12);
+      --font-stack: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft YaHei", sans-serif;
+    }
+
+    [data-theme="dark"] {
+      --bg-canvas: #1c1c1f;
+      --bg-card: #28282c;
+      --bg-card-subtle: #222226;
+      --bg-hover: #34343a;
+      --bg-active: #3e3e46;
+      --border-color: #38383e;
+      --border-strong: #4a4a54;
+      --text-main: #f5f5f7;
+      --text-muted: #a1a1aa;
+      --text-dim: #71717a;
+      --accent: #3b82f6;
+      --accent-hover: #60a5fa;
+      --accent-light: rgba(59, 130, 246, 0.2);
+      --danger: #f87171;
+      --danger-light: rgba(248, 113, 113, 0.2);
+      --success: #34d399;
+      --success-light: rgba(52, 211, 153, 0.2);
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.25);
+      --shadow-md: 0 4px 16px rgba(0,0,0,0.35);
+      --shadow-lg: 0 12px 32px rgba(0,0,0,0.5);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-stack); -webkit-font-smoothing: antialiased; }
+    body { background: var(--bg-canvas); color: var(--text-main); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; transition: background 0.25s, color 0.25s; }
+    .app-window { width: 1100px; height: 760px; background: var(--bg-canvas); border-radius: var(--radius-lg); border: 1px solid var(--border-color); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden; position: relative; }
+
+    /* Titlebar */
+    .titlebar { height: 44px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); background: var(--bg-canvas); user-select: none; }
+    .titlebar-brand { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; }
+    .app-icon { width: 22px; height: 22px; background: var(--accent); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; }
+    .titlebar-controls { display: flex; align-items: center; gap: 8px; }
+    .theme-toggle-btn { background: transparent; border: 1px solid var(--border-color); padding: 4px 10px; border-radius: var(--radius-sm); color: var(--text-muted); cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+    .theme-toggle-btn:hover { background: var(--bg-hover); color: var(--text-main); }
+    .window-buttons { display: flex; gap: 6px; margin-left: 12px; }
+    .win-btn { width: 12px; height: 12px; border-radius: 50%; border: none; cursor: pointer; }
+    .win-btn.close { background: #ff5f56; }
+    .win-btn.min { background: #ffbd2e; }
+    .win-btn.max { background: #27c93f; }
+
+    /* Layout Body */
+    .window-body { display: flex; flex: 1; height: calc(100% - 44px); overflow: hidden; }
+
+    /* Left Sidebar Navigation (情景模式已彻底移除) */
+    .nav-pane { width: 220px; background: var(--bg-card-subtle); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 14px 10px; gap: 4px; }
+    .nav-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); padding: 8px 10px 4px; font-weight: 600; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--radius-sm); cursor: pointer; border: 1px solid transparent; color: var(--text-muted); font-size: 13px; font-weight: 500; transition: all 0.15s ease; position: relative; }
+    .nav-item:hover { background: var(--bg-hover); color: var(--text-main); }
+    .nav-item.active { background: var(--bg-card); color: var(--accent); font-weight: 600; border-color: var(--border-color); box-shadow: var(--shadow-sm); }
+    .nav-item.active::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; background: var(--accent); border-radius: 0 4px 4px 0; }
+    .nav-item-badge { margin-left: auto; background: var(--accent); color: white; font-size: 10px; font-weight: bold; padding: 2px 7px; border-radius: 10px; }
+    .nav-removed-tag { margin-left: auto; background: var(--danger-light); color: var(--danger); font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
+    .nav-footer { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border-color); }
+
+    /* Right Content */
+    .content-pane { flex: 1; padding: 24px 32px 32px; overflow-y: auto; background: var(--bg-canvas); }
+    .page { display: none; animation: fadeIn 0.2s ease-in-out; }
+    .page.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+
+    .page-header { margin-bottom: 20px; }
+    .page-title { font-size: 20px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 10px; }
+    .page-desc { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    .badge-pill { font-size: 11px; background: var(--accent-light); color: var(--accent); padding: 3px 8px; border-radius: 6px; font-weight: 600; }
+    .badge-removed { font-size: 11px; background: var(--danger-light); color: var(--danger); padding: 3px 8px; border-radius: 6px; font-weight: 600; }
+
+    /* Informational Notice Banner */
+    .notice-banner { background: var(--accent-light); border: 1px dashed var(--accent); border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 20px; font-size: 12px; line-height: 1.5; display: flex; align-items: flex-start; gap: 10px; }
+    .notice-banner strong { color: var(--accent); }
+
+    /* Section Cards & Rows */
+    .section-title { font-size: 13px; font-weight: 600; color: var(--text-main); margin: 20px 0 10px; display: flex; align-items: center; justify-content: space-between; }
+    .card-group { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); overflow: hidden; }
+    .card-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border-bottom: 1px solid var(--border-color); }
+    .card-row:last-child { border-bottom: none; }
+    .row-meta { display: flex; flex-direction: column; gap: 2px; max-width: 68%; }
+    .row-title { font-size: 13px; font-weight: 600; color: var(--text-main); }
+    .row-desc { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+
+    /* Buttons & Controls */
+    .btn { padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; }
+    .btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+    .btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+    .btn.primary:hover { background: var(--accent-hover); }
+    .btn.danger { color: var(--danger); border-color: var(--border-color); }
+    .btn.danger:hover { background: var(--danger-light); border-color: var(--danger); }
+    .btn.sm { padding: 3px 8px; font-size: 11px; }
+
+    .toggle { position: relative; width: 40px; height: 22px; display: inline-block; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border-strong); transition: .2s; border-radius: 22px; }
+    .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%; }
+    input:checked + .slider { background-color: var(--accent); }
+    input:checked + .slider:before { transform: translateX(18px); }
+
+    select, input[type="text"], input[type="number"] { padding: 6px 10px; font-size: 12px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text-main); outline: none; }
+    select:focus, input[type="text"]:focus, input[type="number"]:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }
+
+    /* ======================================================== */
+    /* MODULES WORKBENCH (全新模块中心核心布局) */
+    /* ======================================================== */
+    .modules-workbench {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 18px;
+      height: 570px;
+    }
+
+    /* Left Column: Catalog */
+    .catalog-panel {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+    }
+    .catalog-topbar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .cat-pills {
+      display: flex;
+      gap: 5px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      margin-bottom: 10px;
+    }
+    .cat-pill {
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 12px;
+      background: var(--bg-hover);
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      border: 1px solid transparent;
+      user-select: none;
+    }
+    .cat-pill.active {
+      background: var(--accent);
+      color: white;
+      font-weight: 600;
+    }
+
+    .catalog-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding-right: 6px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      align-content: start;
+    }
+
+    .catalog-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.15s;
+    }
+    .catalog-card:hover {
+      border-color: var(--accent);
+      box-shadow: var(--shadow-sm);
+      transform: translateY(-1px);
+    }
+    .card-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: var(--accent-light);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .card-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .card-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Right Column: Mounted Widgets & Inline Settings Drawer */
+    .mounted-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+    }
+    .mounted-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-card-subtle);
+    }
+    .mounted-title {
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Scrollable Active Widgets List (Top half) */
+    .mounted-list {
+      height: 250px;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .mounted-row {
+      background: var(--bg-canvas);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .mounted-row:hover {
+      border-color: var(--border-strong);
+      background: var(--bg-hover);
+    }
+    .mounted-row.active {
+      border-color: var(--accent);
+      background: var(--accent-light);
+    }
+    .row-meta-inline {
+      flex: 1;
+      min-width: 0;
+    }
+    .row-name-inline {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+    .row-status-inline {
+      font-size: 10px;
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .row-btn-group {
+      display: flex;
+      gap: 3px;
+    }
+    .icon-action-btn {
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+    }
+    .icon-action-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-main);
+    }
+    .icon-action-btn.del:hover {
+      background: var(--danger-light);
+      color: var(--danger);
+    }
+
+    /* Bottom half: Inline Parameter Configuration Drawer */
+    .param-drawer {
+      flex: 1;
+      padding: 14px;
+      background: var(--bg-card);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .param-drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .param-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .param-sync-tag {
+      font-size: 10px;
+      color: var(--success);
+      background: var(--success-light);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .param-form {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 12px;
+    }
+    .param-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .param-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* Edge cards for Layout page */
+    .edge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+    .edge-card { border: 2px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; background: var(--bg-card); cursor: pointer; text-align: center; }
+    .edge-card.active { border-color: var(--accent); background: var(--accent-light); }
+    .screen-mock { width: 80px; height: 50px; border: 2px solid var(--border-strong); border-radius: 4px; margin: 0 auto 8px; position: relative; background: rgba(0,0,0,0.04); }
+    .dock-pill { background: var(--accent); border-radius: 2px; position: absolute; }
+    .dock-pill.top { top: 2px; left: 16px; right: 16px; height: 4px; }
+    .dock-pill.left { left: 2px; top: 10px; bottom: 10px; width: 4px; }
+    .dock-pill.right { right: 2px; top: 10px; bottom: 10px; width: 4px; }
+  </style>
+</head>
+<body data-theme="light">
+
+  <div class="app-window">
+    <!-- Window Titlebar -->
+    <div class="titlebar">
+      <div class="titlebar-brand">
+        <div class="app-icon">▤</div>
+        <span>WinDock 设置中心 (Sidebox Settings)</span>
+        <span class="badge-pill">专注模块中心 · 已移除情景模式</span>
+      </div>
+      <div class="titlebar-controls">
+        <button class="theme-toggle-btn" onclick="toggleTheme()">
+          <span id="themeIcon">🌙</span>
+          <span id="themeLabel">深色模式</span>
+        </button>
+        <div class="window-buttons">
+          <button class="win-btn min" title="最小化"></button>
+          <button class="win-btn max" title="最大化"></button>
+          <button class="win-btn close" title="关闭并常驻后台"></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="window-body">
+      <!-- Left Sidebar (情景模式已移除，直观精炼) -->
+      <div class="nav-pane">
+        <div class="nav-group-title">核心功能</div>
+        <div class="nav-item active" onclick="switchPage('modules')">
+          <span>🧩</span>
+          <span>模块中心</span>
+          <span class="nav-item-badge">19</span>
+        </div>
+        <div class="nav-item" onclick="switchPage('layout')">
+          <span>🖥️</span>
+          <span>停靠与布局</span>
+        </div>
+        <div class="nav-item" onclick="switchPage('appearance')">
+          <span>🎨</span>
+          <span>外观与材质</span>
+        </div>
+        <div class="nav-item" onclick="switchPage('hotkeys')">
+          <span>⌨️</span>
+          <span>快捷键</span>
+        </div>
+
+        <div class="nav-group-title" style="margin-top: 10px;">系统支持</div>
+        <div class="nav-item" onclick="switchPage('general')">
+          <span>⚙️</span>
+          <span>常规设置</span>
+        </div>
+        <div class="nav-item" onclick="switchPage('privacy')">
+          <span>🛡️</span>
+          <span>权限与门闩</span>
+        </div>
+        <div class="nav-item" onclick="switchPage('about')">
+          <span>ℹ️</span>
+          <span>关于与更新</span>
+        </div>
+
+        <div class="nav-footer">
+          <button class="btn danger" style="width: 100%; justify-content: center;" onclick="alert('测试退出命令')">
+            <span>🚪</span> 退出 WinDock
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Content Area -->
+      <div class="content-pane">
+
+        <!-- ======================================================== -->
+        <!-- PAGE 1: 模块中心 (WIDGETS WORKBENCH) - 核心改造亮点 -->
+        <!-- ======================================================== -->
+        <div id="page-modules" class="page active">
+          <div class="page-header">
+            <h1 class="page-title">
+              <span>模块中心 (Widgets Workbench)</span>
+              <span class="badge-pill">高内聚：增删 + 排序 + 内嵌配置</span>
+            </h1>
+            <p class="page-desc">自由挑选并挂载实用小组件；直接在右侧对已挂载模块进行<strong>上下排序</strong>与<strong>详细参数配置</strong>，告别桌面盲右键！</p>
+          </div>
+
+          <div class="notice-banner">
+            <div>💡</div>
+            <div>
+              <strong>优化成果说明：</strong>
+              1. <strong>移除情景模式干扰</strong>：所有模块直接挂载于当前主悬浮岛，消除“general / deep-work”多配置混淆；<br>
+              2. <strong>内联参数配置抽屉</strong>：右侧点击任意已挂载模块，立即在下方加载对应专属配置表单（如天气城市、股票代码与涨跌色习惯、白噪音音轨配比、时钟第二时区等），修改即时生效！
+            </div>
+          </div>
+
+          <div class="modules-workbench">
+            <!-- Left: Catalog & Filter -->
+            <div class="catalog-panel">
+              <div class="catalog-topbar">
+                <input type="text" placeholder="🔍 搜索组件 (如: 天气, 股票, CPU, 白噪音, 闹钟...)" style="flex: 1;" oninput="filterCatalog(this.value)">
+              </div>
+              <div class="cat-pills">
+                <div class="cat-pill active" onclick="filterCat(this, 'all')">全部 (19)</div>
+                <div class="cat-pill" onclick="filterCat(this, 'clocks')">时钟与专注 (6)</div>
+                <div class="cat-pill" onclick="filterCat(this, 'system')">硬件状态 (6)</div>
+                <div class="cat-pill" onclick="filterCat(this, 'lifestyle')">生活习惯 (3)</div>
+                <div class="cat-pill" onclick="filterCat(this, 'business')">金融行情 (1)</div>
+                <div class="cat-pill" onclick="filterCat(this, 'notes')">便笺备忘 (1)</div>
+                <div class="cat-pill" onclick="filterCat(this, 'wallpaper')">壁纸库 (2)</div>
+              </div>
+
+              <div class="catalog-scroll" id="catalogGrid">
+                <!-- Weather -->
+                <div class="catalog-card" data-cat="lifestyle">
+                  <div class="card-icon">☀️</div>
+                  <div class="card-info">
+                    <div class="card-name">天气与空气</div>
+                    <div class="card-sub">实时温度与预报</div>
+                  </div>
+                  <button class="btn sm primary" onclick="addModule('weather', '☀️ 天气与空气', '北京 · 晴 22℃')">+ 挂载</button>
+                </div>
+
+                <!-- Stocks -->
+                <div class="catalog-card" data-cat="business">
+                  <div class="card-icon">📈</div>
+                  <div class="card-info">
+                    <div class="card-name">股票行情自选</div>
+                    <div class="card-sub">分时图与实时报价</div>
+                  </div>
+                  <button class="btn sm primary" onclick="addModule('stocks', '📈 股票行情', 'AAPL, TSLA')">+ 挂载</button>
+                </div>
+
+                <!-- White Noise -->
+                <div class="catalog-card" data-cat="lifestyle">
+                  <div class="card-icon">🎧</div>
+                  <div class="card-info">
+                    <div class="card-name">自然白噪音混音</div>
+                    <div class="card-sub">雨声/柴火/咖啡馆</div>
+                  </div>
+                  <button class="btn sm primary" onclick="addModule('whitenoise', '🎧 白噪音混音', '自然雨声 70%')">+ 挂载</button>
+                </div>
+
+                <!-- Clock -->
+                <div class="catalog-card" data-cat="clocks">
+                  <div class="card-icon">⏰</div>
+                  <div class="card-info">
+                    <div class="card-name">本地时钟 & 时区</div>
+                    <div class="card-sub">数字表盘与第二时区</div>
+                  </div>
+                  <button class="btn sm primary" onclick="addModule('clock', '⏰ 本地时钟', '24H制 · 纽约')">+ 挂载</button>
+                </div>
+
+                <!-- SysActivity -->
+                <div class="catalog-card" data-cat="system">
+                  <div class="card-icon">⚡</div>
+                  <div class="card-info">
+                    <div class="card-name">CPU 与内存状态</div>
+                    <div class="card-sub">圆环负载指示</div>
+                  </div>
+                  <button class="btn sm primary" onclick="addModule('sysactivity', '⚡ CPU/内存', '双圆环指示')">+ 挂载</button>
+                </div>
+
+                <!-- Network -->
+                <div class="catalog-card" data-cat="system">
+                  <div class="card-icon">📶</div>
+                  <div class="card-info">
+                    <div class="card-name">网络速率监控</div>
+                    <div class="card-sub">实时流量与60s折线</div>
+                  </div>
+                  <button class="btn sm primary" onclick="addModule('network', '📶 网络速率', '实时网速折线')">+ 挂载</button>
+                </div>
+
+                <!-- FocusTimer -->
+                <div class="catalog-card" data-cat="clocks">
+                  <div class="card-icon">🍃</div>
+                  <div class="card-info">
+                    <div class="card-name">专注番茄钟</div>
+                    <div class="card-sub">25/5min 休息轮次</div>
+                  </div>
+                  <button class="btn sm primary" onclick="addModule('focustimer', '🍃 专注番茄钟', '25分钟轮次')">+ 挂载</button>
+                </div>
+
+                <!-- Notes -->
+                <div class="catalog-card" data-cat="notes">
+                  <div class="card-icon">📝</div>
+                  <div class="card-info">
+                    <div class="card-name">便笺速记</div>
+                    <div class="card-sub">随时备忘与即时保存</div>
+                  </div>
+                  <button class="btn sm primary" onclick="addModule('notes', '📝 便笺速记', '本地自动保存')">+ 挂载</button>
+                </div>
+
+                <!-- Disk -->
+                <div class="catalog-card" data-cat="system">
+                  <div class="card-icon">💾</div>
+                  <div class="card-info">
+                    <div class="card-name">磁盘存储空间</div>
+                    <div class="card-sub">固定分区剩余容量</div>
+                  </div>
+                  <button class="btn sm primary" onclick="addModule('disk', '💾 磁盘空间', 'C: / D: 盘')">+ 挂载</button>
+                </div>
+
+                <!-- Bing Wallpaper -->
+                <div class="catalog-card" data-cat="wallpaper">
+                  <div class="card-icon">🖼️</div>
+                  <div class="card-info">
+                    <div class="card-name">Bing 每日壁纸</div>
+                    <div class="card-sub">近8日 UHD 归档下载</div>
+                  </div>
+                  <button class="btn sm primary" onclick="addModule('bing', '🖼️ Bing 壁纸', '每日自动轮换')">+ 挂载</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Mounted Widgets Panel + Inline Config Drawer -->
+            <div class="mounted-panel">
+              <div class="mounted-header">
+                <span class="mounted-title">
+                  <span>📌 已挂载组件</span>
+                  <span style="font-size: 11px; color: var(--accent);" id="activeCounter">4 个</span>
+                </span>
+                <span style="font-size: 10px; color: var(--text-dim);">点击调参 / 上下移动重排</span>
+              </div>
+
+              <!-- Active List -->
+              <div class="mounted-list" id="mountedList">
+                <!-- Weather -->
+                <div class="mounted-row active" onclick="selectWidgetConfig('weather', this)">
+                  <span>☀️</span>
+                  <div class="row-meta-inline">
+                    <div class="row-name-inline">天气与空气</div>
+                    <div class="row-status-inline">北京 · 晴 22℃ (AQI 35)</div>
+                  </div>
+                  <div class="row-btn-group">
+                    <button class="icon-action-btn" title="上移" onclick="moveRow(event, this, -1)">▲</button>
+                    <button class="icon-action-btn" title="下移" onclick="moveRow(event, this, 1)">▼</button>
+                    <button class="icon-action-btn del" title="卸载" onclick="removeWidgetRow(event, this)">✕</button>
+                  </div>
+                </div>
+
+                <!-- Stocks -->
+                <div class="mounted-row" onclick="selectWidgetConfig('stocks', this)">
+                  <span>📈</span>
+                  <div class="row-meta-inline">
+                    <div class="row-name-inline">股票自选行情</div>
+                    <div class="row-status-inline">AAPL +1.45% · 红涨绿跌</div>
+                  </div>
+                  <div class="row-btn-group">
+                    <button class="icon-action-btn" title="上移" onclick="moveRow(event, this, -1)">▲</button>
+                    <button class="icon-action-btn" title="下移" onclick="moveRow(event, this, 1)">▼</button>
+                    <button class="icon-action-btn del" title="卸载" onclick="removeWidgetRow(event, this)">✕</button>
+                  </div>
+                </div>
+
+                <!-- White Noise -->
+                <div class="mounted-row" onclick="selectWidgetConfig('whitenoise', this)">
+                  <span>🎧</span>
+                  <div class="row-meta-inline">
+                    <div class="row-name-inline">自然白噪音混音</div>
+                    <div class="row-status-inline">暴雨 + 咖啡馆 · 音量 60%</div>
+                  </div>
+                  <div class="row-btn-group">
+                    <button class="icon-action-btn" title="上移" onclick="moveRow(event, this, -1)">▲</button>
+                    <button class="icon-action-btn" title="下移" onclick="moveRow(event, this, 1)">▼</button>
+                    <button class="icon-action-btn del" title="卸载" onclick="removeWidgetRow(event, this)">✕</button>
+                  </div>
+                </div>
+
+                <!-- Clock -->
+                <div class="mounted-row" onclick="selectWidgetConfig('clock', this)">
+                  <span>⏰</span>
+                  <div class="row-meta-inline">
+                    <div class="row-name-inline">本地时钟 & 时区</div>
+                    <div class="row-status-inline">24H制 · 纽约 (UTC-4)</div>
+                  </div>
+                  <div class="row-btn-group">
+                    <button class="icon-action-btn" title="上移" onclick="moveRow(event, this, -1)">▲</button>
+                    <button class="icon-action-btn" title="下移" onclick="moveRow(event, this, 1)">▼</button>
+                    <button class="icon-action-btn del" title="卸载" onclick="removeWidgetRow(event, this)">✕</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Parameter Drawer (Inline) -->
+              <div class="param-drawer" id="paramDrawer">
+                <div class="param-drawer-header">
+                  <span class="param-title" id="paramTitle">☀️ 天气模块专属配置</span>
+                  <span class="param-sync-tag">实时同步至 Dock</span>
+                </div>
+
+                <div class="param-form" id="paramBody">
+                  <!-- Injected via selectWidgetConfig -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- PAGE 2: 停靠与布局 (已移除情景模式的绑定) -->
+        <!-- ======================================================== -->
+        <div id="page-layout" class="page">
+          <div class="page-header">
+            <h1 class="page-title">
+              <span>停靠与布局</span>
+              <span class="badge-pill">全局单一 Dock 模式</span>
+            </h1>
+            <p class="page-desc">设置悬浮岛屏幕位置、自动收起避让机制以及显示器锁定</p>
+          </div>
+
+          <div class="section-title">停靠边缘位置</div>
+          <div class="edge-grid">
+            <div class="edge-card active" onclick="selectEdgeCard(this)">
+              <div class="screen-mock"><div class="dock-pill top"></div></div>
+              <div style="font-size: 13px; font-weight: 600;">顶部边缘（推荐）</div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">最符合余光扫视</div>
+            </div>
+            <div class="edge-card" onclick="selectEdgeCard(this)">
+              <div class="screen-mock"><div class="dock-pill left"></div></div>
+              <div style="font-size: 13px; font-weight: 600;">左侧边缘</div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">适合宽屏与垂直布局</div>
+            </div>
+            <div class="edge-card" onclick="selectEdgeCard(this)">
+              <div class="screen-mock"><div class="dock-pill right"></div></div>
+              <div style="font-size: 13px; font-weight: 600;">右侧边缘</div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">靠拢通知与操作中心</div>
+            </div>
+          </div>
+
+          <div class="section-title">显示与行为感知</div>
+          <div class="card-group">
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">目标显示器</span>
+                <span class="row-desc">选择 Dock 停靠的屏幕，副屏拔出时自动迁回主屏。在屏幕间直接拖拽悬浮岛也会自动记忆。</span>
+              </div>
+              <select style="min-width: 180px;">
+                <option>主显示器 (Display 1 - 主屏)</option>
+                <option>副显示器 (Display 2 - 扩展屏)</option>
+              </select>
+            </div>
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">无操作时自动隐藏</span>
+                <span class="row-desc">空闲约 800ms 后贴边收起为 4px 细条，全屏游戏或演示时自动平滑避让。</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox">
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">鼠标触碰边缘热区时滑出</span>
+                <span class="row-desc">指针靠近屏幕边缘感应区立即滑出 Dock。</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">程序聚合抽屉</span>
+                <span class="row-desc">仅显示单个应用抽屉图标，点击后展开全部已钉选程序。</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox">
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- PAGE 3: 外观与材质 -->
+        <!-- ======================================================== -->
+        <div id="page-appearance" class="page">
+          <div class="page-header">
+            <h1 class="page-title">
+              <span>外观与材质</span>
+            </h1>
+            <p class="page-desc">定制岛面高透亚克力、云母和雾面磨砂质感</p>
+          </div>
+
+          <div class="section-title">材质与色彩</div>
+          <div class="card-group">
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">色彩风格</span>
+                <span class="row-desc">明亮浅色、深色沉浸或跟随 Windows 整体主题。</span>
+              </div>
+              <select style="min-width: 150px;">
+                <option>跟随系统 (System)</option>
+                <option>浅色模式 (Light)</option>
+                <option>深色模式 (Dark)</option>
+              </select>
+            </div>
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">岛面材质 (Fluent Backdrop)</span>
+                <span class="row-desc">云母 Mica（偏实且沉稳）、磨砂 Frosted（雾面哑光）、通透玻璃 Glass（80%透光亚克力）。</span>
+              </div>
+              <select style="min-width: 150px;">
+                <option>通透玻璃 Glass (推荐)</option>
+                <option>云母 Mica</option>
+                <option>磨砂 Frosted</option>
+              </select>
+            </div>
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">背景通透度</span>
+                <span class="row-desc">精细调节岛面在壁纸上的透明比例（10% - 95%）。</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <input type="range" min="10" max="95" value="75" style="width: 130px;">
+                <span style="font-size: 12px; font-weight: bold; color: var(--accent);">75%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- PAGE 4: 快捷键 (移除了 3 个情景模式快捷键，纯粹精炼) -->
+        <!-- ======================================================== -->
+        <div id="page-hotkeys" class="page">
+          <div class="page-header">
+            <h1 class="page-title">
+              <span>快捷键中心</span>
+              <span class="badge-removed">已清理无用的情景流转热键</span>
+            </h1>
+            <p class="page-desc">配置全局呼出与高频动作快捷键</p>
+          </div>
+
+          <div class="notice-banner">
+            <div>⌨️</div>
+            <div>
+              <strong>优化细节：</strong> 移除了旧版中臃肿冗余的“轮换下一个情景”、“轮换上一个情景”、“一键撤销情景”等 3 个情景热键，只保留核心高效的全局呼出与实用工具热键。
+            </div>
+          </div>
+
+          <div class="section-title">核心操作热键</div>
+          <div class="card-group">
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">全局呼出 / 收起 Dock</span>
+                <span class="row-desc">在自动隐藏状态下瞬间呼出悬浮岛，再次按下立即平滑退避。</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" value="Win + Shift + A" readonly style="width: 130px; text-align: center; font-family: monospace; font-weight: bold;">
+                <button class="btn">重新录制</button>
+              </div>
+            </div>
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">一键静音/播放白噪音</span>
+                <span class="row-desc">随时通过全局组合键启停自然混音，不中断当前工作流。</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" value="Win + Alt + N" readonly style="width: 130px; text-align: center; font-family: monospace; font-weight: bold;">
+                <button class="btn">重新录制</button>
+              </div>
+            </div>
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">快速呼出便笺速记</span>
+                <span class="row-desc">灵感闪现时直接唤起便笺输入气泡。</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" value="Win + Alt + O" readonly style="width: 130px; text-align: center; font-family: monospace; font-weight: bold;">
+                <button class="btn">重新录制</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- PAGE 5: 常规设置 -->
+        <!-- ======================================================== -->
+        <div id="page-general" class="page">
+          <div class="page-header">
+            <h1 class="page-title"><span>常规设置</span></h1>
+            <p class="page-desc">系统启动偏好、多语言以及配置导出备份</p>
+          </div>
+
+          <div class="section-title">系统与启动</div>
+          <div class="card-group">
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">随 Windows 开机自动启动</span>
+                <span class="row-desc">登录桌面后自动贴边加载悬浮岛，无后台驻留唤醒守护进程。</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">界面语言</span>
+                <span class="row-desc">设置悬浮岛主界面与上下文右键菜单显示的语言。</span>
+              </div>
+              <select style="min-width: 150px;">
+                <option>跟随系统 (System)</option>
+                <option>简体中文</option>
+                <option>English</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="section-title">配置数据与维护</div>
+          <div class="card-group">
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">配置导出与恢复</span>
+                <span class="row-desc">备份当前已钉选的应用、组件排版与自定义参数为 JSON 文件。</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn" onclick="alert('已备份至 settings.json')">导出配置</button>
+                <button class="btn" onclick="alert('导入配置向导')">导入配置</button>
+                <button class="btn danger" onclick="confirm('确认恢复出厂设置？')">恢复出厂</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- PAGE 6: 权限与门闩 -->
+        <!-- ======================================================== -->
+        <div id="page-privacy" class="page">
+          <div class="page-header">
+            <h1 class="page-title"><span>权限与安全门闩</span></h1>
+            <p class="page-desc">严格遵循零上传原则，所有硬件指标与文本数据均留存在本地内存中</p>
+          </div>
+
+          <div class="section-title">硬件状态与数据门闩</div>
+          <div class="card-group">
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">媒体歌曲信息读取 (GSMTC)</span>
+                <span class="row-desc">允许媒体模块读取系统当前播放的歌曲名与封面。</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox">
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">网络吞吐流量监控</span>
+                <span class="row-desc">仅在本地读取网卡流量差值，绝不上报云端接口数据。</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">粗略公网 IP 城市定位</span>
+                <span class="row-desc">仅在初次配置天气时通过 geojs.io 查询大致地级市，非真实 GPS。</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- PAGE 7: 关于与更新 -->
+        <!-- ======================================================== -->
+        <div id="page-about" class="page">
+          <div class="page-header">
+            <h1 class="page-title"><span>关于与更新</span></h1>
+            <p class="page-desc">WinDock (Sidebox) · Windows 桌面贴边悬浮岛</p>
+          </div>
+
+          <div class="card-group">
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">WinDock v1.0.0 (net10.0-windows10.0.22621.0)</span>
+                <span class="row-desc">纯净无广告 · 聚焦效率</span>
+              </div>
+              <button class="btn primary" onclick="alert('已是最新版本')">检查更新</button>
+            </div>
+            <div class="card-row">
+              <div class="row-meta">
+                <span class="row-title">数据与日志存储目录</span>
+                <span class="row-desc">核心配置文件：%AppData%\Sidebox\settings.json</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn" onclick="alert('已在资源管理器打开配置目录')">打开配置目录</button>
+                <button class="btn" onclick="alert('已在资源管理器打开日志目录')">查看运行日志</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Theme toggle
+    function toggleTheme() {
+      const isDark = document.body.getAttribute('data-theme') === 'dark';
+      document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+      document.getElementById('themeIcon').textContent = isDark ? '🌙' : '☀️';
+      document.getElementById('themeLabel').textContent = isDark ? '深色模式' : '浅色模式';
+    }
+
+    // Switch Left Navigation Tabs
+    function switchPage(pageId) {
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+
+      event.currentTarget.classList.add('active');
+      document.getElementById('page-' + pageId).classList.add('active');
+    }
+
+    // Edge card selection
+    function selectEdgeCard(el) {
+      document.querySelectorAll('.edge-card').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    // Catalog Filter
+    function filterCat(el, cat) {
+      document.querySelectorAll('.cat-pill').forEach(p => p.classList.remove('active'));
+      el.classList.add('active');
+
+      document.querySelectorAll('.catalog-card').forEach(item => {
+        if (cat === 'all' || item.getAttribute('data-cat') === cat) item.style.display = 'flex';
+        else item.style.display = 'none';
+      });
+    }
+
+    function filterCatalog(term) {
+      const q = term.toLowerCase().trim();
+      document.querySelectorAll('.catalog-card').forEach(item => {
+        const text = item.textContent.toLowerCase();
+        item.style.display = text.includes(q) ? 'flex' : 'none';
+      });
+    }
+
+    // Add module to mounted list
+    function addModule(id, name, hint) {
+      const list = document.getElementById('mountedList');
+      const row = document.createElement('div');
+      row.className = 'mounted-row';
+      row.onclick = () => selectWidgetConfig(id, row);
+      row.innerHTML = `
+        <span>🧩</span>
+        <div class="row-meta-inline">
+          <div class="row-name-inline">${name}</div>
+          <div class="row-status-inline">${hint}</div>
+        </div>
+        <div class="row-btn-group">
+          <button class="icon-action-btn" title="上移" onclick="moveRow(event, this, -1)">▲</button>
+          <button class="icon-action-btn" title="下移" onclick="moveRow(event, this, 1)">▼</button>
+          <button class="icon-action-btn del" title="卸载" onclick="removeWidgetRow(event, this)">✕</button>
+        </div>
+      `;
+      list.appendChild(row);
+      updateMountedCount();
+      selectWidgetConfig(id, row);
+    }
+
+    function removeWidgetRow(e, btn) {
+      e.stopPropagation();
+      const row = btn.closest('.mounted-row');
+      const wasActive = row.classList.contains('active');
+      row.remove();
+      updateMountedCount();
+      if (wasActive) {
+        const remaining = document.querySelector('.mounted-row');
+        if (remaining) remaining.click();
+        else clearParamDrawer();
+      }
+    }
+
+    function moveRow(e, btn, direction) {
+      e.stopPropagation();
+      const row = btn.closest('.mounted-row');
+      if (direction === -1 && row.previousElementSibling) {
+        row.parentNode.insertBefore(row, row.previousElementSibling);
+      } else if (direction === 1 && row.nextElementSibling) {
+        row.parentNode.insertBefore(row.nextElementSibling, row);
+      }
+    }
+
+    function updateMountedCount() {
+      const count = document.querySelectorAll('.mounted-row').length;
+      document.getElementById('activeCounter').textContent = count + ' 个';
+    }
+
+    function clearParamDrawer() {
+      document.getElementById('paramTitle').textContent = '未选择组件';
+      document.getElementById('paramBody').innerHTML = '<div style="color: var(--text-dim); padding: 20px 0; text-align: center;">当前悬浮岛未挂载任何组件</div>';
+    }
+
+    // ========================================================
+    // SELECT WIDGET CONFIG - 动态渲染组件对应的专属配置参数表单
+    // ========================================================
+    function selectWidgetConfig(id, rowEl) {
+      document.querySelectorAll('.mounted-row').forEach(r => r.classList.remove('active'));
+      if (rowEl) rowEl.classList.add('active');
+
+      const title = document.getElementById('paramTitle');
+      const body = document.getElementById('paramBody');
+
+      if (id === 'weather') {
+        title.innerHTML = '☀️ 天气与空气质量专属配置';
+        body.innerHTML = `
+          <div class="param-group">
+            <label class="param-label">预报城市</label>
+            <input type="text" value="北京" placeholder="城市中文或拼音">
+          </div>
+          <div class="param-group">
+            <label class="param-label">刷新间隔</label>
+            <select>
+              <option selected>每 30 分钟 (推荐)</option>
+              <option>每 15 分钟</option>
+              <option>每 1 小时</option>
+            </select>
+          </div>
+          <div style="display: flex; gap: 14px; margin-top: 4px;">
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" checked> 启用公网 IP 自动定位</label>
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" checked> 显示空气质量 AQI</label>
+          </div>
+        `;
+      } else if (id === 'stocks') {
+        title.innerHTML = '📈 股票行情自选配置';
+        body.innerHTML = `
+          <div class="param-group">
+            <label class="param-label">自选代码列表 (逗号分隔)</label>
+            <input type="text" value="AAPL, TSLA, 600519.SH" placeholder="例如: AAPL, MSFT">
+          </div>
+          <div class="param-group">
+            <label class="param-label">涨跌颜色习惯</label>
+            <div style="display: flex; gap: 14px; margin-top: 2px;">
+              <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="stockColor" checked> 红涨绿跌 (A股传统)</label>
+              <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="stockColor"> 绿涨红跌 (美股习惯)</label>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+            <input type="checkbox" checked> 紧凑模式下显示实时微型分时折线
+          </div>
+        `;
+      } else if (id === 'whitenoise') {
+        title.innerHTML = '🎧 自然白噪音混音调音台';
+        body.innerHTML = `
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span>🌧️ 自然暴雨</span>
+              <input type="range" min="0" max="100" value="70" style="width: 130px;">
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span>☕ 咖啡馆人声</span>
+              <input type="range" min="0" max="100" value="40" style="width: 130px;">
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span>🔥 壁炉木柴</span>
+              <input type="range" min="0" max="100" value="20" style="width: 130px;">
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span>⌨️ 机械键盘</span>
+              <input type="range" min="0" max="100" value="0" style="width: 130px;">
+            </div>
+          </div>
+        `;
+      } else if (id === 'clock') {
+        title.innerHTML = '⏰ 时钟表盘与时区配置';
+        body.innerHTML = `
+          <div class="param-group">
+            <label class="param-label">跨时区第二时钟 (可选)</label>
+            <select>
+              <option>不启用第二时区</option>
+              <option selected>纽约 (UTC-4 · EDT)</option>
+              <option>伦敦 (UTC+1 · BST)</option>
+              <option>东京 (UTC+9 · JST)</option>
+            </select>
+          </div>
+          <div style="display: flex; gap: 14px; margin-top: 4px;">
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" checked> 24 小时制</label>
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" checked> 显示平滑跳动秒针</label>
+          </div>
+        `;
+      } else if (id === 'sysactivity') {
+        title.innerHTML = '⚡ 系统负载监控偏好';
+        body.innerHTML = `
+          <div class="param-group">
+            <label class="param-label">悬浮岛呈现形态</label>
+            <select>
+              <option selected>双圆环仪表盘 (CPU + 内存)</option>
+              <option>数字百分比 (紧凑极简)</option>
+              <option>水平双条形负载进度</option>
+            </select>
+          </div>
+          <div class="param-group">
+            <label class="param-label">刷新采样周期</label>
+            <select>
+              <option selected>2 秒 (均衡低耗)</option>
+              <option>1 秒 (高灵敏)</option>
+              <option>5 秒 (极致节能)</option>
+            </select>
+          </div>
+        `;
+      } else if (id === 'notes') {
+        title.innerHTML = '📝 便笺速记参数';
+        body.innerHTML = `
+          <div class="param-group">
+            <label class="param-label">存储位置</label>
+            <span style="font-size: 11px; color: var(--text-dim); font-family: monospace;">%AppData%\\Sidebox\\notes\\</span>
+          </div>
+          <div style="margin-top: 6px;">
+            <button class="btn sm" onclick="alert('已在记事本中打开便笺文本')">在记事本中打开当前便笺</button>
+          </div>
+        `;
+      } else {
+        title.innerHTML = '⚙️ 组件常规参数';
+        body.innerHTML = `
+          <div class="param-group">
+            <label class="param-label">显示形态</label>
+            <select>
+              <option selected>自适应展开卡片</option>
+              <option>极简紧凑药丸</option>
+            </select>
+          </div>
+          <div style="margin-top: 4px;">
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" checked> 允许点击呼出交互浮窗</label>
+          </div>
+        `;
+      }
+    }
+
+    // Initialize Default Config View
+    selectWidgetConfig('weather', document.querySelector('.mounted-row.active'));
+  </script>
+</body>
+</html>

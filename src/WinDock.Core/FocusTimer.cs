@@ -7,6 +7,14 @@ public enum FocusTimerPhase
     LongBreak
 }
 
+public static class FocusTimerEvents
+{
+    public static event Action<bool, FocusTimerPhase>? StateChanged;
+
+    public static void Notify(bool isRunning, FocusTimerPhase phase) =>
+        StateChanged?.Invoke(isRunning, phase);
+}
+
 public sealed record FocusTimerSettings
 {
     public string Color { get; init; } = FocusTimerColors.Default;

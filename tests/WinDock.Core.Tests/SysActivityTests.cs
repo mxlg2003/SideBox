@@ -15,6 +15,8 @@ public class SysActivityTests
         Assert.Equal("数字", SysActivityFormat.LayoutTitle("nope"));
         Assert.Equal("圆环", SysActivityFormat.LayoutTitle(SysActivityLayouts.Rings));
         Assert.Equal("条形", SysActivityFormat.LayoutTitle(SysActivityLayouts.Bars));
+        Assert.Equal("3.60 GHz", SysActivityFormat.Frequency(3600, true));
+        Assert.Equal("—", SysActivityFormat.Frequency(0, false));
     }
 
     [Fact]

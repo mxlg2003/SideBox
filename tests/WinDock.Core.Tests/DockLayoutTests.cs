@@ -6,6 +6,16 @@ namespace WinDock.Core.Tests;
 public sealed class DockLayoutTests
 {
     [Fact]
+    public void Side_edges_use_the_fixed_island_width()
+    {
+        Assert.Equal(DockLayoutConstants.SideIslandWidth, DockLayoutCalculator.ThicknessFor(DockEdge.Left));
+        Assert.Equal(DockLayoutConstants.SideIslandWidth, DockLayoutCalculator.ThicknessFor(DockEdge.Right));
+        Assert.Equal(DockLayoutCalculator.DefaultThickness, DockLayoutCalculator.ThicknessFor(DockEdge.Top));
+        Assert.Equal(120, DockTokens.SideIslandWidth);
+        Assert.Equal(108, DockTokens.SideTileWidth);
+    }
+
+    [Fact]
     public void Top_island_is_centered_and_inset_from_work_area()
     {
         var monitor = Monitor(1920, 1040);
@@ -68,6 +78,24 @@ public sealed class DockLayoutTests
         var monitor = Monitor(800, 600);
         var bounds = DockLayoutCalculator.GetIslandBounds(monitor, DockEdge.Top, 68, 200, 40, 4000);
         Assert.Equal(800 - (2 * DockTokens.IslandMargin), bounds.Width);
+    }
+
+    [Fact]
+    public void Primary_alias_matches_the_primary_device()
+    {
+        var primary = Monitor(1920, 1080) with { Id = @"\\.\DISPLAY3", DevicePath = @"\\?\DISPLAY#PHL", IsPrimary = true };
+        var other = Monitor(1080, 1920) with
+        {
+            Id = @"\\.\DISPLAY1",
+            DevicePath = @"\\?\DISPLAY#KOS",
+            IsPrimary = false,
+            Bounds = new RectLogical(-1080, 0, 1080, 1920),
+            WorkArea = new RectLogical(-1080, 0, 1080, 1920)
+        };
+        var topology = new DisplayTopologySnapshot { Monitors = [other, primary] };
+
+        Assert.True(DockLayoutCalculator.SameMonitor(topology, @"\\?\DISPLAY#PHL", "primary"));
+        Assert.False(DockLayoutCalculator.SameMonitor(topology, @"\\?\DISPLAY#PHL", @"\\?\DISPLAY#KOS"));
     }
 
     private static MonitorInfo Monitor(double width, double height) => new()

@@ -11,11 +11,18 @@ public sealed class WeatherProvider : IWeatherProvider, IDisposable
     private const string GeoJsUrl = "https://get.geojs.io/v1/ip/geo.json";
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
 
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        WriteIndented = false
+    };
+
     private readonly string _cacheFile;
     private readonly object _gate = new();
+    private readonly Dictionary<string, WeatherSnapshot> _snapshots = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, WeatherSettings> _watched = new(StringComparer.OrdinalIgnoreCase);
     private System.Threading.Timer? _refreshTimer;
     private WeatherSnapshot? _current;
-    private WeatherSettings _lastSettings = WeatherSettings.Default;
     private bool _started;
     private bool _isDisposed;
 
@@ -38,7 +45,7 @@ public sealed class WeatherProvider : IWeatherProvider, IDisposable
     {
         var dir = cacheDirectory ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "WinDock");
+            ProductInfo.DataFolderName);
         Directory.CreateDirectory(dir);
         _cacheFile = Path.Combine(dir, "weather-cache.json");
         TryLoadDiskCache();
@@ -66,6 +73,28 @@ public sealed class WeatherProvider : IWeatherProvider, IDisposable
         _refreshTimer = null;
     }
 
+    public WeatherSnapshot? SnapshotFor(WeatherSettings settings)
+    {
+        var key = CacheKey(WeatherSettings.Normalize(settings));
+        lock (_gate)
+        {
+            return _snapshots.TryGetValue(key, out var snapshot) ? snapshot : null;
+        }
+    }
+
+    public void Watch(IReadOnlyList<WeatherSettings> settings)
+    {
+        lock (_gate)
+        {
+            _watched.Clear();
+            foreach (var item in settings)
+            {
+                var normalized = WeatherSettings.Normalize(item);
+                _watched[CacheKey(normalized)] = normalized;
+            }
+        }
+    }
+
     private void OnBackgroundTimer(object? state)
     {
         if (_isDisposed || !_started)
@@ -73,7 +102,16 @@ public sealed class WeatherProvider : IWeatherProvider, IDisposable
             return;
         }
 
-        _ = RefreshAsync(_lastSettings, force: false);
+        WeatherSettings[] watched;
+        lock (_gate)
+        {
+            watched = _watched.Values.ToArray();
+        }
+
+        foreach (var settings in watched)
+        {
+            _ = RefreshAsync(settings, force: false);
+        }
     }
 
     public async Task<WeatherSnapshot?> RefreshAsync(
@@ -82,17 +120,17 @@ public sealed class WeatherProvider : IWeatherProvider, IDisposable
         CancellationToken cancellationToken = default)
     {
         settings = WeatherSettings.Normalize(settings);
-        _lastSettings = settings;
+        var key = CacheKey(settings);
 
         WeatherSnapshot? existing;
         lock (_gate)
         {
-            existing = _current;
+            _watched.TryAdd(key, settings);
+            _snapshots.TryGetValue(key, out existing);
         }
 
         if (!force
             && existing is { Error: WeatherError.None, IsOffline: false }
-            && CitiesMatch(existing.City, settings)
             && (DateTime.Now - existing.UpdatedTime).TotalMinutes < 15)
         {
             return existing;
@@ -101,17 +139,12 @@ public sealed class WeatherProvider : IWeatherProvider, IDisposable
         try
         {
             var snapshot = await FetchFromApiAsync(settings, cancellationToken).ConfigureAwait(false);
-            lock (_gate)
-            {
-                _current = snapshot;
-            }
-
+            Publish(key, snapshot);
             if (snapshot.Error == WeatherError.None)
             {
-                SaveDiskCache(snapshot);
+                SaveDiskCache();
             }
 
-            Changed?.Invoke(this, EventArgs.Empty);
             return snapshot;
         }
         catch (OperationCanceledException)
@@ -123,19 +156,17 @@ public sealed class WeatherProvider : IWeatherProvider, IDisposable
             WeatherSnapshot fallback;
             lock (_gate)
             {
-                if (_current is { Error: WeatherError.None })
+                if (_snapshots.TryGetValue(key, out var cached) && cached.Error == WeatherError.None)
                 {
-                    _current = _current with { IsOffline = true };
-                    fallback = _current;
+                    fallback = cached with { IsOffline = true };
                 }
                 else
                 {
                     fallback = ErrorSnapshot(WeatherError.Network, settings.City);
-                    _current = fallback;
                 }
             }
 
-            Changed?.Invoke(this, EventArgs.Empty);
+            Publish(key, fallback);
             return fallback;
         }
     }
@@ -351,14 +382,27 @@ public sealed class WeatherProvider : IWeatherProvider, IDisposable
                && double.TryParse(el.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out value);
     }
 
-    private static bool CitiesMatch(string snapshotCity, WeatherSettings settings)
+    internal static string CacheKey(WeatherSettings settings)
     {
         if (settings.AutoLocate && string.IsNullOrWhiteSpace(settings.City))
         {
-            return !string.IsNullOrWhiteSpace(snapshotCity);
+            return "auto";
         }
 
-        return string.Equals(snapshotCity, settings.City, StringComparison.OrdinalIgnoreCase);
+        return string.IsNullOrWhiteSpace(settings.City)
+            ? "unset"
+            : settings.City.Trim().ToLowerInvariant();
+    }
+
+    private void Publish(string key, WeatherSnapshot snapshot)
+    {
+        lock (_gate)
+        {
+            _snapshots[key] = snapshot;
+            _current = snapshot;
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private static WeatherSnapshot ErrorSnapshot(WeatherError error, string city) => new()
@@ -381,12 +425,43 @@ public sealed class WeatherProvider : IWeatherProvider, IDisposable
             }
 
             var json = File.ReadAllText(_cacheFile);
-            var snapshot = JsonSerializer.Deserialize<WeatherSnapshot>(json);
-            if (snapshot is { Error: WeatherError.None })
+            using var doc = JsonDocument.Parse(json);
+            if ((doc.RootElement.TryGetProperty("cities", out var citiesElem)
+                    || doc.RootElement.TryGetProperty("Cities", out citiesElem))
+                && citiesElem.ValueKind == JsonValueKind.Object)
             {
+                var cache = JsonSerializer.Deserialize<WeatherDiskCache>(json, JsonOptions);
+                if (cache?.Cities is null)
+                {
+                    return;
+                }
+
                 lock (_gate)
                 {
-                    _current = snapshot with { IsOffline = true };
+                    foreach (var pair in cache.Cities)
+                    {
+                        if (pair.Value is { Error: WeatherError.None })
+                        {
+                            _snapshots[pair.Key] = pair.Value with { IsOffline = true };
+                        }
+                    }
+
+                    _current = _snapshots.Values.OrderByDescending(item => item.UpdatedTime).FirstOrDefault();
+                }
+
+                return;
+            }
+
+            var snapshot = JsonSerializer.Deserialize<WeatherSnapshot>(json, JsonOptions);
+            if (snapshot is { Error: WeatherError.None })
+            {
+                var key = string.IsNullOrWhiteSpace(snapshot.City)
+                    ? "auto"
+                    : snapshot.City.Trim().ToLowerInvariant();
+                lock (_gate)
+                {
+                    _snapshots[key] = snapshot with { IsOffline = true };
+                    _current = _snapshots[key];
                 }
             }
         }
@@ -395,9 +470,17 @@ public sealed class WeatherProvider : IWeatherProvider, IDisposable
         }
     }
 
-    private void SaveDiskCache(WeatherSnapshot snapshot)
+    private void SaveDiskCache()
     {
-        if (snapshot.Error != WeatherError.None)
+        Dictionary<string, WeatherSnapshot> cities;
+        lock (_gate)
+        {
+            cities = _snapshots
+                .Where(pair => pair.Value.Error == WeatherError.None)
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (cities.Count == 0)
         {
             return;
         }
@@ -410,7 +493,7 @@ public sealed class WeatherProvider : IWeatherProvider, IDisposable
                 Directory.CreateDirectory(dir);
             }
 
-            var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions { WriteIndented = false });
+            var json = JsonSerializer.Serialize(new WeatherDiskCache { Cities = cities }, JsonOptions);
             File.WriteAllText(_cacheFile, json);
         }
         catch (Exception)
@@ -468,4 +551,9 @@ public sealed class WeatherProvider : IWeatherProvider, IDisposable
         _isDisposed = true;
         Stop();
     }
+}
+
+internal sealed class WeatherDiskCache
+{
+    public Dictionary<string, WeatherSnapshot> Cities { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

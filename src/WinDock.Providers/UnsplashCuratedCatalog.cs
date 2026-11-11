@@ -1,0 +1,109 @@
+using WinDock.Core;
+
+namespace WinDock.Providers;
+
+/// <summary>
+/// Built-in curated wallpapers from Unsplash (https://unsplash.com/license),
+/// ported from qiaomu-home (https://github.com/joeseesun/qiaomu-home).
+/// Selected for high aesthetic quality and calm contrast.
+/// Hotlinked directly from images.unsplash.com; no API key needed.
+/// </summary>
+public static class UnsplashCuratedCatalog
+{
+    private const string Utm = "utm_source=windock&utm_medium=referral";
+
+    private static readonly (string Id, string Path, string Author, string Username, string Color)[] Items =
+    [
+        ("Q1p7bh3SHj8", "photo-1451187580459-43490279c0fa", "NASA", "nasa", "#0c2626"),
+        ("phIFdC6lA4E", "photo-1519681393784-d120267933ba", "Benjamin Voros", "vorosbenisop", "#0c2659"),
+        ("sO-JmQj95ec", "photo-1492724724894-7464c27d0ceb", "Kevin Lanceplaine", "lanceplaine", "#262640"),
+        ("-93ArahrTKc", "photo-1543275485-77cf9dae2880", "Ivan Bandura", "unstable_affliction", "#402626"),
+        ("7XbxPUdRtgw", "photo-1572270907014-c31da1c54124", "Carlos Vega", "charliebcn", "#737373"),
+        ("c9MFM8rSMsQ", "photo-1541599468348-e96984315921", "Michelle Spollen", "micki", "#264059"),
+        ("6tfO1M8_gas", "photo-1512923927402-a9867a68180e", "Chris Lawton", "chrislawton", "#595959"),
+        ("oUTmhg97gzY", "photo-1615390265246-72d3198a48b7", "Ása Steinarsdóttir", "asast", "#0c4040"),
+        ("NRQV-hBF10M", "photo-1506744038136-46273834b3fb", "Bailey Zindel", "baileyzindel", "#d9d9d9"),
+        ("78A265wPiO4", "photo-1469474968028-56623f02e42e", "Urban Vintage", "urban_vintage", "#8c8c73"),
+        ("HTb2aTv2JHs", "photo-1605904266472-c5be8939cdb6", "Marek Piwnicki", "marekpiwnicki", "#260c0c"),
+        ("1Z2niiBPg5A", "photo-1470071459604-3b5ec3a7fe05", "v2osk", "v2osk", "#404040"),
+        ("JgOeRuGD_Y4", "photo-1477346611705-65d1883cee1e", "JOHN TOWNER", "heytowner", "#260c26"),
+        ("DlkF4-dbCOU", "photo-1493246507139-91e8fad9978e", "garrett parker", "garrettpsystems", "#262626"),
+        ("uOi3lg8fGl4", "photo-1473800447596-01729482b8eb", "Sam Ferrara", "samferrara", "#262640"),
+        ("cYrMQA7a3Wc", "photo-1499678329028-101435549a4e", "Anders Jildén", "andersjilden", "#262626"),
+        ("6KQETG8J-zI", "photo-1581610186406-5f6e9f9edbc1", "Daniel Olah", "danesduet", "#0c2640"),
+        ("in9-n0JwgZ0", "photo-1431440869543-efaf3388c585", "Breno Machado", "brenomachado", "#262626"),
+        ("kFHz9Xh3PPU", "photo-1482784160316-6eb046863ece", "jms", "jmsdono", "#262640"),
+        ("hvrpOmuMrAI", "photo-1500673922987-e212871fec22", "Johannes Plenio", "jplenio", "#262626"),
+        ("V7EgUtCnvLY", "photo-1780042426982-cb794203ea1d", "Pascal Debrunner", "debrupas", "#404040"),
+        ("7Y0NshQLohk", "photo-1504548840739-580b10ae7715", "Sumner Mahaffey", "sumnerm", "#a6a6a6"),
+        ("tpCPd4MbzNU", "photo-1577578306649-09e937512e28", "Gissur O. Steinarsson", "gissurosteinarsson", "#595973"),
+        ("RwHv7LgeC7s", "photo-1523712999610-f77fbcfc3843", "Johannes Plenio", "jplenio", "#59260c"),
+        ("xHhaFZb_ln0", "photo-1509380247342-83d059a517a6", "Iswanto Arif", "iswanto", "#262626"),
+        ("Xk2Pl7CMKYY", "photo-1564376130023-5360fbb7c91b", "Johannes Mändle", "leonardo_64", "#a6c0c0"),
+        ("1c33ba-uh_8", "photo-1547327132-5d20850c62b5", "Anthony Da Cruz", "akhu", "#8c8cc0"),
+        ("LGgKrtjNsoI", "photo-1612543827278-d19245d6a00d", "Marek Piwnicki", "marekpiwnicki", "#f3a68c"),
+        ("KMn4VEeEPR8", "photo-1507525428034-b723cf961d3e", "Sean Oulashin", "oulashin", "#c0c0c0"),
+        ("_RBcxo9AU-U", "photo-1472214103451-9374bd1c798e", "Robert Lukeman", "robertlukeman", "#40590c"),
+        ("N9Z8rUCwUPU", "photo-1716919400792-738a00ab1be7", "DJ", "djthoms", "#404059"),
+        ("7BjhtdogU3A", "photo-1475070929565-c985b496cb9f", "Karsten Würth", "karsten_wuerth", "#262626"),
+        ("17_tB-oI0ao", "photo-1551309292-e185c0b6e22a", "Alessio Soggetti", "asoggetti", "#0c2626"),
+        ("2Hzmz15wGik", "photo-1511884642898-4c92249e20b6", "pine  watt", "pinewatt", "#262626"),
+        ("erokwq3nu6s", "photo-1687033826405-9d922c28d54a", "Kym MacKinnon", "vixenly", "#738ca6"),
+        ("LcCpvQhjJSM", "photo-1542206715-91831740a1af", "Angel Santos", "afs_snapshots", "#262626"),
+        ("4e9eeHdiBi0", "photo-1544259342-306eccfec481", "Kevin Bosc", "kevinbosc", "#262626"),
+        ("IzsVq4gwQO4", "photo-1496162963310-1180604b1e53", "simon", "simon_berger", "#262626"),
+        ("xyCpmrP_0Qo", "photo-1684581159337-6434c3ca59be", "Chris wu", "chrisjorwu", "#262626"),
+        ("tTSkzqDklWk", "photo-1696914083279-3ce7756f41a4", "Artyom Panfilov", "panfilov_jpg", "#0c2626"),
+        ("EeOgxp9_Rfk", "photo-1603137884437-f31086c73ec4", "Anna Tsareva", "tsariovaanna", "#a6c0c0"),
+        ("XEOD_ZlBhEM", "photo-1660577291136-244a0fd796e3", "Vasilina Sirotina", "luniavis", "#26260c"),
+        ("RhXk4pjhEv8", "photo-1595757077131-e91fc687eb28", "Elimende Inagella", "elimendeinagella", "#26260c"),
+        ("aX7shhAOvp4", "photo-1567529862126-0742389673a2", "Anastasiya Romanova", "nanichkar", "#26260c"),
+        ("xj-s70L4rrY", "photo-1710273330112-1461aa903ac7", "James Kelly-Smith", "jksphotographer", "#404040"),
+        ("ESLWcO_qd8A", "photo-1629316583544-7d83debbc4ad", "Dmytro Bukhantsov", "bdv91", "#404026"),
+        ("h04c2IAyXp8", "photo-1604440095301-4ec2f9230155", "Seb Zurcher", "seb_zr", "#26260c"),
+        ("sGptUDSrMVU", "photo-1623423415485-1d36867376b6", "Annegret Kammer", "anneeaway", "#0c2626"),
+        ("z_f2JrBRbOg", "photo-1603979649806-5299879db16b", "Ansgar Scheffold", "ansgarscheffold", "#26260c"),
+        ("GA09PKfRIQY", "photo-1559310589-2673bfe16970", "Adam Vradenburg", "vradenburg", "#0c2626")
+    ];
+
+    public static int Count => Items.Length;
+
+    public static IReadOnlyList<WallpaperItem> GetAll(int width = 1920) =>
+        Items.Select(item => ToWallpaperItem(item, width)).ToList();
+
+    public static WallpaperItem Next(string? currentId, int width = 1920, Random? random = null)
+    {
+        random ??= Random.Shared;
+        var candidates = Items.Where(i => !string.Equals($"curated:{i.Id}", currentId, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (candidates.Length == 0)
+        {
+            candidates = Items;
+        }
+
+        var chosen = candidates[random.Next(candidates.Length)];
+        return ToWallpaperItem(chosen, width);
+    }
+
+    public static WallpaperItem? FindById(string id, int width = 1920)
+    {
+        var cleanId = id.StartsWith("curated:", StringComparison.OrdinalIgnoreCase) ? id[8..] : id;
+        var found = Items.FirstOrDefault(i => string.Equals(i.Id, cleanId, StringComparison.OrdinalIgnoreCase));
+        return string.IsNullOrEmpty(found.Id) ? null : ToWallpaperItem(found, width);
+    }
+
+    private static WallpaperItem ToWallpaperItem((string Id, string Path, string Author, string Username, string Color) item, int width)
+    {
+        var sizedUrl = $"https://images.unsplash.com/{item.Path}?w={width}&q=80&fm=jpg&fit=crop";
+        return new WallpaperItem
+        {
+            Id = $"curated:{item.Id}",
+            Source = WallpaperSource.Curated,
+            Url = sizedUrl,
+            Title = item.Author,
+            Author = item.Author,
+            AuthorUrl = $"https://unsplash.com/@{item.Username}?{Utm}",
+            PageUrl = $"https://unsplash.com/photos/{item.Id}?{Utm}",
+            DominantColor = item.Color
+        };
+    }
+}

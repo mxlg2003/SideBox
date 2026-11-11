@@ -24,6 +24,8 @@ public sealed record NetworkWidgetSettings
 
     public bool ChartInPopup { get; init; } = true;
 
+    public bool ShowWifiSignal { get; init; }
+
     public static NetworkWidgetSettings Default { get; } = new();
 
     public static NetworkWidgetSettings Normalize(NetworkWidgetSettings? settings)

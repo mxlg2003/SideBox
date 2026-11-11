@@ -57,6 +57,27 @@ public class UiLocaleTests
     }
 
     [Fact]
+    public void Navigation_and_settings_groups_localized()
+    {
+        Assert.Equal("基础设置", UiText.NavGroupBasic);
+        Assert.Equal("核心功能", UiText.NavGroupCore);
+        Assert.Equal("系统与支持", UiText.NavGroupSystemAndSupport);
+        Assert.Equal("模块广场", UiText.NavModules);
+        Assert.Equal("情景模式", UiText.NavProfiles);
+        Assert.Equal("快捷键中心", UiText.NavHotkeys);
+
+        using (UiLocale.Push(UiLanguage.English))
+        {
+            Assert.Equal("Basic Settings", UiText.NavGroupBasic);
+            Assert.Equal("Core Features", UiText.NavGroupCore);
+            Assert.Equal("System & Support", UiText.NavGroupSystemAndSupport);
+            Assert.Equal("Widgets", UiText.NavModules);
+            Assert.Equal("Profiles", UiText.NavProfiles);
+            Assert.Equal("Shortcuts", UiText.NavHotkeys);
+        }
+    }
+
+    [Fact]
     public void IsChineseCulture_reads_zh_prefix()
     {
         Assert.True(UiLocale.IsChineseCulture(CultureInfo.GetCultureInfo("zh-CN")));

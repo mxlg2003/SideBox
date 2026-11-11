@@ -4,7 +4,7 @@ public static class DockLayoutCalculator
 {
     public const double DefaultThickness = DockLayoutConstants.TileHeight + (2 * DockLayoutConstants.IslandPaddingY) + 2;
 
-    public const double SideThickness = DefaultThickness;
+    public const double SideThickness = DockLayoutConstants.SideIslandWidth;
 
     public static double ThicknessFor(DockEdge edge) =>
         edge is DockEdge.Left or DockEdge.Right ? SideThickness : DefaultThickness;
@@ -78,6 +78,24 @@ public static class DockLayoutCalculator
                    string.Equals(m.Id, monitorRef, StringComparison.OrdinalIgnoreCase)
                    || string.Equals(m.DevicePath, monitorRef, StringComparison.OrdinalIgnoreCase))
                ?? topology.Primary;
+    }
+
+    public static bool SameMonitor(DisplayTopologySnapshot topology, string? left, string? right)
+    {
+        if (string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (topology.Monitors.Count == 0)
+        {
+            return false;
+        }
+
+        var a = ResolveMonitor(topology, left);
+        var b = ResolveMonitor(topology, right);
+        return string.Equals(a.Id, b.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(a.DevicePath, b.DevicePath, StringComparison.OrdinalIgnoreCase);
     }
 
     public static WidgetPlacement RelocateToPrimary(WidgetPlacement placement) => new()

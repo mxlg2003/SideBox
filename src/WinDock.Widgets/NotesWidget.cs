@@ -10,7 +10,7 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, INotesHistory, ILocalizable
+public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, INotesHistory, ILocalizable, IDockEdgeAware
 {
     private readonly INotesStore _store;
     private readonly string _key;
@@ -29,13 +29,13 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
     private readonly TextBlock _historyCaption = new();
     private IReadOnlyList<NotesHistoryItem> _history = [];
     private TextBlock _flyoutTitle = null!;
-    private TextBlock _todoGlyph = null!;
+    private PhosphorGlyph _todoGlyph = null!;
     private TextBlock _customizeTitle = null!;
     private TextBlock _backLabel = null!;
     private TextBlock _paperCaption = null!;
     private TextBlock _syntaxCaption = null!;
     private TextBlock _syntaxHint = null!;
-    private TextBlock _customizeGlyph = null!;
+    private PhosphorGlyph _customizeGlyph = null!;
     private TextBlock _deleteCancel = null!;
     private TextBlock _deleteConfirmLabel = null!;
     private readonly ScrollViewer _historyScroll = new()
@@ -45,9 +45,10 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
         Margin = new Thickness(0, 8, 0, 0)
     };
-    private readonly List<(string Id, TextBlock Check)> _marks = [];
+    private readonly List<(string Id, PhosphorGlyph Check)> _marks = [];
     private readonly DispatcherTimer _saveTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
     private readonly Popup _popup;
+    private bool _side;
     private FrameworkElement _deleteButton = null!;
     private FrameworkElement _deleteConfirm = null!;
     private string _paper = NotePapers.Default;
@@ -247,6 +248,13 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         _popup.IsOpen = true;
     }
 
+    public void ApplyDockEdge(DockEdge edge)
+    {
+        _side = WidgetChrome.IsSide(edge);
+        FitPreview(_preview.Text);
+        WidgetChrome.FitEdge(_tile, _side, 0);
+    }
+
     public void ApplyPaper(string? paper)
     {
         _paper = NotePapers.Normalize(paper);
@@ -314,11 +322,11 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
     private Grid BuildEditor(Brush ink)
     {
         _flyoutTitle = HeaderLabel(UiText.WidgetNotes, ink);
-        _todoGlyph = HeaderGlyph("\uE73A", ink, ToggleCurrentLineTodo);
+        _todoGlyph = WidgetChrome.HeaderIcon(PhosphorIcon.CheckSquare, ToggleCurrentLineTodo, foreground: ink, tag: "ink", opacity: 0.55);
         _todoGlyph.ToolTip = UiText.NotesTodoToggle;
-        _customizeGlyph = HeaderGlyph("\uE8FD", ink, OpenCustomize);
+        _customizeGlyph = WidgetChrome.HeaderIcon(PhosphorIcon.SlidersHorizontal, OpenCustomize, foreground: ink, tag: "ink", opacity: 0.55);
         _customizeGlyph.ToolTip = UiText.Customize;
-        var close = HeaderGlyph("\u00D7", ink, ClosePopup, 18);
+        var close = WidgetChrome.HeaderClose(ClosePopup, 18, ink, "ink", 0.55);
         var header = HeaderRow(_flyoutTitle, _todoGlyph, _customizeGlyph, close);
         var footer = BuildDeleteFooter(ink);
         var page = new Grid();
@@ -375,7 +383,7 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
             Cursor = Cursors.Hand,
             Children =
             {
-                HeaderGlyph("\uE76B", ink, ShowEditor, 12),
+                WidgetChrome.HeaderIcon(PhosphorIcon.CaretLeft, ShowEditor, 12, ink, "ink", 0.55),
                 HeaderLabel(UiText.Back, ink)
             }
         };
@@ -388,7 +396,7 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         _customizeTitle = HeaderLabel(UiText.Customize, ink);
         _customizeTitle.Margin = new Thickness(8, 0, 0, 0);
         _customizeTitle.FontWeight = FontWeights.SemiBold;
-        var close = HeaderGlyph("\u00D7", ink, ClosePopup, 18);
+        var close = WidgetChrome.HeaderClose(ClosePopup, 18, ink, "ink", 0.55);
         var left = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -465,9 +473,8 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
             Restore();
             e.Handled = true;
         };
-        var trash = HeaderGlyph("\uE74D", _historyCaption.Foreground, () => DiscardRequested?.Invoke(this, id));
+        var trash = WidgetChrome.HeaderIcon(PhosphorIcon.Trash, () => DiscardRequested?.Invoke(this, id), foreground: _historyCaption.Foreground, tag: "ink", opacity: 0.55);
         trash.ToolTip = UiText.DeleteForever;
-        trash.Padding = new Thickness(8, 4, 0, 4);
         var dot = new Ellipse
         {
             Width = 10,
@@ -490,13 +497,11 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         return row;
     }
 
-    private (Border Dot, TextBlock Check) Swatch(string id)
+    private (Border Dot, PhosphorGlyph Check) Swatch(string id)
     {
-        var check = new TextBlock
+        var check = new PhosphorGlyph(PhosphorIcon.Check, 11)
         {
-            Text = "\uE73E",
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 11,
+            Tag = "tint",
             Foreground = Brushes.White,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
@@ -519,8 +524,8 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         };
         var border = new Border
         {
-            Width = 32,
-            Height = 32,
+            Width = DockTokens.FlyoutControlHeight,
+            Height = DockTokens.FlyoutControlHeight,
             Margin = new Thickness(0, 0, 10, 0),
             Cursor = Cursors.Hand,
             Child = dot
@@ -577,7 +582,7 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
 
     private Grid BuildDeleteFooter(Brush ink)
     {
-        var trash = HeaderGlyph("\uE74D", ink, AskDelete);
+        var trash = WidgetChrome.HeaderIcon(PhosphorIcon.Trash, AskDelete, foreground: ink, tag: "ink", opacity: 0.55);
         trash.HorizontalAlignment = HorizontalAlignment.Right;
         trash.VerticalAlignment = VerticalAlignment.Bottom;
         trash.ToolTip = UiText.DeleteThisNote;
@@ -602,7 +607,7 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         };
         var footer = new Grid
         {
-            MinHeight = 28,
+            MinHeight = DockTokens.FlyoutControlHeight,
             Margin = new Thickness(0, 8, 0, 0)
         };
         footer.Children.Add(_deleteButton);
@@ -640,7 +645,8 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         {
             Background = Brushes.Transparent,
             Cursor = Cursors.Hand,
-            Padding = new Thickness(8, 4, 0, 4),
+            Height = DockTokens.FlyoutControlHeight,
+            Padding = new Thickness(10, 0, 10, 0),
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Bottom,
             Child = label
@@ -653,28 +659,6 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
         return border;
     }
 
-    private static TextBlock HeaderGlyph(string glyph, Brush ink, Action click, double size = 13)
-    {
-        var block = new TextBlock
-        {
-            Tag = "ink",
-            Text = glyph,
-            FontFamily = glyph == "\u00D7" ? WidgetFonts.Ui : new FontFamily("Segoe MDL2 Assets"),
-            FontSize = size,
-            Foreground = ink,
-            Opacity = 0.55,
-            Padding = new Thickness(8, 4, 0, 4),
-            Background = Brushes.Transparent,
-            Cursor = Cursors.Hand,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        block.MouseLeftButtonUp += (_, e) =>
-        {
-            click();
-            e.Handled = true;
-        };
-        return block;
-    }
 
     private void RequestDelete()
     {
@@ -715,6 +699,16 @@ public sealed class NotesWidget : UserControl, IWidgetOpenable, IWidgetCustomiza
 
     private void FitPreview(string text)
     {
+        if (_side)
+        {
+            _preview.Width = DockTokens.SideTileWidth - 12;
+            _preview.MaxHeight = 42;
+            _preview.TextAlignment = TextAlignment.Left;
+            return;
+        }
+
+        _preview.Width = 132;
+        _preview.TextAlignment = TextAlignment.Left;
         _preview.MaxHeight = NotesText.HasTitle(text) ? 14 : 28;
     }
 

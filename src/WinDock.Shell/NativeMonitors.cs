@@ -102,9 +102,7 @@ public static class NativeMonitors
             var entry = FromPoint(pt.X, pt.Y);
             if (entry is not null)
             {
-                return entry.IsPrimary
-                    ? "primary"
-                    : DisplayConfig.DevicePathFor(entry.DeviceName) ?? entry.DeviceName;
+                return DisplayConfig.DevicePathFor(entry.DeviceName) ?? entry.DeviceName;
             }
         }
 

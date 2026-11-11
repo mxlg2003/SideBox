@@ -1,4 +1,4 @@
-# WinDock MVP 计划
+# Sidebox MVP 计划
 
 对应 2 名熟悉 Windows 桌面的开发者、约 6–9 人月。本文把报告阶段 1+2 切成可验收里程碑。
 
@@ -63,7 +63,8 @@ M0 两人一起完成骨架。之后按垂直切片并行，接口以 `WinDock.C
 
 交付可开关 widget：
 
-- clock、notes、sysactivity、network、power、nowplaying、bing、stopwatch、countdown、alarm、focustimer、timeprogress
+- clock、notes、sysactivity、network、power、bing、stopwatch、countdown、alarm、focustimer、timeprogress、weather、schedule、disk、gpu、stocks
+- `nowplaying` 与 `processes` 代码仍在。两个产品开关都关闭，目录和岛面不提供。进程列表是实验开关
 - CPU / 内存共用 `IPerfSampler`（`PerformanceCounter`），仅在系统状态模块上岛时启动；网络 / 电源 / 媒体同样按订阅 Start/Stop
 - Now Playing：Edge 网页媒体 + 至少一种常见播放器；有会话才显示封面与控制，无会话不发全局媒体键
 - Bing 壁纸：HPImageArchive（仅 bing.com URL）+ 设为桌面；模块要先同意；失败时卡片可点重试
@@ -83,7 +84,7 @@ M0 两人一起完成骨架。之后按垂直切片并行，接口以 `WinDock.C
 - 显示器规则、时间规则
 - AppBar 可选模式仍是目标；当前实现为 stub，设置不开放，失败保持 Overlay
 - 隐私页、关于页、开机启动
-- 卸载不留服务 / 计划任务；保留 `%AppData%\WinDock` 与日志；卸载删 Run 键
+- 卸载不留服务 / 计划任务；保留 `%AppData%\Sidebox` 与日志；卸载删 Run 键
 
 验收：
 
@@ -96,7 +97,7 @@ M0 两人一起完成骨架。之后按垂直切片并行，接口以 `WinDock.C
 交付：
 
 - unpackaged x64 EXE + Inno Setup 骨架（`pack/WinDock.iss`）；SignTool 有证书再开
-- 兼容矩阵：22H2 / 23H2 / 24H2
+- 兼容矩阵：Win10 2004+ (20H2/21H2/22H2) / Win11 21H2 / 22H2 / 23H2 / 24H2
 - 笔记本 + 扩展坞插拔
 - `--safe` 禁用 AppBar 与全部 widget
 
@@ -110,9 +111,9 @@ Shell 手工矩阵：DPI 125/150/200、插拔显示器、全屏游戏、自动�
 
 ## Stretch（不挡 M5）
 
-- Open-Meteo 天气 + 手动城市
-- 本地日历（非 Graph）；`AppointmentStore` 仅在可用时启用
+- 系统日历（非 Graph）；`AppointmentStore` 仅在可用时启用。当前「日程」是本机手写清单，禁止假装已同步 Outlook
 - 文件夹徽标
+- 天气、日程、磁盘、GPU、进程、股票已经在模块目录里，不再算未做的 stretch
 
 ## 明确延后
 
@@ -120,7 +121,6 @@ Shell 手工矩阵：DPI 125/150/200、插拔显示器、全屏游戏、自动�
 - 脚本插件 / Power Automate
 - 实验性桌面层
 - Microsoft Store / MSIX
-- Windows 10
 - Graph To Do、支付 widget
 
 ## 风险对应

@@ -11,7 +11,7 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IFocusTimerConfigurable, IKeepAliveWhileRunning, IWidgetThemeAware, ILocalizable, IWidgetDetachable
+public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IFocusTimerConfigurable, IKeepAliveWhileRunning, IWidgetThemeAware, ILocalizable, IWidgetDetachable, IDockEdgeAware
 {
     private const uint Accent = 0xFF0078D4;
     private const uint QuietFill = 0x14000000;
@@ -46,7 +46,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
         Margin = new Thickness(0, 10, 0, 8)
     };
     private readonly List<(int Minutes, Border Chip, TextBlock Label)> _presetChips = [];
-    private readonly List<(string Id, TextBlock Check)> _marks = [];
+    private readonly List<(string Id, PhosphorGlyph Check)> _marks = [];
     private readonly Dictionary<string, TextBlock> _stepValues = new(StringComparer.Ordinal);
     private readonly Dictionary<string, TextBlock> _stepNames = new(StringComparer.Ordinal);
     private TextBlock _flyoutTitle = null!;
@@ -64,6 +64,10 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
         VerticalAlignment = VerticalAlignment.Center
     };
     private bool _applying;
+    private bool _side;
+    private readonly Grid _ringHost;
+    private readonly StackPanel _dockCopy;
+    private readonly StackPanel _dock;
 
     public FocusTimerWidget()
     {
@@ -92,7 +96,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
         _ring.VerticalAlignment = VerticalAlignment.Center;
         ApplyTheme(false);
 
-        var ringHost = new Grid
+        _ringHost = new Grid
         {
             Width = RingSize,
             Height = RingSize,
@@ -100,17 +104,18 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
             VerticalAlignment = VerticalAlignment.Center,
             Children = { _ring, _pauseMark }
         };
-        var copy = new StackPanel
+        _dockCopy = new StackPanel
         {
             VerticalAlignment = VerticalAlignment.Center,
             Children = { _tileTime, _tileStatus }
         };
-        _tile = WidgetChrome.Wrap(new StackPanel
+        _dock = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { ringHost, copy }
-        }, 0);
+            Children = { _ringHost, _dockCopy }
+        };
+        _tile = WidgetChrome.Wrap(_dock, 0);
         _tile.MouseLeftButtonUp += (_, e) =>
         {
             Open();
@@ -191,6 +196,21 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
     {
     }
 
+    public void ApplyDockEdge(DockEdge edge)
+    {
+        _side = WidgetChrome.IsSide(edge);
+        _dock.Orientation = _side ? Orientation.Vertical : Orientation.Horizontal;
+        _dock.HorizontalAlignment = HorizontalAlignment.Center;
+        _ringHost.Margin = _side ? new Thickness(0, 0, 0, 2) : new Thickness(0, 0, 8, 0);
+        _ringHost.HorizontalAlignment = HorizontalAlignment.Center;
+        _dockCopy.HorizontalAlignment = HorizontalAlignment.Center;
+        _tileTime.HorizontalAlignment = HorizontalAlignment.Center;
+        _tileTime.TextAlignment = _side ? TextAlignment.Center : TextAlignment.Left;
+        _tileStatus.HorizontalAlignment = HorizontalAlignment.Center;
+        _tileStatus.TextAlignment = _side ? TextAlignment.Center : TextAlignment.Left;
+        WidgetChrome.FitEdge(_tile, _side, 0);
+    }
+
     public void ApplyTheme(bool isLight)
     {
         _ring.Track = TokenBrushes.From(isLight ? DockTokens.Light.Stroke : DockTokens.Dark.Stroke);
@@ -258,6 +278,8 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
             return;
         }
 
+        FocusTimerEvents.Notify(_engine.Running, _engine.Phase);
+
         if (_engine.Settings.NotifyWhenFinished)
         {
             SystemSounds.Asterisk.Play();
@@ -282,6 +304,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
             _timer.Stop();
         }
 
+        FocusTimerEvents.Notify(_engine.Running, _engine.Phase);
         Render();
     }
 
@@ -290,6 +313,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
         HideResetMenu();
         _engine.SetFocusMinutes(minutes, Now);
         _timer.Stop();
+        FocusTimerEvents.Notify(_engine.Running, _engine.Phase);
         Persist();
         Render();
     }
@@ -299,6 +323,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
         HideResetMenu();
         _engine.ResetPeriod();
         _timer.Stop();
+        FocusTimerEvents.Notify(false, _engine.Phase);
         Render();
     }
 
@@ -307,6 +332,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
         HideResetMenu();
         _engine.ResetToSession1();
         _timer.Stop();
+        FocusTimerEvents.Notify(false, _engine.Phase);
         Render();
     }
 
@@ -453,8 +479,8 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
     private Grid BuildEditor()
     {
         _flyoutTitle = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.FocusTimer));
-        var customize = HeaderGlyph("\uE8FD", OpenCustomize);
-        var close = HeaderGlyph("\u00D7", ClosePopup, 18);
+        var customize = WidgetChrome.HeaderIcon(PhosphorIcon.SlidersHorizontal, OpenCustomize);
+        var close = WidgetChrome.HeaderClose(ClosePopup, 18);
         var header = HeaderRow(_flyoutTitle, customize, close);
         var primary = ActionButton(_primaryLabel, Accent, Toggle);
         _resetLabel = ResetLabel();
@@ -492,7 +518,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
             Cursor = Cursors.Hand,
             Children =
             {
-                HeaderGlyph("\uE76B", ShowEditor, 12),
+                WidgetChrome.HeaderIcon(PhosphorIcon.CaretLeft, ShowEditor, 12),
                 _backLabel
             }
         };
@@ -504,7 +530,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
         _customizeTitle = HeaderLabel(UiText.Customize);
         _customizeTitle.Margin = new Thickness(8, 0, 0, 0);
         _customizeTitle.FontWeight = FontWeights.SemiBold;
-        var close = HeaderGlyph("\u00D7", ClosePopup, 18);
+        var close = WidgetChrome.HeaderClose(ClosePopup, 18);
         var header = HeaderRow(new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -582,7 +608,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
         var chip = new Border
         {
             MinWidth = 58,
-            Height = 30,
+            Height = DockTokens.FlyoutControlHeight,
             CornerRadius = new CornerRadius(DockTokens.IslandCornerRadius),
             Margin = new Thickness(4, 0, 4, 0),
             Background = TokenBrushes.From(QuietFill),
@@ -619,9 +645,9 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
             VerticalAlignment = VerticalAlignment.Center,
             Children =
             {
-                RoundButton("\uE738", minus),
+                RoundButton(PhosphorIcon.Minus, minus),
                 value,
-                RoundButton("\uE710", plus)
+                RoundButton(PhosphorIcon.Plus, plus)
             }
         };
         Grid.SetColumn(controls, 1);
@@ -631,19 +657,16 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
 
     private static Border RoundButton(string glyph, Action click)
     {
-        var icon = new TextBlock
+        var icon = new PhosphorGlyph(glyph, 11)
         {
-            Text = glyph,
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 11,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         };
         var border = new Border
         {
-            Width = 28,
-            Height = 28,
-            CornerRadius = new CornerRadius(14),
+            Width = DockTokens.FlyoutControlHeight,
+            Height = DockTokens.FlyoutControlHeight,
+            CornerRadius = new CornerRadius(DockTokens.FlyoutControlHeight / 2),
             Background = TokenBrushes.From(QuietFill),
             Cursor = Cursors.Hand,
             Child = icon
@@ -657,13 +680,11 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
         return border;
     }
 
-    private (Border Dot, TextBlock Check) Swatch(string id)
+    private (Border Dot, PhosphorGlyph Check) Swatch(string id)
     {
-        var check = new TextBlock
+        var check = new PhosphorGlyph(PhosphorIcon.Check, 11)
         {
-            Text = "\uE73E",
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 11,
+            Tag = "tint",
             Foreground = Brushes.White,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
@@ -686,8 +707,8 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
         };
         var border = new Border
         {
-            Width = 32,
-            Height = 32,
+            Width = DockTokens.FlyoutControlHeight,
+            Height = DockTokens.FlyoutControlHeight,
             Margin = new Thickness(0, 0, 8, 0),
             Cursor = Cursors.Hand,
             Child = host
@@ -705,7 +726,7 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
         var border = new Border
         {
             MinWidth = 88,
-            Height = 34,
+            Height = DockTokens.FlyoutControlHeight,
             CornerRadius = new CornerRadius(DockTokens.IslandCornerRadius),
             Padding = new Thickness(16, 0, 16, 0),
             Margin = new Thickness(4, 0, 4, 0),
@@ -761,25 +782,6 @@ public sealed class FocusTimerWidget : UserControl, IWidgetOpenable, IWidgetCust
         VerticalAlignment = VerticalAlignment.Center
     };
 
-    private static TextBlock HeaderGlyph(string glyph, Action click, double size = 13)
-    {
-        var block = new TextBlock
-        {
-            Text = glyph,
-            FontFamily = glyph == "\u00D7" ? WidgetFonts.Ui : new FontFamily("Segoe MDL2 Assets"),
-            FontSize = size,
-            Opacity = 0.45,
-            Padding = new Thickness(8, 4, 0, 4),
-            Cursor = Cursors.Hand,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        block.MouseLeftButtonUp += (_, e) =>
-        {
-            click();
-            e.Handled = true;
-        };
-        return block;
-    }
 
     private static DateTimeOffset Now => DateTimeOffset.UtcNow;
 

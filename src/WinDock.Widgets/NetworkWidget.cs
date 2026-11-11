@@ -10,7 +10,7 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IWidgetModeAware, INetworkConfigurable, IWidgetThemeAware, ILocalizable
+public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IWidgetModeAware, IDockEdgeAware, INetworkConfigurable, IWidgetThemeAware, IIslandLayoutAware, ILocalizable
 {
     private const double DockChartHeight = 28;
     private const string DockValueSample = "000.00";
@@ -42,6 +42,10 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
     private readonly ComboBox _showBox = new();
     private readonly CheckBox _dockChartBox = new();
     private readonly CheckBox _popupChartBox = new();
+    private readonly CheckBox _wifiBox = new();
+    private readonly TextBlock _wifiLabel = WidgetCopy.Secondary();
+    private readonly TextBlock _wifiValue = WidgetCopy.Primary();
+    private readonly Grid _wifiRow = new();
     private readonly Grid _panelRates = new();
     private readonly Border _tile;
     private readonly Border _panel;
@@ -55,12 +59,15 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
     private NetworkWidgetSettings _settings = NetworkWidgetSettings.Default;
     private WidgetDensity _density = WidgetDensity.Expanded;
     private double _copyWidth;
+    private double _laidOutWidth = double.NaN;
     private bool _applying;
     private bool _isLight = true;
+    private bool _side;
 
-    public NetworkWidget(INetworkProvider network)
+    public NetworkWidget(INetworkProvider network, WidgetDensity density = WidgetDensity.Expanded)
     {
         _network = network;
+        _density = density;
         _updated = UiPump.Coalesce<NetworkSnapshot>(Dispatcher, Render);
         StyleRate(_downValue, _downUnit);
         StyleRate(_upValue, _upUnit);
@@ -71,6 +78,7 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
         _panelUpName.Text = UiText.Upload;
         _footer.Text = NetworkFormat.Footer;
         _footer.Margin = new Thickness(0, 10, 0, 0);
+        _wifiLabel.Text = UiText.WifiSignal;
         _dockChart.Width = DockTokens.SparklineDockWidth;
         _dockChart.Height = DockChartHeight;
         _dockChart.Margin = new Thickness(4, 0, 0, 0);
@@ -130,6 +138,7 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
         Loaded += (_, _) =>
         {
             _network.Updated += _updated;
+            _network.CollectWifi = _settings.ShowWifiSignal;
             RebuildTile();
             Render(_network.Current);
         };
@@ -155,6 +164,15 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
     }
 
     public event EventHandler<NetworkWidgetSettings>? SettingsChanged;
+
+    public event EventHandler? IslandLayoutChanged;
+
+    public void ApplyDockEdge(DockEdge edge)
+    {
+        _side = WidgetChrome.IsSide(edge);
+        RebuildTile();
+        WidgetChrome.FitEdge(_tile, _side, 0);
+    }
 
     public void ApplyPaper(string? paper)
     {
@@ -186,6 +204,7 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
         _showCaption.Text = UiText.Display;
         _dockChartBox.Content = UiText.DockChart;
         _popupChartBox.Content = UiText.PopupChart;
+        _wifiBox.Content = UiText.WifiSignal;
         FillShowBox();
         _applying = false;
         Render(_network.Current);
@@ -205,15 +224,21 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
 
     public void ApplyDensity(WidgetDensity density)
     {
+        var changed = _density != density;
         _density = density;
         RebuildTile();
         Render(_network.Current);
+        if (changed)
+        {
+            IslandLayoutChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public void ApplySettings(NetworkWidgetSettings settings)
     {
         _applying = true;
         _settings = NetworkWidgetSettings.Normalize(settings);
+        _network.CollectWifi = _settings.ShowWifiSignal;
         PaintCustomize();
         RebuildTile();
         Render(_network.Current);
@@ -250,6 +275,36 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
         _dockBody.Children.Clear();
         var compact = _density != WidgetDensity.Expanded;
         var chart = !compact && _settings.ChartInDock;
+        if (_side)
+        {
+            var inner = DockTokens.SideTileWidth - 12;
+            _copy.HorizontalAlignment = HorizontalAlignment.Center;
+            _copy.Width = double.NaN;
+            _copy.MinWidth = 0;
+            _copy.MaxWidth = inner;
+            _dockChart.Width = inner;
+            _dockChart.Height = 16;
+            _dockChart.Margin = new Thickness(0, 4, 0, 0);
+            _dockChart.HorizontalAlignment = HorizontalAlignment.Stretch;
+            var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+            stack.Children.Add(_copy);
+            if (chart)
+            {
+                stack.Children.Add(_dockChart);
+            }
+
+            _dockBody.Children.Add(stack);
+            _dockBody.Width = double.NaN;
+            _dockBody.MinWidth = 0;
+            WidgetChrome.ApplyTheme(_tile, _isLight);
+            _tile.InvalidateMeasure();
+            InvalidateMeasure();
+            return;
+        }
+
+        _dockChart.Width = DockTokens.SparklineDockWidth;
+        _dockChart.Height = DockChartHeight;
+        _dockChart.Margin = new Thickness(4, 0, 0, 0);
         var width = chart ? _copyWidth + 4 + DockTokens.SparklineDockWidth : _copyWidth;
         _dockBody.HorizontalAlignment = HorizontalAlignment.Center;
         _copy.HorizontalAlignment = HorizontalAlignment.Left;
@@ -281,6 +336,11 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
         WidgetChrome.ApplyTheme(_tile, _isLight);
         _tile.InvalidateMeasure();
         InvalidateMeasure();
+        if (double.IsNaN(_laidOutWidth) || Math.Abs(_laidOutWidth - width) > 0.5)
+        {
+            _laidOutWidth = width;
+            IslandLayoutChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void PlaceDockRates()
@@ -427,6 +487,10 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
             : Visibility.Collapsed;
         _panelChart.Visibility = _settings.ChartInPopup ? Visibility.Visible : Visibility.Collapsed;
         _footer.Visibility = _settings.ChartInPopup ? Visibility.Visible : Visibility.Collapsed;
+        _wifiValue.Text = snapshot.IsWifi
+            ? SysActivityFormat.Percent(snapshot.WifiSignalPercent ?? 0, snapshot.WifiSignalPercent is not null)
+            : "—";
+        _wifiRow.Visibility = _settings.ShowWifiSignal ? Visibility.Visible : Visibility.Collapsed;
         _dockChart.Render(snapshot.ReceiveHistory, snapshot.SendHistory, _settings.ShowsDownload, _settings.ShowsUpload);
         _panelChart.Render(snapshot.ReceiveHistory, snapshot.SendHistory, _settings.ShowsDownload, _settings.ShowsUpload);
         ToolTip = string.IsNullOrWhiteSpace(snapshot.AdapterName) ? null : snapshot.AdapterName;
@@ -435,13 +499,19 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
     private Grid BuildEditor()
     {
         _flyoutTitle = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.Network));
-        var customize = HeaderGlyph("\uE8FD", OpenCustomize);
-        var close = HeaderGlyph("\u00D7", ClosePopup, 18);
+        var customize = WidgetChrome.HeaderIcon(PhosphorIcon.SlidersHorizontal, OpenCustomize);
+        var close = WidgetChrome.HeaderClose(ClosePopup, 18);
         var header = HeaderRow(_flyoutTitle, customize, close);
+        _wifiRow.Margin = new Thickness(0, 12, 0, 0);
+        _wifiRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        _wifiRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        _wifiRow.Children.Add(_wifiLabel);
+        Grid.SetColumn(_wifiValue, 1);
+        _wifiRow.Children.Add(_wifiValue);
         _panelChart.HorizontalAlignment = HorizontalAlignment.Stretch;
         var page = new StackPanel
         {
-            Children = { header, _panelRates, _panelChart, _footer }
+            Children = { header, _panelRates, _wifiRow, _panelChart, _footer }
         };
         var grid = new Grid();
         grid.Children.Add(page);
@@ -458,7 +528,7 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
             Cursor = Cursors.Hand,
             Children =
             {
-                HeaderGlyph("\uE76B", ShowEditor, 12),
+                WidgetChrome.HeaderIcon(PhosphorIcon.CaretLeft, ShowEditor, 12),
                 _backLabel
             }
         };
@@ -470,7 +540,7 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
         _customizeTitle = HeaderLabel(UiText.Customize);
         _customizeTitle.Margin = new Thickness(8, 0, 0, 0);
         _customizeTitle.FontWeight = FontWeights.SemiBold;
-        var close = HeaderGlyph("\u00D7", ClosePopup, 18);
+        var close = WidgetChrome.HeaderClose(ClosePopup, 18);
         var header = HeaderRow(new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -505,10 +575,14 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
         _popupChartBox.Margin = new Thickness(0, 4, 0, 4);
         _popupChartBox.Checked += (_, _) => SetChart(dock: false, on: true);
         _popupChartBox.Unchecked += (_, _) => SetChart(dock: false, on: false);
+        _wifiBox.Content = UiText.WifiSignal;
+        _wifiBox.Margin = new Thickness(0, 4, 0, 4);
+        _wifiBox.Checked += (_, _) => SetWifi(true);
+        _wifiBox.Unchecked += (_, _) => SetWifi(false);
 
         var page = new StackPanel
         {
-            Children = { header, _showCaption, _showBox, _dockChartBox, _popupChartBox }
+            Children = { header, _showCaption, _showBox, _dockChartBox, _popupChartBox, _wifiBox }
         };
         var grid = new Grid();
         grid.Children.Add(page);
@@ -530,12 +604,26 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
         Render(_network.Current);
     }
 
+    private void SetWifi(bool on)
+    {
+        if (_applying)
+        {
+            return;
+        }
+
+        _settings = _settings with { ShowWifiSignal = on };
+        _network.CollectWifi = on;
+        Persist();
+        Render(_network.Current);
+    }
+
     private void PaintCustomize()
     {
         WidgetChrome.SelectChoice(_showBox, _settings.Show);
 
         _dockChartBox.IsChecked = _settings.ChartInDock;
         _popupChartBox.IsChecked = _settings.ChartInPopup;
+        _wifiBox.IsChecked = _settings.ShowWifiSignal;
     }
 
     private void ShowEditor()
@@ -654,23 +742,4 @@ public sealed class NetworkWidget : UserControl, IWidgetOpenable, IWidgetCustomi
         VerticalAlignment = VerticalAlignment.Center
     };
 
-    private static TextBlock HeaderGlyph(string glyph, Action click, double size = 13)
-    {
-        var block = new TextBlock
-        {
-            Text = glyph,
-            FontFamily = glyph == "\u00D7" ? WidgetFonts.Ui : new FontFamily("Segoe MDL2 Assets"),
-            FontSize = size,
-            Opacity = 0.45,
-            Padding = new Thickness(8, 4, 0, 4),
-            Cursor = Cursors.Hand,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        block.MouseLeftButtonUp += (_, e) =>
-        {
-            click();
-            e.Handled = true;
-        };
-        return block;
-    }
 }

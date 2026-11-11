@@ -2,14 +2,15 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:WinDock.App"
-        Title="WinDock"
-        Width="1000"
-        Height="680"
-        MinWidth="800"
-        MinHeight="520"
+        xmlns:widgets="clr-namespace:WinDock.Widgets;assembly=WinDock.Widgets"
+        Title="SideBox 设置中心"
+        Width="1040"
+        Height="720"
+        MinWidth="960"
+        MinHeight="640"
         WindowStartupLocation="CenterScreen"
         ShowInTaskbar="True"
-        FontFamily="Segoe UI Variable, Segoe UI"
+        FontFamily="{x:Static widgets:UiFont.Family}"
         Background="#FFF4F4F6">
     <Window.Resources>
         <ResourceDictionary>
@@ -20,357 +21,941 @@
     </Window.Resources>
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="NavColumn" Width="168"/>
+            <ColumnDefinition x:Name="NavColumn" Width="220"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
+        <!-- Left Navigation Rail (Width 220px, Single-Pane Fluent Design) -->
         <Border x:Name="NavPane" Grid.Column="0"
                 Background="#FFF4F5F7"
-                BorderBrush="#14000000"
+                BorderBrush="{DynamicResource Settings.Stroke}"
                 BorderThickness="0,0,1,0"
-                Padding="12">
-            <DockPanel>
-                <TextBlock x:Name="NavTitle" DockPanel.Dock="Top" Text="设置" Style="{StaticResource Settings.NavTitle}"/>
+                Padding="12,14,12,14">
+            <DockPanel LastChildFill="True">
+                <!-- App Brand Header -->
+                <Border DockPanel.Dock="Top" Margin="4,2,4,16">
+                    <DockPanel LastChildFill="True">
+                        <Border Width="26" Height="26" CornerRadius="6" Background="{DynamicResource Settings.Accent}"
+                                Margin="0,0,10,0" VerticalAlignment="Center">
+                            <widgets:PhosphorGlyph Icon="squares-four" Width="14" Height="14" Foreground="White"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock x:Name="NavTitle" Text="SideBox 设置中心" FontSize="14" FontWeight="Bold"
+                                   Foreground="{DynamicResource Settings.Text}" VerticalAlignment="Center"/>
+                    </DockPanel>
+                </Border>
+
+                <!-- Footer: Exit Button -->
                 <Button x:Name="NavExitButton" DockPanel.Dock="Bottom" Margin="0,16,0,0"
                         Style="{StaticResource Settings.DangerButton}"
                         Click="NavExit_OnClick">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                        <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="12" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="NavExitLabel" Text="退出 WinDock" VerticalAlignment="Center"/>
+                        <widgets:PhosphorGlyph Icon="sign-out" Width="14" Height="14" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource Settings.Danger}"/>
+                        <TextBlock x:Name="NavExitLabel" Text="退出 SideBox" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
+
+                <!-- Navigation List -->
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
-                        <TextBlock x:Name="NavGroupDock" Text="Dock" Style="{StaticResource Settings.NavGroup}" Margin="8,0,8,8"/>
-                        <RadioButton x:Name="NavModules" GroupName="SettingsPage" Tag="modules"
+                        <!-- Group 1: 基础设置 -->
+                        <TextBlock x:Name="NavGroupBasic" Text="基础设置" Style="{StaticResource Settings.NavGroup}"/>
+                        <RadioButton x:Name="NavGeneral" GroupName="SettingsPage" Tag="general"
                                      Style="{StaticResource Settings.NavItem}"
-                                     AutomationProperties.Name="模块"
+                                     AutomationProperties.Name="常规"
                                      Checked="Nav_OnChecked">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE8A5;" Style="{StaticResource Settings.NavGlyph}"/>
-                                <TextBlock x:Name="NavModulesLabel" Text="模块" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" Margin="2,0,0,0">
+                                <widgets:PhosphorGlyph Icon="gear" Style="{StaticResource Settings.NavGlyph}"/>
+                                <TextBlock x:Name="NavGeneralLabel" Text="常规设置" VerticalAlignment="Center"/>
                             </StackPanel>
                         </RadioButton>
                         <RadioButton x:Name="NavLayout" GroupName="SettingsPage" Tag="layout"
                                      Style="{StaticResource Settings.NavItem}"
-                                     AutomationProperties.Name="布局"
+                                     AutomationProperties.Name="停靠与布局"
                                      Checked="Nav_OnChecked">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE7F8;" Style="{StaticResource Settings.NavGlyph}"/>
-                                <TextBlock x:Name="NavLayoutLabel" Text="布局" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" Margin="2,0,0,0">
+                                <widgets:PhosphorGlyph Icon="layout" Style="{StaticResource Settings.NavGlyph}"/>
+                                <TextBlock x:Name="NavLayoutLabel" Text="停靠与布局" VerticalAlignment="Center"/>
                             </StackPanel>
                         </RadioButton>
-
-                        <TextBlock x:Name="NavGroupDisplay" Text="显示" Style="{StaticResource Settings.NavGroup}"/>
                         <RadioButton x:Name="NavAppearance" GroupName="SettingsPage" Tag="appearance"
                                      Style="{StaticResource Settings.NavItem}"
-                                     AutomationProperties.Name="外观"
+                                     AutomationProperties.Name="外观与材质"
                                      Checked="Nav_OnChecked">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE790;" Style="{StaticResource Settings.NavGlyph}"/>
-                                <TextBlock x:Name="NavAppearanceLabel" Text="外观" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" Margin="2,0,0,0">
+                                <widgets:PhosphorGlyph Icon="palette" Style="{StaticResource Settings.NavGlyph}"/>
+                                <TextBlock x:Name="NavAppearanceLabel" Text="外观与材质" VerticalAlignment="Center"/>
                             </StackPanel>
                         </RadioButton>
 
-                        <TextBlock x:Name="NavGroupSystem" Text="系统" Style="{StaticResource Settings.NavGroup}"/>
+                        <!-- Group 2: 核心功能 -->
+                        <TextBlock x:Name="NavGroupCore" Text="核心功能" Style="{StaticResource Settings.NavGroup}"/>
+                        <RadioButton x:Name="NavModules" GroupName="SettingsPage" Tag="modules"
+                                     Style="{StaticResource Settings.NavItem}"
+                                     AutomationProperties.Name="模块广场"
+                                     Checked="Nav_OnChecked">
+                            <DockPanel LastChildFill="True">
+                                <Border DockPanel.Dock="Right" Background="{DynamicResource Settings.Accent}" CornerRadius="9" Padding="6,1" VerticalAlignment="Center" Margin="0,0,4,0">
+                                    <TextBlock x:Name="NavModulesBadge" Text="18" FontSize="10" FontWeight="Bold" Foreground="White"/>
+                                </Border>
+                                <StackPanel Orientation="Horizontal" Margin="2,0,0,0">
+                                    <widgets:PhosphorGlyph Icon="squares-four" Style="{StaticResource Settings.NavGlyph}"/>
+                                    <TextBlock x:Name="NavModulesLabel" Text="模块广场" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </RadioButton>
+                        <RadioButton x:Name="NavProfiles" GroupName="SettingsPage" Tag="profiles"
+                                     Style="{StaticResource Settings.NavItem}"
+                                     AutomationProperties.Name="情景模式"
+                                     Checked="Nav_OnChecked">
+                            <StackPanel Orientation="Horizontal" Margin="2,0,0,0">
+                                <widgets:PhosphorGlyph Icon="stack" Style="{StaticResource Settings.NavGlyph}"/>
+                                <TextBlock x:Name="NavProfilesLabel" Text="情景模式" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton x:Name="NavHotkeys" GroupName="SettingsPage" Tag="hotkeys"
+                                     Style="{StaticResource Settings.NavItem}"
+                                     AutomationProperties.Name="快捷键中心"
+                                     Checked="Nav_OnChecked">
+                            <StackPanel Orientation="Horizontal" Margin="2,0,0,0">
+                                <widgets:PhosphorGlyph Icon="keyboard" Style="{StaticResource Settings.NavGlyph}"/>
+                                <TextBlock x:Name="NavHotkeysLabel" Text="快捷键中心" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </RadioButton>
+
+                        <!-- Group 3: 系统与支持 -->
+                        <TextBlock x:Name="NavGroupSystem" Text="系统与支持" Style="{StaticResource Settings.NavGroup}"/>
                         <RadioButton x:Name="NavPrivacy" GroupName="SettingsPage" Tag="privacy"
                                      Style="{StaticResource Settings.NavItem}"
-                                     AutomationProperties.Name="隐私"
+                                     AutomationProperties.Name="数据与权限"
                                      Checked="Nav_OnChecked">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE72E;" Style="{StaticResource Settings.NavGlyph}"/>
-                                <TextBlock x:Name="NavPrivacyLabel" Text="隐私" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" Margin="2,0,0,0">
+                                <widgets:PhosphorGlyph Icon="shield" Style="{StaticResource Settings.NavGlyph}"/>
+                                <TextBlock x:Name="NavPrivacyLabel" Text="数据与权限" VerticalAlignment="Center"/>
                             </StackPanel>
                         </RadioButton>
                         <RadioButton x:Name="NavAbout" GroupName="SettingsPage" Tag="about"
                                      Style="{StaticResource Settings.NavItem}"
-                                     AutomationProperties.Name="关于"
+                                     AutomationProperties.Name="关于与社区"
                                      Checked="Nav_OnChecked">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE946;" Style="{StaticResource Settings.NavGlyph}"/>
-                                <TextBlock x:Name="NavAboutLabel" Text="关于" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" Margin="2,0,0,0">
+                                <widgets:PhosphorGlyph Icon="info" Style="{StaticResource Settings.NavGlyph}"/>
+                                <TextBlock x:Name="NavAboutLabel" Text="关于与社区" VerticalAlignment="Center"/>
                             </StackPanel>
                         </RadioButton>
-
-                        <StackPanel x:Name="AdvancedGroup">
-                            <TextBlock x:Name="NavGroupAdvanced" Text="高级" Style="{StaticResource Settings.NavGroup}"/>
-                            <RadioButton x:Name="NavProfiles" GroupName="SettingsPage" Tag="profiles"
-                                         Style="{StaticResource Settings.NavItem}"
-                                         AutomationProperties.Name="情景"
-                                         Checked="Nav_OnChecked">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE8F1;" Style="{StaticResource Settings.NavGlyph}"/>
-                                    <TextBlock x:Name="NavProfilesLabel" Text="情景" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </RadioButton>
-                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </DockPanel>
         </Border>
 
+        <!-- Right Content Area -->
         <Grid Grid.Column="1">
-            <DockPanel x:Name="PageModules" Visibility="Visible">
-                <StackPanel DockPanel.Dock="Top" Margin="24,24,24,16">
-                    <TextBlock x:Name="ModulesTitle" Text="模块" Style="{StaticResource Settings.Title}"/>
-                    <TextBlock x:Name="ModulesHelp" Style="{StaticResource Settings.Help}" Margin="{StaticResource Settings.HelpGap}"
-                               Text="把时钟、便笺等加到边缘岛上。"/>
-                </StackPanel>
-                <local:WidgetPicker x:Name="WidgetPicker"/>
-            </DockPanel>
 
-            <ScrollViewer x:Name="PageLayout" Visibility="Collapsed"
+            <!-- PAGE 1: 常规设置 (General) -->
+            <ScrollViewer x:Name="PageGeneral" Visibility="Visible"
                           VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel Margin="{StaticResource Settings.PageInset}" MaxWidth="560" HorizontalAlignment="Left">
-                    <TextBlock x:Name="LayoutTitle" Text="布局" Style="{StaticResource Settings.Title}"/>
-                    <TextBlock x:Name="LayoutIntro" Style="{StaticResource Settings.Help}" Margin="0,8,0,24"
-                               Text="配置屏幕停靠边缘、目标显示器，以及空闲时的自动隐藏行为。"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="16"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0">
-                            <TextBlock x:Name="EdgeLabel" Text="边缘位置" Style="{StaticResource Settings.Label}" Margin="{StaticResource Settings.LabelGap}"/>
-                            <ComboBox x:Name="EdgeBox" HorizontalAlignment="Stretch" SelectionChanged="EdgeBox_OnSelectionChanged">
-                                <ComboBoxItem x:Name="EdgeTop" Content="上" Tag="Top"/>
-                                <ComboBoxItem x:Name="EdgeLeft" Content="左" Tag="Left"/>
-                                <ComboBoxItem x:Name="EdgeRight" Content="右" Tag="Right"/>
-                            </ComboBox>
-                        </StackPanel>
-                        <StackPanel Grid.Column="2">
-                            <TextBlock x:Name="MonitorLabel" Text="显示器" Style="{StaticResource Settings.Label}" Margin="{StaticResource Settings.LabelGap}"/>
-                            <ComboBox x:Name="MonitorBox" HorizontalAlignment="Stretch" SelectionChanged="MonitorBox_OnSelectionChanged"/>
-                        </StackPanel>
-                    </Grid>
-                    <DockPanel Margin="0,24,0,0">
-                        <CheckBox x:Name="AutoHideCheck" Style="{StaticResource Settings.Toggle}"
-                                  DockPanel.Dock="Right" VerticalAlignment="Center"
-                                  AutomationProperties.Name="自动隐藏"
-                                  Click="AutoHide_OnClick"/>
-                        <StackPanel Margin="0,0,16,0">
-                            <TextBlock x:Name="AutoHideTitle" Text="自动隐藏" Style="{StaticResource Settings.Label}"/>
-                            <TextBlock x:Name="AutoHideHelp" Style="{StaticResource Settings.Help}" Margin="{StaticResource Settings.HelpGap}"
-                                       Text="无交互时自动收起至屏幕边缘，避免遮挡最大化窗口。"/>
-                        </StackPanel>
-                    </DockPanel>
-                    <DockPanel Margin="0,8,0,0">
-                        <CheckBox x:Name="PeekCheck" Style="{StaticResource Settings.Toggle}"
-                                  DockPanel.Dock="Right" VerticalAlignment="Center"
-                                  AutomationProperties.Name="鼠标靠近边缘热区时自动滑出"
-                                  Click="Peek_OnClick"/>
-                        <StackPanel Margin="0,0,16,0">
-                            <TextBlock x:Name="PeekTitle" Text="鼠标靠近边缘热区时自动滑出" Style="{StaticResource Settings.Label}"/>
-                            <TextBlock x:Name="PeekHelp" Style="{StaticResource Settings.Help}" Margin="{StaticResource Settings.HelpGap}"
-                                       Text="鼠标指针移入屏幕边缘的感应区域时自动滑出 Dock。"/>
-                        </StackPanel>
-                    </DockPanel>
-                    <DockPanel Margin="0,8,0,0">
-                        <CheckBox x:Name="RevealHotkeyCheck" Style="{StaticResource Settings.Toggle}"
-                                  DockPanel.Dock="Right" VerticalAlignment="Center"
-                                  AutomationProperties.Name="全局唤醒快捷键"
-                                  Click="RevealHotkey_OnClick"/>
-                        <StackPanel Margin="0,0,16,0">
-                            <TextBlock x:Name="RevealHotkeyTitle" Text="全局唤醒快捷键" Style="{StaticResource Settings.Label}"/>
-                            <TextBlock x:Name="RevealHotkeyHelp" Style="{StaticResource Settings.Help}" Margin="{StaticResource Settings.HelpGap}"
-                                       Text="开启后可通过全局快捷键呼出处于隐藏状态的 Dock。若快捷键被占用，可在下方重新录制。"/>
-                        </StackPanel>
-                    </DockPanel>
-                    <TextBox x:Name="RevealHotkeyBox" Style="{StaticResource Settings.TextBox}"
-                             Margin="0,8,0,0" HorizontalAlignment="Left" Width="280"
-                             IsReadOnly="True" CaretBrush="Transparent"
-                             AutomationProperties.Name="唤醒快捷键"
-                             GotKeyboardFocus="RevealHotkeyBox_OnGotKeyboardFocus"
-                             LostKeyboardFocus="RevealHotkeyBox_OnLostKeyboardFocus"
-                             PreviewKeyDown="RevealHotkeyBox_OnPreviewKeyDown"/>
-                    <TextBlock x:Name="RevealHotkeyHint" Style="{StaticResource Settings.Help}" Margin="{StaticResource Settings.HelpGap}"/>
-                    <DockPanel Margin="0,24,0,0">
-                        <CheckBox x:Name="CollapseAppsCheck" Style="{StaticResource Settings.Toggle}"
-                                  DockPanel.Dock="Right" VerticalAlignment="Center"
-                                  AutomationProperties.Name="程序折叠"
-                                  Click="CollapseApps_OnClick"/>
-                        <StackPanel Margin="0,0,16,0">
-                            <TextBlock x:Name="CollapseAppsTitle" Text="程序折叠" Style="{StaticResource Settings.Label}"/>
-                            <TextBlock x:Name="CollapseAppsHelp" Style="{StaticResource Settings.Help}" Margin="{StaticResource Settings.HelpGap}"
-                                       Text="Dock 上仅显示一个聚合程序图标，点击可展开全部应用程序与快捷方式。"/>
-                        </StackPanel>
-                    </DockPanel>
-                    <DockPanel Margin="0,8,0,0">
-                        <CheckBox x:Name="CollapseFoldersCheck" Style="{StaticResource Settings.Toggle}"
-                                  DockPanel.Dock="Right" VerticalAlignment="Center"
-                                  AutomationProperties.Name="文件夹折叠"
-                                  Click="CollapseFolders_OnClick"/>
-                        <StackPanel Margin="0,0,16,0">
-                            <TextBlock x:Name="CollapseFoldersTitle" Text="文件夹折叠" Style="{StaticResource Settings.Label}"/>
-                            <TextBlock x:Name="CollapseFoldersHelp" Style="{StaticResource Settings.Help}" Margin="{StaticResource Settings.HelpGap}"
-                                       Text="Dock 上仅显示一个聚合文件夹图标，点击可展开全部已钉选的文件夹。"/>
-                        </StackPanel>
-                    </DockPanel>
-                    <TextBlock x:Name="LayoutHelp" Style="{StaticResource Settings.Help}" Margin="0,24,0,0"
-                               Text="WinDock 默认为贴边居中的悬浮岛，在全屏应用或演示模式下会自动避让。可拖动两端调整宽度，双击边缘可恢复根据内容自适应。在多显示器间拖拽 Dock 会自动同步此处的显示器设置。内容超出屏幕范围时边缘将显示翻页箭头。"/>
-                </StackPanel>
-            </ScrollViewer>
+                <StackPanel Margin="32,24,32,32" MaxWidth="780" HorizontalAlignment="Left">
+                        <TextBlock x:Name="GeneralTitle" Text="常规设置" Style="{StaticResource Settings.Title}"/>
+                        <TextBlock x:Name="GeneralIntro" Style="{StaticResource Settings.Subtitle}"
+                                   Text="配置开机启动、界面语言、托盘联动以及数据备份"/>
 
-            <ScrollViewer x:Name="PageAppearance" Visibility="Collapsed"
-                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel Margin="{StaticResource Settings.PageInset}" MaxWidth="560" HorizontalAlignment="Left">
-                    <TextBlock x:Name="AppearanceTitle" Text="外观" Style="{StaticResource Settings.Title}"/>
-                    <TextBlock x:Name="AppearanceIntro" Style="{StaticResource Settings.Help}" Margin="0,8,0,24"
-                               Text="主题、材质和透明度设置将应用于整个 Dock。"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="16"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0">
-                            <TextBlock x:Name="ThemeLabel" Text="主题" Style="{StaticResource Settings.Label}" Margin="{StaticResource Settings.LabelGap}"/>
-                            <ComboBox x:Name="ThemeBox" HorizontalAlignment="Stretch" SelectionChanged="ThemeBox_OnSelectionChanged">
-                                <ComboBoxItem x:Name="ThemeSystem" Content="跟随系统" Tag="System"/>
-                                <ComboBoxItem x:Name="ThemeLight" Content="浅色" Tag="Light"/>
-                                <ComboBoxItem x:Name="ThemeDark" Content="深色" Tag="Dark"/>
-                            </ComboBox>
-                        </StackPanel>
-                        <StackPanel Grid.Column="2">
-                            <TextBlock x:Name="BackdropLabel" Text="材质" Style="{StaticResource Settings.Label}" Margin="{StaticResource Settings.LabelGap}"/>
-                            <ComboBox x:Name="BackdropBox" HorizontalAlignment="Stretch" SelectionChanged="BackdropBox_OnSelectionChanged">
-                                <ComboBoxItem x:Name="BackdropMica" Content="云母（偏实）" Tag="Mica"/>
-                                <ComboBoxItem x:Name="BackdropFrosted" Content="磨砂（雾面）" Tag="Frosted"/>
-                                <ComboBoxItem x:Name="BackdropGlass" Content="玻璃（通透）" Tag="Glass"/>
-                            </ComboBox>
-                        </StackPanel>
-                    </Grid>
-                    <TextBlock x:Name="LanguageLabel" Text="语言" Style="{StaticResource Settings.Label}" Margin="{StaticResource Settings.SectionLabel}"/>
-                    <ComboBox x:Name="LanguageBox" HorizontalAlignment="Stretch" SelectionChanged="LanguageBox_OnSelectionChanged">
-                        <ComboBoxItem x:Name="LanguageSystem" Content="跟随系统" Tag="System"/>
-                        <ComboBoxItem x:Name="LanguageChinese" Content="中文" Tag="Chinese"/>
-                        <ComboBoxItem x:Name="LanguageEnglish" Content="English" Tag="English"/>
-                    </ComboBox>
-                    <TextBlock x:Name="LanguageHelp" Style="{StaticResource Settings.Help}" Margin="{StaticResource Settings.HelpGap}"
-                               Text="设置界面语言。设为跟随系统时，在中文 Windows 环境下显示中文，其他语言环境下显示英文。"/>
-                    <TextBlock x:Name="TransparencyCaption" Text="Dock 透明度" Style="{StaticResource Settings.Label}" Margin="{StaticResource Settings.SectionLabel}"/>
-                    <DockPanel>
-                        <TextBlock x:Name="TransparencyLabel" DockPanel.Dock="Right" Width="40" VerticalAlignment="Center"
-                                   Style="{StaticResource Settings.Label}" Text="50%"/>
-                        <Slider x:Name="TransparencySlider" Minimum="0" Maximum="100" Value="50"
-                                IsSnapToTickEnabled="True" TickFrequency="1"
-                                VerticalAlignment="Center"
-                                ValueChanged="TransparencySlider_OnValueChanged"/>
-                    </DockPanel>
-                    <Border x:Name="IslandPreview" Height="56" HorizontalAlignment="Left" Width="280"
-                            Margin="0,16,0,0" CornerRadius="8" BorderThickness="1" Padding="5">
-                        <Border x:Name="IslandPreviewTile" CornerRadius="4" Padding="10,6" VerticalAlignment="Center" HorizontalAlignment="Left">
-                            <TextBlock x:Name="IslandPreviewLabel" Text="预览" FontSize="13" VerticalAlignment="Center"/>
+                        <!-- Section: 系统与启动 -->
+                        <TextBlock x:Name="SystemAndStartupLabel" Text="系统与启动" Style="{StaticResource Settings.SectionTitle}"/>
+                        <Border Style="{StaticResource Settings.CardGroup}">
+                            <StackPanel>
+                                <!-- Row: 开机自启 -->
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="StartupTitle" Text="随 Windows 开机自动启动" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock x:Name="StartupHelp" Style="{StaticResource Settings.RowDesc}"
+                                                   Text="登录桌面后自动在屏幕边缘加载 SideBox 悬浮岛，无多余驻留后台进程。"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="StartupCheck" Grid.Column="1" Style="{StaticResource Settings.Toggle}"
+                                              VerticalAlignment="Center" AutomationProperties.Name="开机启动"
+                                              Click="Startup_OnClick"/>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                <!-- Row: 界面语言 -->
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="LanguageLabel" Text="界面语言" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock x:Name="LanguageHelp" Style="{StaticResource Settings.RowDesc}"
+                                                   Text="设置主界面与上下文菜单显示的语言。"/>
+                                    </StackPanel>
+                                    <ComboBox x:Name="LanguageBox" Grid.Column="1" MinWidth="180" VerticalAlignment="Center"
+                                              SelectionChanged="LanguageBox_OnSelectionChanged">
+                                        <ComboBoxItem x:Name="LanguageSystem" Content="跟随系统 (System)" Tag="System"/>
+                                        <ComboBoxItem x:Name="LanguageChinese" Content="简体中文" Tag="Chinese"/>
+                                        <ComboBoxItem x:Name="LanguageEnglish" Content="English" Tag="English"/>
+                                    </ComboBox>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                <!-- Row: 托盘行为 -->
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="托盘图标与窗口行为" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock Text="关闭设置面板时最小化到系统托盘，保持 Dock 置顶不中断。" Style="{StaticResource Settings.RowDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox IsChecked="True" IsEnabled="False" Grid.Column="1" Style="{StaticResource Settings.Toggle}"
+                                              VerticalAlignment="Center" ToolTip="默认开启"/>
+                                </Grid>
+                            </StackPanel>
                         </Border>
-                    </Border>
-                    <TextBlock x:Name="AppearanceHelp" Style="{StaticResource Settings.Help}" Margin="0,24,0,0"
-                               Text="切换材质会自动应用推荐的预设透明度：云母（偏实）、磨砂（雾面）、玻璃（通透）。设置面板打开时 Dock 将保持常驻，便于即时预览效果。"/>
-                </StackPanel>
-            </ScrollViewer>
 
-            <ScrollViewer x:Name="PagePrivacy" Visibility="Collapsed"
-                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel Margin="{StaticResource Settings.PageInset}" MaxWidth="560" HorizontalAlignment="Left">
-                    <TextBlock x:Name="PrivacyTitle" Text="隐私" Style="{StaticResource Settings.Title}"/>
-                    <TextBlock x:Name="PrivacyIntro" Style="{StaticResource Settings.Help}" Margin="0,8,0,24"
-                               Text="所有权限默认处于关闭状态。关闭权限后对应模块仍保留在 Dock 上，但不再读取相关数据。"/>
-                    <DockPanel Margin="0,0,0,16">
-                        <CheckBox x:Name="MediaCheck" Style="{StaticResource Settings.Toggle}"
-                                  DockPanel.Dock="Right" VerticalAlignment="Center"
-                                  AutomationProperties.Name="允许读取正在播放的标题和封面"
-                                  Click="Privacy_OnClick"/>
-                        <StackPanel Margin="0,0,16,0">
-                            <TextBlock x:Name="MediaPrivacyTitle" Text="允许读取正在播放的标题和封面" Style="{StaticResource Settings.Label}"/>
-                            <TextBlock x:Name="MediaHint" Style="{StaticResource Settings.Help}" Margin="{StaticResource Settings.HelpGap}"/>
-                        </StackPanel>
-                    </DockPanel>
-                    <DockPanel Margin="0,0,0,16">
-                        <CheckBox x:Name="NetworkCheck" Style="{StaticResource Settings.Toggle}"
-                                  DockPanel.Dock="Right" VerticalAlignment="Center"
-                                  AutomationProperties.Name="允许显示网络适配器名称和速率"
-                                  Click="Privacy_OnClick"/>
-                        <StackPanel Margin="0,0,16,0">
-                            <TextBlock x:Name="NetworkPrivacyTitle" Text="允许显示网络适配器名称和速率" Style="{StaticResource Settings.Label}"/>
-                            <TextBlock x:Name="NetworkPrivacyHelp" Style="{StaticResource Settings.Help}" Margin="{StaticResource Settings.HelpGap}" Text="数据仅在本地处理，绝不上传网络。"/>
-                        </StackPanel>
-                    </DockPanel>
-                    <DockPanel Margin="0,0,0,16">
-                        <CheckBox x:Name="LocationCheck" Style="{StaticResource Settings.Toggle}"
-                                  DockPanel.Dock="Right" VerticalAlignment="Center"
-                                  AutomationProperties.Name="允许使用大致位置自动填写天气城市"
-                                  Click="Privacy_OnClick"/>
-                        <StackPanel Margin="0,0,16,0">
-                            <TextBlock x:Name="LocationPrivacyTitle" Text="允许使用大致位置自动填写天气城市" Style="{StaticResource Settings.Label}"/>
-                            <TextBlock x:Name="LocationPrivacyHelp" Style="{StaticResource Settings.Help}" Margin="{StaticResource Settings.HelpGap}"
-                                       Text="仅在你点击「自动定位」后，通过 HTTPS 查询大致城市。可随时关闭；关闭后只使用已填写的城市。"/>
-                        </StackPanel>
-                    </DockPanel>
-                    <DockPanel>
-                        <CheckBox x:Name="BingCheck" Style="{StaticResource Settings.Toggle}"
-                                  DockPanel.Dock="Right" VerticalAlignment="Center"
-                                  AutomationProperties.Name="允许从 bing.com 下载壁纸图"
-                                  Click="Privacy_OnClick"/>
-                        <StackPanel Margin="0,0,16,0">
-                            <TextBlock x:Name="BingPrivacyTitle" Text="允许从 bing.com 下载壁纸图" Style="{StaticResource Settings.Label}"/>
-                            <TextBlock x:Name="BingPrivacyHelp" Style="{StaticResource Settings.Help}" Margin="{StaticResource Settings.HelpGap}" Text="将其设为桌面壁纸时会二次确认。"/>
-                        </StackPanel>
-                    </DockPanel>
-                    <TextBlock x:Name="PrivacyHelp" Style="{StaticResource Settings.Help}" Margin="0,24,0,0"
-                               Text="未启用崩溃数据上报，所有诊断日志仅保存在本地设备。"/>
-                </StackPanel>
-            </ScrollViewer>
+                        <!-- Section: 配置管理与备份 -->
+                        <TextBlock x:Name="BackupSectionTitle" Text="配置管理与备份" Style="{StaticResource Settings.SectionTitle}"/>
+                        <Border Style="{StaticResource Settings.CardGroup}">
+                            <StackPanel>
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="导出 / 导入所有情景与偏好" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock x:Name="BackupSectionHelp" Style="{StaticResource Settings.RowDesc}"
+                                                   Text="将您的全部钉选应用、模块排版与快捷键备份为 JSON 格式文件，便于多设备同步。"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button x:Name="ExportSettingsButton" Content="导出配置" Style="{StaticResource Settings.Button}" Margin="0,0,8,0" Click="ExportSettings_OnClick"/>
+                                        <Button x:Name="ImportSettingsButton" Content="导入配置" Style="{StaticResource Settings.Button}" Click="ImportSettings_OnClick"/>
+                                    </StackPanel>
+                                </Grid>
 
-            <ScrollViewer x:Name="PageAbout" Visibility="Collapsed"
-                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel Margin="{StaticResource Settings.PageInset}" MaxWidth="560" HorizontalAlignment="Left">
-                    <TextBlock x:Name="AboutTitle" Text="关于" Style="{StaticResource Settings.Title}"/>
-                    <TextBlock x:Name="AboutBlurb" Style="{StaticResource Settings.Help}" Margin="0,8,0,24"
-                               Text="WinDock 是一款轻量贴边桌面悬浮岛，用于快捷启动与情境信息展示。不替换 Windows 任务栏，不以管理员权限运行。"/>
-                    <TextBlock x:Name="AboutVersion" Style="{StaticResource Settings.Title}" Margin="{StaticResource Settings.LabelGap}"/>
-                    <TextBlock x:Name="AboutPaths" Style="{StaticResource Settings.Help}" Margin="{StaticResource Settings.SectionGap}"/>
-                    <DockPanel>
-                        <CheckBox x:Name="StartupCheck" Style="{StaticResource Settings.Toggle}"
-                                  DockPanel.Dock="Right" VerticalAlignment="Center"
-                                  AutomationProperties.Name="开机启动"
-                                  Click="Startup_OnClick"/>
-                        <StackPanel Margin="0,0,16,0">
-                            <TextBlock x:Name="StartupTitle" Text="开机启动" Style="{StaticResource Settings.Label}"/>
-                            <TextBlock x:Name="StartupHelp" Style="{StaticResource Settings.Help}" Margin="{StaticResource Settings.HelpGap}" Text="仅对当前 Windows 用户生效，不影响其他用户。"/>
-                        </StackPanel>
-                    </DockPanel>
-                    <Button x:Name="AboutExitButton" Content="退出 WinDock" Margin="0,24,0,0"
-                            Style="{StaticResource Settings.DangerButton}" HorizontalAlignment="Left" MinWidth="140"
-                            Click="NavExit_OnClick"/>
-                </StackPanel>
-            </ScrollViewer>
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
 
-            <ScrollViewer x:Name="PageProfiles" Visibility="Collapsed"
-                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel Margin="{StaticResource Settings.PageInset}" MaxWidth="560" HorizontalAlignment="Left">
-                    <TextBlock x:Name="ProfilesTitle" Text="情景" Style="{StaticResource Settings.Title}"/>
-                    <TextBlock x:Name="ProfilesIntro" Style="{StaticResource Settings.Help}" Margin="0,8,0,24"
-                               Text="复制情景将完整保留所有钉选启动项与模块配置。可通过本页下拉菜单、系统托盘右键菜单或快捷键进行情景切换。"/>
-                    <TextBlock x:Name="CurrentProfileLabel" Text="当前情景" Style="{StaticResource Settings.Label}" Margin="{StaticResource Settings.LabelGap}"/>
-                    <DockPanel Margin="{StaticResource Settings.SectionGap}">
-                        <Button x:Name="UndoButton" DockPanel.Dock="Right" Content="撤销上一次切换"
-                                Style="{StaticResource Settings.Button}" MinWidth="96" Margin="16,0,0,0"
-                                VerticalAlignment="Center" Click="Undo_OnClick"/>
-                        <ComboBox x:Name="ProfileBox" HorizontalAlignment="Stretch"
-                                  AutomationProperties.Name="当前情景"
-                                  SelectionChanged="ProfileBox_OnSelectionChanged"/>
-                    </DockPanel>
-                    <StackPanel Orientation="Horizontal" Margin="{StaticResource Settings.SectionGap}">
-                        <Button x:Name="DuplicateProfileButton" Content="复制当前情景" Style="{StaticResource Settings.Button}" MinWidth="120" Margin="{StaticResource Settings.ButtonGap}" Click="DuplicateProfile_OnClick"/>
-                        <Button x:Name="RenameProfileButton" Content="重命名" Style="{StaticResource Settings.Button}" Margin="{StaticResource Settings.ButtonGap}" Click="RenameProfile_OnClick"/>
-                        <Button x:Name="DeleteProfileButton" Content="删除" Style="{StaticResource Settings.DestructiveButton}" Click="DeleteProfile_OnClick"/>
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="恢复出厂默认值" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock Text="将悬浮岛恢复至最初安装时的时钟 + 便笺日常布局。" Style="{StaticResource Settings.RowDesc}"/>
+                                    </StackPanel>
+                                    <Button x:Name="ResetSettingsButton" Grid.Column="1" Content="恢复出厂设置" Style="{StaticResource Settings.DestructiveButton}" Click="ResetSettings_OnClick" VerticalAlignment="Center"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-                    <TextBlock x:Name="HotkeyText" Style="{StaticResource Settings.Help}" Margin="{StaticResource Settings.SectionGap}"/>
-                    <TextBlock x:Name="RecentSwitchesTitle" Text="最近切换" Style="{StaticResource Settings.Title}" Margin="{StaticResource Settings.LabelGap}"/>
-                    <ListBox x:Name="HistoryList" Height="220"/>
-                    <TextBlock x:Name="FocusHint" Style="{StaticResource Settings.Help}" Margin="0,16,0,0"/>
-                </StackPanel>
-            </ScrollViewer>
+                </ScrollViewer>
+
+                <!-- PAGE 2: 停靠与布局 (Layout) -->
+                <ScrollViewer x:Name="PageLayout" Visibility="Collapsed"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="32,24,32,32" MaxWidth="780" HorizontalAlignment="Left">
+                        <TextBlock x:Name="LayoutTitle" Text="停靠与布局" Style="{StaticResource Settings.Title}"/>
+                        <TextBlock x:Name="LayoutIntro" Style="{StaticResource Settings.Subtitle}"
+                                   Text="定义悬浮岛在屏幕上的停靠边缘、多屏分配及自动收起避让机制"/>
+
+                        <!-- Visual Edge Selector (Interactive 3 Cards) -->
+                        <TextBlock x:Name="EdgeLabel" Text="停靠边缘位置" Style="{StaticResource Settings.SectionTitle}"/>
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Top Edge Card -->
+                            <Border x:Name="EdgeTopCard" Grid.Column="0" Margin="0,0,6,0" Padding="14,16"
+                                    Background="{DynamicResource Settings.Card}"
+                                    BorderBrush="{DynamicResource Settings.Accent}"
+                                    BorderThickness="2" CornerRadius="8" Cursor="Hand"
+                                    MouseLeftButtonUp="EdgeTopCard_OnClick">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <!-- Wireframe Monitor -->
+                                    <Border Width="90" Height="54" BorderBrush="{DynamicResource Settings.BorderStrong}" BorderThickness="2"
+                                            CornerRadius="4" Background="#14000000" HorizontalAlignment="Center" Margin="0,0,0,10">
+                                        <Border Height="5" Margin="18,3,18,0" Background="{DynamicResource Settings.Accent}"
+                                                VerticalAlignment="Top" CornerRadius="2"/>
+                                    </Border>
+                                    <TextBlock x:Name="EdgeTop" Text="顶部边缘（推荐）" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Settings.Text}" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="最符合余光一瞥视线习惯" FontSize="11" Foreground="{DynamicResource Settings.Muted}"
+                                               HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Left Edge Card -->
+                            <Border x:Name="EdgeLeftCard" Grid.Column="1" Margin="6,0,6,0" Padding="14,16"
+                                    Background="{DynamicResource Settings.Card}"
+                                    BorderBrush="{DynamicResource Settings.Stroke}"
+                                    BorderThickness="1" CornerRadius="8" Cursor="Hand"
+                                    MouseLeftButtonUp="EdgeLeftCard_OnClick">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <Border Width="90" Height="54" BorderBrush="{DynamicResource Settings.BorderStrong}" BorderThickness="2"
+                                            CornerRadius="4" Background="#14000000" HorizontalAlignment="Center" Margin="0,0,0,10">
+                                        <Border Width="5" Margin="3,10,0,10" Background="{DynamicResource Settings.Accent}"
+                                                HorizontalAlignment="Left" CornerRadius="2"/>
+                                    </Border>
+                                    <TextBlock x:Name="EdgeLeft" Text="左侧边缘" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Settings.Text}" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="不占上下垂直工作高度" FontSize="11" Foreground="{DynamicResource Settings.Muted}"
+                                               HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Right Edge Card -->
+                            <Border x:Name="EdgeRightCard" Grid.Column="2" Margin="6,0,0,0" Padding="14,16"
+                                    Background="{DynamicResource Settings.Card}"
+                                    BorderBrush="{DynamicResource Settings.Stroke}"
+                                    BorderThickness="1" CornerRadius="8" Cursor="Hand"
+                                    MouseLeftButtonUp="EdgeRightCard_OnClick">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <Border Width="90" Height="54" BorderBrush="{DynamicResource Settings.BorderStrong}" BorderThickness="2"
+                                            CornerRadius="4" Background="#14000000" HorizontalAlignment="Center" Margin="0,0,0,10">
+                                        <Border Width="5" Margin="0,10,3,10" Background="{DynamicResource Settings.Accent}"
+                                                HorizontalAlignment="Right" CornerRadius="2"/>
+                                    </Border>
+                                    <TextBlock x:Name="EdgeRight" Text="右侧边缘" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Settings.Text}" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="靠近操作中心与侧边栏" FontSize="11" Foreground="{DynamicResource Settings.Muted}"
+                                               HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- Hidden ComboBox for backward compatibility -->
+                        <ComboBox x:Name="EdgeBox" Visibility="Collapsed" SelectionChanged="EdgeBox_OnSelectionChanged"/>
+
+                        <!-- Section: 屏幕与显示 -->
+                        <TextBlock x:Name="MonitorLabel" Text="屏幕与显示器" Style="{StaticResource Settings.SectionTitle}"/>
+                        <Border Style="{StaticResource Settings.CardGroup}">
+                            <Grid Margin="18,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Text="目标显示器" Style="{StaticResource Settings.RowTitle}"/>
+                                    <TextBlock Style="{StaticResource Settings.RowDesc}"
+                                               Text="选择 Dock 停靠的屏幕，支持跨屏自动跟随活动主屏或锁定在副屏。"/>
+                                </StackPanel>
+                                <ComboBox x:Name="MonitorBox" Grid.Column="1" MinWidth="220" VerticalAlignment="Center"
+                                          SelectionChanged="MonitorBox_OnSelectionChanged"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Section: 自动隐藏与手势唤醒 -->
+                        <TextBlock Text="自动隐藏与手势唤醒" Style="{StaticResource Settings.SectionTitle}"/>
+                        <Border Style="{StaticResource Settings.CardGroup}">
+                            <StackPanel>
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="AutoHideTitle" Text="无操作时自动隐藏" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock x:Name="AutoHideHelp" Style="{StaticResource Settings.RowDesc}"
+                                                   Text="在全屏游戏、观看视频或最大化应用时完全贴边收起，避免任何视觉遮挡。"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="AutoHideCheck" Grid.Column="1" Style="{StaticResource Settings.Toggle}"
+                                              VerticalAlignment="Center" AutomationProperties.Name="自动隐藏"
+                                              Click="AutoHide_OnClick"/>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="PeekTitle" Text="鼠标靠近边缘热区时自动滑出" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock x:Name="PeekHelp" Style="{StaticResource Settings.RowDesc}"
+                                                   Text="鼠标指针移入屏幕边缘的感应区域时自动滑出 Dock。"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="PeekCheck" Grid.Column="1" Style="{StaticResource Settings.Toggle}"
+                                              VerticalAlignment="Center" AutomationProperties.Name="鼠标靠近滑出"
+                                              Click="Peek_OnClick"/>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="CollapseAppsTitle" Text="程序聚合抽屉" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock x:Name="CollapseAppsHelp" Style="{StaticResource Settings.RowDesc}"
+                                                   Text="Dock 上仅显示一个聚合程序图标，点击可展开全部应用程序与快捷方式。"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="CollapseAppsCheck" Grid.Column="1" Style="{StaticResource Settings.Toggle}"
+                                              VerticalAlignment="Center" AutomationProperties.Name="程序折叠"
+                                              Click="CollapseApps_OnClick"/>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="CollapseFoldersTitle" Text="文件夹聚合抽屉" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock x:Name="CollapseFoldersHelp" Style="{StaticResource Settings.RowDesc}"
+                                                   Text="Dock 上仅显示一个聚合文件夹图标，点击可展开全部已钉选的文件夹。"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="CollapseFoldersCheck" Grid.Column="1" Style="{StaticResource Settings.Toggle}"
+                                              VerticalAlignment="Center" AutomationProperties.Name="文件夹折叠"
+                                              Click="CollapseFolders_OnClick"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock x:Name="LayoutHelp" Style="{StaticResource Settings.Help}" Margin="0,8,0,0"
+                                   Text="SideBox 默认为贴边居中的悬浮岛，在全屏应用或演示模式下会自动避让。可拖动两端调整宽度，双击边缘可恢复根据内容自适应。在多显示器间拖拽 Dock 会自动同步此处的显示器设置。"/>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- PAGE 3: 外观与材质 (Appearance) -->
+                <ScrollViewer x:Name="PageAppearance" Visibility="Collapsed"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="32,24,32,32" MaxWidth="780" HorizontalAlignment="Left">
+                        <TextBlock x:Name="AppearanceTitle" Text="外观与材质" Style="{StaticResource Settings.Title}"/>
+                        <TextBlock x:Name="AppearanceIntro" Style="{StaticResource Settings.Subtitle}"
+                                   Text="定制岛面高透亚克力、云母和雾面磨砂质感，实时预览渲染效果"/>
+
+                        <!-- Realistic Wallpaper Preview Card -->
+                        <TextBlock Text="实时沉浸渲染预览" Style="{StaticResource Settings.SectionTitle}"/>
+                        <Border x:Name="AppearancePreviewHost" Height="140" CornerRadius="8"
+                                BorderBrush="{DynamicResource Settings.Stroke}" BorderThickness="1"
+                                ClipToBounds="True" Margin="0,0,0,16">
+                            <Border.Background>
+                                <ImageBrush ImageSource="pack://application:,,,/SideBox;component/Assets/preview-wallpaper.jpg" Stretch="UniformToFill"/>
+                            </Border.Background>
+                            <!-- Floating Island Dock Pill -->
+                            <Border x:Name="IslandPreview" Height="46" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,18,0,0"
+                                    CornerRadius="23" BorderThickness="1" BorderBrush="#40FFFFFF"
+                                    Background="#B3202028" Padding="14,0">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.45" Color="Black"/>
+                                </Border.Effect>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Border CornerRadius="6" Padding="8,5" Background="#26FFFFFF" Margin="0,0,8,0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <widgets:PhosphorGlyph Icon="clock" Width="13" Height="13" Foreground="White" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="16:42:08" FontSize="12" Foreground="White" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border CornerRadius="6" Padding="8,5" Background="#26FFFFFF" Margin="0,0,8,0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <widgets:PhosphorGlyph Icon="lightning" Width="13" Height="13" Foreground="#FFFBBF24" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="CPU 12%" FontSize="12" Foreground="White" FontWeight="Medium" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border CornerRadius="6" Padding="8,5" Background="#26FFFFFF" Margin="0,0,8,0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <widgets:PhosphorGlyph Icon="headphones" Width="13" Height="13" Foreground="#FF60A5FA" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="WinDock" FontSize="12" Foreground="White" FontWeight="Medium" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border x:Name="IslandPreviewTile" CornerRadius="6" Padding="8,5" Background="{DynamicResource Settings.Accent}">
+                                        <TextBlock x:Name="IslandPreviewLabel" Text="通透玻璃" FontSize="11" Foreground="White" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+                        </Border>
+
+                        <!-- Section: 材质与色彩 -->
+                        <TextBlock Text="材质与色彩" Style="{StaticResource Settings.SectionTitle}"/>
+                        <Border Style="{StaticResource Settings.CardGroup}">
+                            <StackPanel>
+                                <!-- Row: 主题风格 -->
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="ThemeLabel" Text="主题风格" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock Style="{StaticResource Settings.RowDesc}" Text="切换 Dock 整体黑白明暗基调。"/>
+                                    </StackPanel>
+                                    <ComboBox x:Name="ThemeBox" Grid.Column="1" MinWidth="180" VerticalAlignment="Center"
+                                              SelectionChanged="ThemeBox_OnSelectionChanged">
+                                        <ComboBoxItem x:Name="ThemeSystem" Content="跟随系统" Tag="System"/>
+                                        <ComboBoxItem x:Name="ThemeLight" Content="清爽浅色 (Light)" Tag="Light"/>
+                                        <ComboBoxItem x:Name="ThemeDark" Content="深色沉浸 (Dark)" Tag="Dark"/>
+                                    </ComboBox>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                <!-- Row: 岛面材质 -->
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="BackdropLabel" Text="岛面材质 (Windows 11 Fluent)" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock Style="{StaticResource Settings.RowDesc}" Text="云母（沉稳防眩光）、磨砂（哑光雾面）、通透玻璃（高光亚克力）。"/>
+                                    </StackPanel>
+                                    <ComboBox x:Name="BackdropBox" Grid.Column="1" MinWidth="180" VerticalAlignment="Center"
+                                              SelectionChanged="BackdropBox_OnSelectionChanged">
+                                        <ComboBoxItem x:Name="BackdropMica" Content="云母 Mica (偏实)" Tag="Mica"/>
+                                        <ComboBoxItem x:Name="BackdropFrosted" Content="磨砂 Frosted (雾面)" Tag="Frosted"/>
+                                        <ComboBoxItem x:Name="BackdropGlass" Content="通透玻璃 Glass (80%透光)" Tag="Glass"/>
+                                    </ComboBox>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                <!-- Row: 背景透明度 -->
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="220"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <DockPanel>
+                                            <TextBlock x:Name="TransparencyCaption" Text="背景透明度" Style="{StaticResource Settings.RowTitle}"/>
+                                            <TextBlock x:Name="TransparencyLabel" Style="{StaticResource Settings.RowTitle}"
+                                                       Foreground="{DynamicResource Settings.Accent}" Text="65%" Margin="8,0,0,0"/>
+                                        </DockPanel>
+                                        <TextBlock Style="{StaticResource Settings.RowDesc}" Text="精细调节岛面在桌面壁纸上的背景通透度。"/>
+                                    </StackPanel>
+                                    <Slider x:Name="TransparencySlider" Grid.Column="1" Minimum="10" Maximum="95" Value="65"
+                                            IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"
+                                            ValueChanged="TransparencySlider_OnValueChanged"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock x:Name="AppearanceHelp" Style="{StaticResource Settings.Help}" Margin="0,8,0,0"
+                                   Text="切换材质会自动应用推荐的预设透明度：云母（偏实）、磨砂（雾面）、玻璃（通透）。设置面板打开时 Dock 将保持常驻，便于即时预览效果。"/>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- PAGE 4: 模块广场与管理 (Modules) -->
+                <DockPanel x:Name="PageModules" Visibility="Collapsed">
+                    <StackPanel DockPanel.Dock="Top" Margin="32,24,32,14">
+                        <TextBlock x:Name="ModulesTitle" Text="模块广场与管理" Style="{StaticResource Settings.Title}"/>
+                        <TextBlock x:Name="ModulesHelp" Style="{StaticResource Settings.Subtitle}"
+                                   Text="浏览 18+ 款原生开箱即用的小组件，并直接调整当前 Dock 上已挂载的组件"/>
+                    </StackPanel>
+                    <local:WidgetPicker x:Name="WidgetPicker" Margin="32,0,32,24"/>
+                </DockPanel>
+
+                <!-- PAGE 5: 情景模式 (Profiles) -->
+                <ScrollViewer x:Name="PageProfiles" Visibility="Collapsed"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="32,24,32,32" MaxWidth="780" HorizontalAlignment="Left">
+                        <TextBlock x:Name="ProfilesTitle" Text="情景模式 (Profiles)" Style="{StaticResource Settings.Title}"/>
+                        <TextBlock x:Name="ProfilesIntro" Style="{StaticResource Settings.Subtitle}"
+                                   Text="为“工位双屏”、“会议演示”与“极简专注”定制专属的 Dock 启动项与小组件集合"/>
+
+                        <!-- Top Action Buttons -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                            <Button x:Name="DuplicateProfileButton" Content="+ 复制当前情景" Style="{StaticResource Settings.PrimaryButton}" Margin="0,0,10,0" Click="DuplicateProfile_OnClick"/>
+                            <Button x:Name="RenameProfileButton" Content="重命名当前情景" Style="{StaticResource Settings.Button}" Margin="0,0,10,0" Click="RenameProfile_OnClick"/>
+                            <Button x:Name="DeleteProfileButton" Content="删除当前情景" Style="{StaticResource Settings.DestructiveButton}" Click="DeleteProfile_OnClick"/>
+                        </StackPanel>
+
+                        <!-- Hidden ProfileBox to keep session switch logic in code-behind -->
+                        <ComboBox x:Name="ProfileBox" Visibility="Collapsed" SelectionChanged="ProfileBox_OnSelectionChanged"/>
+                        <TextBlock x:Name="CurrentProfileLabel" Visibility="Collapsed"/>
+
+                        <!-- Visual Profile Cards Host (Grid of Profile Cards) -->
+                        <TextBlock x:Name="ProfileModulesTitle" Text="全部情景卡片" Style="{StaticResource Settings.SectionTitle}"/>
+                        <StackPanel x:Name="ProfileModulesHost" Margin="0,0,0,16"/>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- PAGE 6: 快捷键中心 (Hotkeys) -->
+                <ScrollViewer x:Name="PageHotkeys" Visibility="Collapsed"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="32,24,32,32" MaxWidth="780" HorizontalAlignment="Left">
+                        <TextBlock x:Name="HotkeysTitle" Text="快捷键中心" Style="{StaticResource Settings.Title}"/>
+                        <TextBlock x:Name="HotkeysIntro" Style="{StaticResource Settings.Subtitle}"
+                                   Text="集中配置全局呼出、情景轮转与极速动作热键，支持冲突检测"/>
+
+                        <!-- Section: 核心操作热键 -->
+                        <TextBlock Text="核心操作热键" Style="{StaticResource Settings.SectionTitle}"/>
+                        <Border Style="{StaticResource Settings.CardGroup}">
+                            <StackPanel>
+                                <!-- Row 1: 全局呼出 -->
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <DockPanel>
+                                            <CheckBox x:Name="RevealHotkeyCheck" Style="{StaticResource Settings.Toggle}" Margin="0,0,10,0"
+                                                      VerticalAlignment="Center" AutomationProperties.Name="全局唤醒快捷键"
+                                                      Click="RevealHotkey_OnClick"/>
+                                            <TextBlock x:Name="RevealHotkeyTitle" Text="全局唤醒 / 收起 Dock" Style="{StaticResource Settings.RowTitle}" VerticalAlignment="Center"/>
+                                        </DockPanel>
+                                        <TextBlock x:Name="RevealHotkeyHelp" Style="{StaticResource Settings.RowDesc}"
+                                                   Text="在隐藏状态下呼出 Dock，再次按下立即平滑退避。"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBox x:Name="RevealHotkeyBox" Style="{StaticResource Settings.TextBox}"
+                                                 Width="150" Margin="0,0,8,0" FontFamily="Consolas, Segoe UI"
+                                                 FontWeight="SemiBold" TextAlignment="Center"
+                                                 IsReadOnly="True" CaretBrush="Transparent"
+                                                 GotKeyboardFocus="RevealHotkeyBox_OnGotKeyboardFocus"
+                                                 LostKeyboardFocus="RevealHotkeyBox_OnLostKeyboardFocus"
+                                                 PreviewKeyDown="RevealHotkeyBox_OnPreviewKeyDown"/>
+                                        <Button Content="重新录制" Style="{StaticResource Settings.Button}" Click="RecordReveal_OnClick"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <StackPanel x:Name="ProfileHotkeysGroup">
+                                    <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                    <!-- Row 2: 轮换下一个情景 -->
+                                    <Grid Margin="18,14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                            <TextBlock x:Name="NextProfileLabel" Text="轮换下一个情景模式" Style="{StaticResource Settings.RowTitle}"/>
+                                            <TextBlock Style="{StaticResource Settings.RowDesc}"
+                                                       Text="无需点击托盘，双手不离键盘在“日常/专注/会议”间快速流转。"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBox x:Name="NextProfileBox" Style="{StaticResource Settings.TextBox}"
+                                                     Width="150" Margin="0,0,8,0" FontFamily="Consolas, Segoe UI"
+                                                     FontWeight="SemiBold" TextAlignment="Center"
+                                                     IsReadOnly="True" CaretBrush="Transparent"
+                                                     GotKeyboardFocus="ProfileHotkeyBox_OnGotKeyboardFocus"
+                                                     LostKeyboardFocus="ProfileHotkeyBox_OnLostKeyboardFocus"
+                                                     PreviewKeyDown="ProfileHotkeyBox_OnPreviewKeyDown"
+                                                     Tag="next"/>
+                                            <Button Content="重新录制" Style="{StaticResource Settings.Button}" Tag="next" Click="RecordProfileHotkey_OnClick"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                    <!-- Row 3: 轮换上一个情景 -->
+                                    <Grid Margin="18,14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                            <TextBlock x:Name="PrevProfileLabel" Text="轮换上一个情景模式" Style="{StaticResource Settings.RowTitle}"/>
+                                            <TextBlock Style="{StaticResource Settings.RowDesc}" Text="快速反向流转情景模式。"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBox x:Name="PrevProfileBox" Style="{StaticResource Settings.TextBox}"
+                                                     Width="150" Margin="0,0,8,0" FontFamily="Consolas, Segoe UI"
+                                                     FontWeight="SemiBold" TextAlignment="Center"
+                                                     IsReadOnly="True" CaretBrush="Transparent"
+                                                     GotKeyboardFocus="ProfileHotkeyBox_OnGotKeyboardFocus"
+                                                     LostKeyboardFocus="ProfileHotkeyBox_OnLostKeyboardFocus"
+                                                     PreviewKeyDown="ProfileHotkeyBox_OnPreviewKeyDown"
+                                                     Tag="prev"/>
+                                            <Button Content="重新录制" Style="{StaticResource Settings.Button}" Tag="prev" Click="RecordProfileHotkey_OnClick"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                    <!-- Row 4: 撤销情景切换 -->
+                                    <Grid Margin="18,14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                            <TextBlock x:Name="UndoProfileLabel" Text="一键撤销上一次情景切换" Style="{StaticResource Settings.RowTitle}"/>
+                                            <TextBlock Style="{StaticResource Settings.RowDesc}" Text="误触快捷键或误切换后，瞬间回退至上一个情景布局。"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBox x:Name="UndoProfileBox" Style="{StaticResource Settings.TextBox}"
+                                                     Width="150" Margin="0,0,8,0" FontFamily="Consolas, Segoe UI"
+                                                     FontWeight="SemiBold" TextAlignment="Center"
+                                                     IsReadOnly="True" CaretBrush="Transparent"
+                                                     GotKeyboardFocus="ProfileHotkeyBox_OnGotKeyboardFocus"
+                                                     LostKeyboardFocus="ProfileHotkeyBox_OnLostKeyboardFocus"
+                                                     PreviewKeyDown="ProfileHotkeyBox_OnPreviewKeyDown"
+                                                     Tag="undo"/>
+                                            <Button Content="重新录制" Style="{StaticResource Settings.Button}" Tag="undo" Click="RecordProfileHotkey_OnClick"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock x:Name="RevealHotkeyHint" Style="{StaticResource Settings.Help}" Foreground="{DynamicResource Settings.Danger}"/>
+                        <TextBlock x:Name="ProfileHotkeysHint" Style="{StaticResource Settings.Help}" Foreground="{DynamicResource Settings.Danger}"/>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- PAGE 7: 数据与权限 (Privacy) -->
+                <ScrollViewer x:Name="PagePrivacy" Visibility="Collapsed"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="32,24,32,32" MaxWidth="780" HorizontalAlignment="Left">
+                        <TextBlock x:Name="PrivacyTitle" Text="数据与权限" Style="{StaticResource Settings.Title}"/>
+                        <TextBlock x:Name="PrivacyIntro" Style="{StaticResource Settings.Subtitle}"
+                                   Text="所有数据严格留存于本机内存中，不收集个人敏感信息，不上传第三方服务器"/>
+
+                        <!-- Section: 硬件与系统状态权限 -->
+                        <TextBlock Text="硬件与系统状态权限" Style="{StaticResource Settings.SectionTitle}"/>
+                        <Border Style="{StaticResource Settings.CardGroup}">
+                            <StackPanel>
+                                <!-- Row 1: 媒体信息 -->
+                                <Grid x:Name="MediaPrivacyRow" Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="MediaPrivacyTitle" Text="媒体播放与歌曲信息读取" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock x:Name="MediaHint" Style="{StaticResource Settings.RowDesc}"
+                                                   Text="允许媒体组件读取系统当前播放的歌曲名、艺术家与封面图。"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="MediaCheck" Grid.Column="1" Style="{StaticResource Settings.Toggle}"
+                                              VerticalAlignment="Center" Click="Privacy_OnClick"/>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                <!-- Row 2: 网络监控 -->
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="NetworkPrivacyTitle" Text="网络适配器与速率监控" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock x:Name="NetworkPrivacyHelp" Style="{StaticResource Settings.RowDesc}"
+                                                   Text="允许流量组件读取本地网卡吞吐数据并在悬浮岛绘制折线。"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="NetworkCheck" Grid.Column="1" Style="{StaticResource Settings.Toggle}"
+                                              VerticalAlignment="Center" Click="Privacy_OnClick"/>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                <!-- Row 3: 进程分析 -->
+                                <Grid x:Name="ProcessPrivacyRow" Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="ProcessPrivacyTitle" Text="高占用进程分析" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock x:Name="ProcessPrivacyHelp" Style="{StaticResource Settings.RowDesc}"
+                                                   Text="仅在本地临时采样 CPU/内存占用前 5 的进程名，绝不记录按键或内容。"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ProcessCheck" Grid.Column="1" Style="{StaticResource Settings.Toggle}"
+                                              VerticalAlignment="Center" Click="Privacy_OnClick"/>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                <!-- Row 4: Bing 壁纸 -->
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="BingPrivacyTitle" Text="Bing 每日高清壁纸下载" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock x:Name="BingPrivacyHelp" Style="{StaticResource Settings.RowDesc}"
+                                                   Text="每日自动从微软必应拉取超清壁纸存档。"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="BingCheck" Grid.Column="1" Style="{StaticResource Settings.Toggle}"
+                                              VerticalAlignment="Center" Click="Privacy_OnClick"/>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                <!-- Row 5: 每日自动应用壁纸 -->
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="BingAutoDailyTitle" Text="每天自动切换桌面壁纸" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock x:Name="BingAutoDailyHelp" Style="{StaticResource Settings.RowDesc}"
+                                                   Text="每天推出新壁纸时，自动将其设为桌面壁纸。"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="BingAutoDailyCheck" Grid.Column="1" Style="{StaticResource Settings.Toggle}"
+                                              VerticalAlignment="Center" Click="BingAutoDaily_OnClick"/>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                <!-- Row 6: 位置定位 -->
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="LocationPrivacyTitle" Text="基于公网 IP 的大致城市定位" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock x:Name="LocationPrivacyHelp" Style="{StaticResource Settings.RowDesc}"
+                                                   Text="仅在初次配置天气时通过 geojs.io 查询大致城市名，非真实 GPS。"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="LocationCheck" Grid.Column="1" Style="{StaticResource Settings.Toggle}"
+                                              VerticalAlignment="Center" Click="Privacy_OnClick"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Section: 崩溃诊断与本地存储 -->
+                        <TextBlock Text="崩溃诊断与本地存储" Style="{StaticResource Settings.SectionTitle}"/>
+                        <Border Style="{StaticResource Settings.CardGroup}">
+                            <Grid Margin="18,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Text="崩溃日志与诊断仅留存在本地" Style="{StaticResource Settings.RowTitle}"/>
+                                    <TextBlock x:Name="PrivacyHelp" Style="{StaticResource Settings.RowDesc}"
+                                               Text="诊断日志位于 %LocalAppData%\SideBox\logs\，默认完全关闭云端上传。"/>
+                                </StackPanel>
+                                <Button x:Name="OpenLogsFolderButton" Grid.Column="1" Content="查看本地日志" Style="{StaticResource Settings.Button}"
+                                        VerticalAlignment="Center" Click="OpenLogsFolder_OnClick"/>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- PAGE 8: 关于与社区 (About) -->
+                <ScrollViewer x:Name="PageAbout" Visibility="Collapsed"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="32,24,32,32" MaxWidth="780" HorizontalAlignment="Left">
+                        <TextBlock x:Name="AboutTitle" Text="关于 SideBox" Style="{StaticResource Settings.Title}"/>
+                        <TextBlock x:Name="AboutBlurb" Style="{StaticResource Settings.Subtitle}"
+                                   Text="Windows 桌面贴边悬浮岛 · 极简、开源、纯净无广告"/>
+
+                        <!-- Section 1: 版本与许可 -->
+                        <TextBlock Text="版本与更新" Style="{StaticResource Settings.SectionTitle}"/>
+                        <Border Style="{StaticResource Settings.CardGroup}">
+                            <StackPanel>
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="AboutVersion" Style="{StaticResource Settings.RowTitle}" FontSize="15" FontWeight="Bold"/>
+                                        <TextBlock x:Name="AboutLicenseLabel" Text="构建版本：net10.0-windows10.0.22621.0 · 永久免费开源" Style="{StaticResource Settings.RowDesc}" Foreground="{DynamicResource Settings.Accent}"/>
+                                    </StackPanel>
+                                    <Button x:Name="AboutCheckUpdateButton" Grid.Column="1" Content="检查更新" Style="{StaticResource Settings.PrimaryButton}"
+                                            VerticalAlignment="Center" Click="AboutCheckUpdate_OnClick"/>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="配置与数据目录" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock x:Name="AboutPaths" Style="{StaticResource Settings.RowDesc}"
+                                                   Text="核心配置文件：%AppData%\SideBox\settings.json"/>
+                                    </StackPanel>
+                                    <Button x:Name="OpenConfigFolderButton" Grid.Column="1" Content="在资源管理器中打开" Style="{StaticResource Settings.Button}"
+                                            VerticalAlignment="Center" Click="OpenConfigFolder_OnClick"/>
+                                </Grid>
+
+                                <!-- Update Details Host -->
+                                <Border x:Name="UpdateStatusHost" Visibility="Collapsed" Margin="18,0,18,14"
+                                        Background="{DynamicResource Settings.Preview}"
+                                        BorderBrush="{DynamicResource Settings.Stroke}"
+                                        BorderThickness="1" CornerRadius="6" Padding="14">
+                                    <StackPanel>
+                                        <DockPanel>
+                                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
+                                                <Button x:Name="OpenBrowserDownloadButton" Content="在浏览器中下载"
+                                                        Style="{StaticResource Settings.Button}"
+                                                        Margin="0,0,8,0" Visibility="Collapsed"
+                                                        Click="OpenBrowserDownload_OnClick"/>
+                                                <Button x:Name="ViewReleaseNotesButton" Content="查看 Release"
+                                                        Style="{StaticResource Settings.Button}"
+                                                        Margin="0,0,8,0" Visibility="Collapsed"
+                                                        Click="ViewReleaseNotes_OnClick"/>
+                                                <Button x:Name="UpdateNowButton" Content="立即更新"
+                                                        Style="{StaticResource Settings.PrimaryButton}"
+                                                        Click="UpdateNow_OnClick"/>
+                                            </StackPanel>
+                                            <TextBlock x:Name="UpdateStatusTitle" Text="发现新版本" Style="{StaticResource Settings.Label}" VerticalAlignment="Center"/>
+                                        </DockPanel>
+                                        <TextBlock x:Name="UpdateStatusMessage" Style="{StaticResource Settings.Help}" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="UpdateChangelogTitle" Text="更新日志：" Style="{StaticResource Settings.Label}" Margin="0,10,0,4"/>
+                                        <Border x:Name="UpdateChangelogHost" Background="{DynamicResource Settings.Card}" CornerRadius="4" Padding="10" Margin="0,0,0,6">
+                                            <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto">
+                                                <TextBlock x:Name="UpdateChangelogText" Style="{StaticResource Settings.Help}" TextWrapping="Wrap"/>
+                                            </ScrollViewer>
+                                        </Border>
+                                        <ProgressBar x:Name="UpdateProgressBar" Height="6" Margin="0,8,0,0" Minimum="0" Maximum="100" Visibility="Collapsed"
+                                                     Foreground="{DynamicResource Settings.Accent}" Background="{DynamicResource Settings.Card}" BorderThickness="0"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Section 2: 开源社区与开发者支持 -->
+                        <TextBlock x:Name="CommunitySectionTitle" Text="开源社区与开发者支持" Style="{StaticResource Settings.SectionTitle}"/>
+                        <Border Style="{StaticResource Settings.CardGroup}">
+                            <StackPanel>
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="GitHub 开源仓库" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock Style="{StaticResource Settings.RowDesc}" Text="查看源码、提交 Bug Issue 或为项目贡献新组件代码。"/>
+                                    </StackPanel>
+                                    <Button x:Name="OpenGitHubButton" Grid.Column="1" Content="访问 GitHub" Style="{StaticResource Settings.Button}"
+                                            VerticalAlignment="Center" Click="OpenGitHub_OnClick"/>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="官方网站与文档" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock Style="{StaticResource Settings.RowDesc}" Text="获取常见问题解答、技巧指南与最新更新日志。"/>
+                                    </StackPanel>
+                                    <Button x:Name="OpenWebsiteButton" Grid.Column="1" Content="访问官网" Style="{StaticResource Settings.Button}"
+                                            VerticalAlignment="Center" Click="OpenWebsite_OnClick"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
         </Grid>
     </Grid>
 </Window>

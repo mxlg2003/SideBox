@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-edge="left">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>侧边模块 · 左 / 右</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #1c1c1e;
+    --page-text: #f2f2f2;
+    --muted: #b0b0b5;
+    --line: rgba(255, 255, 255, 0.08);
+    --island: rgba(12, 16, 24, 0.78);
+    --island-stroke: rgba(255, 255, 255, 0.16);
+    --tile: rgba(46, 46, 56, 0.9);
+    --tile-hover: rgba(62, 62, 74, 0.94);
+    --tile-stroke: rgba(255, 255, 255, 0.08);
+    --text: #fff;
+    --sub: rgba(255, 255, 255, 0.62);
+    --menu: #0c1018;
+    --track: rgba(255, 255, 255, 0.12);
+    --progress: #fff;
+    --quiet: rgba(255, 255, 255, 0.1);
+    --mask-fade: rgba(12, 16, 24, 0.96);
+    --stage-stroke: rgba(255, 255, 255, 0.1);
+    --win: rgba(255, 255, 255, 0.07);
+    --win-line: rgba(255, 255, 255, 0.14);
+    --task: rgba(12, 14, 18, 0.55);
+    --weekday: #ff453a;
+    --shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+    --up: #ff453a;
+    --down: #30d158;
+    --cpu: #c084fc;
+    --mem: #3b82f6;
+    --net: #3b82f6;
+    --net-up: #d946ef;
+    --ok: #34d399;
+    --gpu: #f59e0b;
+    --alarm: #ff9f0a;
+    --focus: #a78bfa;
+    --paper: #fbf0c8;
+    --ink: #1a1a1a;
+    --accent: #2563eb;
+    --island-w: 120px;
+    --font: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+    --note-font: Candara, "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  }
+
+  html[data-theme="light"] {
+    color-scheme: light;
+    --page: #f4f4f6;
+    --page-text: #1a1a1a;
+    --muted: #6f6f76;
+    --line: rgba(0, 0, 0, 0.08);
+    --island: rgba(243, 239, 230, 0.86);
+    --island-stroke: rgba(0, 0, 0, 0.1);
+    --tile: rgba(255, 255, 255, 0.94);
+    --tile-hover: #fff;
+    --tile-stroke: rgba(0, 0, 0, 0.06);
+    --text: #1a1a1a;
+    --sub: rgba(26, 26, 26, 0.62);
+    --menu: #fff;
+    --track: rgba(0, 0, 0, 0.08);
+    --progress: #2a2a32;
+    --quiet: rgba(0, 0, 0, 0.06);
+    --mask-fade: rgba(243, 239, 230, 0.96);
+    --stage-stroke: rgba(0, 0, 0, 0.08);
+    --win: rgba(255, 255, 255, 0.62);
+    --win-line: rgba(255, 255, 255, 0.9);
+    --task: rgba(255, 255, 255, 0.55);
+    --weekday: #d13438;
+    --shadow: 0 10px 28px rgba(70, 50, 20, 0.12);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: var(--font);
+    background: var(--page);
+    color: var(--page-text);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  h1, h2, h3, p { margin: 0; }
+  main { max-width: 1180px; margin: 0 auto; padding: 28px 28px 72px; }
+
+  header { display: flex; justify-content: space-between; gap: 28px; align-items: flex-end; }
+  .kicker { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
+  h1 { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; margin-top: 4px; }
+  .lead { max-width: 680px; margin-top: 8px; color: var(--muted); font-size: 14px; }
+  .rules { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+  .rules b { color: var(--page-text); font-weight: 650; margin-right: 6px; }
+
+  .controls { display: flex; gap: 8px; flex-shrink: 0; }
+  .seg { display: flex; padding: 2px; border-radius: 6px; background: var(--quiet); border: 1px solid var(--line); }
+  .seg button {
+    height: 28px;
+    min-width: 52px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted);
+  }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
+  section { margin-top: 28px; }
+  h2 { font-size: 16px; font-weight: 650; }
+  .section-lead { margin-top: 4px; margin-bottom: 16px; color: var(--muted); font-size: 13px; max-width: 720px; }
+  .caption { margin-top: 10px; font-size: 12px; color: var(--muted); }
+
+  .desktop {
+    position: relative;
+    height: 780px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--stage-stroke);
+  }
+  .wallpaper, .wallpaper::after { position: absolute; inset: 0; }
+  .wallpaper {
+    background:
+      radial-gradient(ellipse at 16% 78%, rgba(255, 176, 120, 0.5), transparent 42%),
+      radial-gradient(ellipse at 82% 24%, rgba(110, 150, 255, 0.38), transparent 46%),
+      linear-gradient(168deg, #1a2744 0%, #3c5274 46%, #c9a88e 100%);
+  }
+  html[data-theme="light"] .wallpaper {
+    background:
+      radial-gradient(ellipse at 18% 82%, rgba(255, 206, 160, 0.95), transparent 42%),
+      radial-gradient(ellipse at 84% 18%, rgba(176, 208, 255, 0.9), transparent 44%),
+      linear-gradient(168deg, #d7e6f6 0%, #f4efe6 52%, #f6e4d0 100%);
+  }
+  .win {
+    position: absolute;
+    border-radius: 10px;
+    background: var(--win);
+    border: 1px solid var(--win-line);
+    box-shadow: var(--shadow);
+  }
+  .win-a { width: 42%; height: 54%; left: 22%; top: 9%; }
+  .win-b { width: 26%; height: 34%; left: 50%; top: 20%; }
+  .taskbar {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    background: var(--task);
+    backdrop-filter: blur(16px);
+    border-top: 1px solid var(--island-stroke);
+    z-index: 3;
+  }
+  .tb { width: 16px; height: 16px; border-radius: 4px; background: var(--text); opacity: 0.28; }
+  .tb.on { opacity: 0.8; }
+
+  .edge-slot {
+    position: absolute;
+    top: 12px;
+    bottom: 52px;
+    width: var(--island-w);
+    display: flex;
+    align-items: center;
+    z-index: 2;
+  }
+  html[data-edge="left"] .edge-slot { left: 10px; }
+  html[data-edge="right"] .edge-slot { right: 10px; }
+
+  .glass {
+    background: var(--island);
+    border: 1px solid var(--island-stroke);
+    backdrop-filter: blur(28px) saturate(1.35);
+    -webkit-backdrop-filter: blur(28px) saturate(1.35);
+  }
+  .island {
+    width: var(--island-w);
+    padding: 6px;
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+  .pins { display: flex; flex-direction: column; align-items: center; padding-bottom: 6px; }
+  .pin {
+    position: relative;
+    width: 100%;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border-radius: 4px;
+  }
+  .pin:hover { background: rgba(127, 127, 127, 0.12); }
+  .ico {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+  }
+  .ico svg { width: 20px; height: 20px; }
+  .ico-web { background: linear-gradient(180deg, #5aa2ff, #1d6adf); }
+  .ico-code { background: linear-gradient(180deg, #8b7cf6, #5746d6); }
+  .folder { width: 36px; height: 30px; position: relative; color: #e8b84a; }
+  .folder svg { width: 36px; height: 30px; display: block; }
+  .folder em {
+    position: absolute;
+    left: 50%;
+    bottom: 3px;
+    transform: translateX(-50%);
+    font-style: normal;
+    font-family: Tahoma, "Microsoft YaHei UI", sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    color: #1a1a1a;
+  }
+  .dot {
+    position: absolute;
+    top: 50%;
+    width: 4px;
+    height: 4px;
+    margin-top: -2px;
+    border-radius: 50%;
+    background: var(--text);
+  }
+  html[data-edge="left"] .dot { left: calc(50% + 22px); }
+  html[data-edge="right"] .dot { left: auto; right: calc(50% + 22px); }
+
+  .modules { display: flex; flex-direction: column; gap: 3px; }
+
+  .stamp {
+    width: 100%;
+    padding: 6px 8px 6px;
+    border-radius: 4px;
+    background: var(--tile);
+    border: 1px solid var(--tile-stroke);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    color: var(--text);
+    text-align: center;
+    min-width: 0;
+  }
+  button.stamp {
+    display: flex;
+    width: 100%;
+    border-style: solid;
+  }
+  .island .stamp:hover,
+  .sheet .stamp:hover,
+  .well .stamp:hover { background: var(--tile-hover); }
+  .hero {
+    font-size: 15px;
+    font-weight: 650;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .hero.lg { font-size: 20px; line-height: 1.2; letter-spacing: -0.03em; }
+  .hero.sm { font-size: 13px; }
+  .sub {
+    max-width: 100%;
+    font-size: 11px;
+    line-height: 1.25;
+    color: var(--sub);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .name {
+    max-width: 100%;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .face { width: 28px; height: 28px; margin-bottom: 2px; }
+  .glyph { width: 16px; height: 16px; margin-bottom: 1px; }
+  .glyph.alarm { color: var(--alarm); }
+  .weekday { font-size: 11px; font-weight: 650; line-height: 1.1; color: var(--weekday); }
+  .day { font-size: 20px; font-weight: 650; line-height: 1; letter-spacing: -0.03em; }
+  .rule { width: 16px; height: 1px; margin: 4px 0 3px; background: var(--tile-stroke); }
+  .when { font-size: 10px; line-height: 1.2; color: var(--sub); }
+  .event {
+    max-width: 100%;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .wx { font-size: 18px; line-height: 1; margin-bottom: 1px; }
+  .aqi {
+    margin-top: 2px;
+    height: 14px;
+    padding: 0 4px;
+    border-radius: 3px;
+    background: rgba(52, 211, 153, 0.18);
+    color: var(--ok);
+    font-size: 10px;
+    font-weight: 650;
+    line-height: 14px;
+  }
+
+  .meters { align-items: stretch; gap: 5px; text-align: left; }
+  .meter-top, .rate {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 11px;
+    line-height: 1.2;
+  }
+  .meter-top b, .rate b {
+    font-size: 12px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+  .track { height: 3px; margin-top: 3px; border-radius: 2px; background: var(--track); overflow: hidden; }
+  .track i { display: block; height: 100%; border-radius: 2px; }
+  .rate.down { color: var(--net); }
+  .rate.up { color: var(--net-up); }
+  .left { text-align: left; }
+
+  .quote { overflow: hidden; padding-bottom: 0; }
+  .meta { display: flex; align-items: center; gap: 4px; margin: 1px 0 2px; font-size: 10px; color: var(--sub); }
+  .badge {
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    border-radius: 3px;
+    background: #3b82f6;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 650;
+    font-style: normal;
+    line-height: 14px;
+    text-align: center;
+  }
+  .chg { font-size: 11px; font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .chg.up { color: var(--up); }
+  .chg.down { color: var(--down); }
+  .spark { width: calc(100% + 16px); height: 20px; margin: 4px -8px 0; display: block; }
+  .spark.short { height: 16px; margin-top: 2px; }
+
+  .notes {
+    align-items: stretch;
+    text-align: left;
+    background: var(--paper);
+    color: var(--ink);
+    border-color: transparent;
+    padding: 7px 8px;
+  }
+  .notes:hover { background: #f8eab0 !important; }
+  .notes p {
+    margin: 0;
+    font-family: var(--note-font);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .ring { width: 36px; height: 36px; margin-bottom: 2px; }
+  .batt { width: 22px; height: 22px; margin-bottom: 1px; color: var(--text); }
+  .proc {
+    width: 22px;
+    height: 22px;
+    margin-bottom: 2px;
+    border-radius: 5px;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(180deg, #8b7cf6, #5746d6);
+    color: #fff;
+  }
+  .proc svg { width: 14px; height: 14px; }
+
+  .bing { padding: 6px; gap: 5px; }
+  .photo {
+    position: relative;
+    width: 100%;
+    height: 64px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: linear-gradient(#8ec5ea, #f4e0c0 68%);
+  }
+  .photo .sun {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    right: 10px;
+    top: 8px;
+    border-radius: 50%;
+    background: #fff6d8;
+    box-shadow: 0 0 10px #fff6d8;
+  }
+  .photo .mesa {
+    position: absolute;
+    left: -8%;
+    right: -8%;
+    bottom: 0;
+    height: 48%;
+    background: linear-gradient(#d07a4e, #8a3c32);
+    clip-path: polygon(0 62%, 16% 42%, 30% 70%, 46% 16%, 64% 58%, 80% 30%, 100% 64%, 100% 100%, 0 100%);
+  }
+  .bing-actions { display: flex; gap: 4px; }
+  .quiet {
+    width: 26px;
+    height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: var(--quiet);
+    color: var(--text);
+    display: grid;
+    place-items: center;
+  }
+  .quiet svg { width: 12px; height: 12px; }
+  .quiet:hover { background: var(--tile-hover); }
+
+  .flyout {
+    position: absolute;
+    z-index: 4;
+    width: 248px;
+    padding: 12px 16px 16px 16px;
+    border-radius: 8px;
+    background: var(--menu);
+    color: var(--text);
+    border: 1px solid var(--island-stroke);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 140ms ease, transform 140ms ease;
+  }
+  .flyout.show { visibility: visible; opacity: 1; transform: none; }
+  .fly-head { display: flex; align-items: center; justify-content: space-between; min-height: 28px; }
+  .fly-head strong { font-size: 13px; font-weight: 650; }
+  .x {
+    width: 28px;
+    height: 28px;
+    margin-right: -6px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text);
+    opacity: 0.45;
+    font-size: 16px;
+    line-height: 1;
+  }
+  .x:hover { opacity: 1; background: var(--quiet); }
+  .fly-temp { margin-top: 4px; font-size: 32px; font-weight: 650; letter-spacing: -0.03em; line-height: 1; }
+  .fly-cond { margin-top: 2px; font-size: 13px; }
+  .fly-meta { margin-top: 10px; font-size: 12px; color: var(--sub); }
+
+  .case { margin-top: 8px; }
+  .case + .case { margin-top: 26px; }
+  .case-name { font-size: 13px; font-weight: 650; margin-bottom: 10px; }
+  .triptych { display: flex; flex-wrap: wrap; gap: 22px 32px; align-items: flex-start; }
+  .step { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .step h3 { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .top-island { display: inline-flex; padding: 5px; border-radius: 8px; }
+  .well { width: var(--island-w); padding: 6px; border-radius: 8px; }
+  .mask {
+    width: 62px;
+    height: 62px;
+    padding: 5px;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+  }
+  .mask::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 16px;
+    background: linear-gradient(90deg, transparent, var(--mask-fade));
+    pointer-events: none;
+  }
+  .pill {
+    height: 50px;
+    width: max-content;
+    padding: 4px 10px 4px 8px;
+    border-radius: 4px;
+    background: var(--tile);
+    border: 1px solid var(--tile-stroke);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+  }
+  .pill-ico { width: 16px; height: 16px; flex: none; color: var(--up); }
+  .pill-copy { display: flex; flex-direction: column; min-width: 72px; }
+  .pill-copy .name { font-size: 13px; }
+  .pill-quote { display: flex; flex-direction: column; align-items: flex-end; margin-left: 10px; }
+  .pill-quote .hero { font-size: 13px; }
+  .pill-spark { width: 72px; height: 12px; margin-top: 2px; }
+  .datecol { display: flex; flex-direction: column; align-items: center; width: 28px; flex: none; }
+  .datecol .day { font-size: 15px; }
+  .agenda { display: flex; flex-direction: column; min-width: 96px; }
+  .agenda .event { font-size: 12px; }
+
+  .groups { display: flex; flex-direction: column; gap: 22px; }
+  .group h3 { font-size: 13px; font-weight: 650; color: var(--muted); margin-bottom: 10px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 16px 18px; }
+  figure { width: var(--island-w); margin: 0; }
+  figcaption { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+
+  @media (max-width: 860px) {
+    header { flex-direction: column; align-items: flex-start; }
+    .desktop { height: 820px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .flyout { transition: none; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" aria-hidden="true" style="position:absolute">
+  <defs>
+    <linearGradient id="fill-up" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF453A" stop-opacity="0.38" />
+      <stop offset="1" stop-color="#FF453A" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="fill-net" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3B82F6" stop-opacity="0.4" />
+      <stop offset="1" stop-color="#3B82F6" stop-opacity="0" />
+    </linearGradient>
+    <symbol id="i-alarm" viewBox="0 0 24 24">
+      <path d="M12 21a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M6.2 16.2V11a5.8 5.8 0 0 1 11.6 0v5.2L19.5 18H4.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24">
+      <circle cx="12" cy="13" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <path d="M12 13V9.5M10 3.5h4M12 3.5V6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-hour" viewBox="0 0 24 24">
+      <path d="M7 4h10M7 20h10M8 4c0 4.2 8 4.6 8 8s-8 3.8-8 8M16 4c0 4.2-8 4.6-8 8s8 3.8 8 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24">
+      <path d="M4 19V5M4 19h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M8 15v-3M12 15V8M16 15v-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-left" viewBox="0 0 24 24">
+      <path d="M14 6L8 12l6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-right" viewBox="0 0 24 24">
+      <path d="M10 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-down" viewBox="0 0 24 24">
+      <path d="M12 5v10M8 11l4 4 4-4M6 19h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-code" viewBox="0 0 24 24">
+      <path d="M9 8L5 12l4 4M15 8l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <path d="M4 12h16M12 4c2.2 2.4 3.2 5 3.2 8s-1 5.6-3.2 8c-2.2-2.4-3.2-5-3.2-8s1-5.6 3.2-8z" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    </symbol>
+  </defs>
+</svg>
+
+<main>
+  <header>
+    <div>
+      <p class="kicker">布局演示 · 左 / 右</p>
+      <h1>侧边模块改成竖章</h1>
+      <p class="lead">顶边模块是高 50 的横药丸，图标和主值并排。侧边岛现在大约只有 62 像素厚，股票、日程、天气这些横排会直接被裁掉。左缘和右缘改用宽 120 的竖岛：每块模块等宽，内容上下叠，高度随自己走。左右是同一套章面。</p>
+      <p class="rules">
+        <span><b>等宽竖章</b>不再锁 50 高</span>
+        <span><b>一个主值</b>辅文只留一行</span>
+        <span><b>图贴底边</b>不再占右侧一列</span>
+        <span><b>程序仍是图标</b>运行点靠屏幕内侧</span>
+      </p>
+    </div>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="边缘" data-set="edge">
+        <button type="button" data-value="left" aria-pressed="true">左</button>
+        <button type="button" data-value="right" aria-pressed="false">右</button>
+      </div>
+      <div class="seg" role="group" aria-label="主题" data-set="theme">
+        <button type="button" data-value="dark" aria-pressed="true">深色</button>
+        <button type="button" data-value="light" aria-pressed="false">浅色</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="stage">
+    <div class="desktop" id="desk">
+      <div class="wallpaper"></div>
+      <div class="win win-a"></div>
+      <div class="win win-b"></div>
+      <div class="edge-slot" id="slot">
+        <aside class="island glass" aria-label="侧边岛">
+          <div class="pins">
+            <div class="pin" title="浏览器">
+              <div class="ico ico-web"><svg><use href="#i-globe"/></svg></div>
+              <i class="dot"></i>
+            </div>
+            <div class="pin" title="代码">
+              <div class="ico ico-code"><svg><use href="#i-code"/></svg></div>
+              <i class="dot"></i>
+            </div>
+            <div class="pin" title="文件夹">
+              <div class="folder">
+                <svg viewBox="0 0 36 30" aria-hidden="true">
+                  <path fill="#E8B84A" d="M2 8a3 3 0 0 1 3-3h7l2.2 2.4H31a3 3 0 0 1 3 3V25a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V8z"/>
+                  <path fill="#F3D27A" d="M2 13h32v12a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V13z"/>
+                </svg>
+                <em>文</em>
+              </div>
+            </div>
+          </div>
+          <div class="modules">
+            <div class="stamp">
+              <svg class="face" viewBox="0 0 32 32" aria-hidden="true">
+                <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="1.25" opacity="0.35"/>
+                <line x1="16" y1="16" x2="16" y2="9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" transform="rotate(76 16 16)"/>
+                <line x1="16" y1="16" x2="16" y2="6.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" transform="rotate(192 16 16)"/>
+                <circle cx="16" cy="16" r="1.3" fill="currentColor"/>
+              </svg>
+              <div class="hero">14:32</div>
+              <div class="sub">10月6日</div>
+            </div>
+
+            <button type="button" class="stamp" id="live-weather" aria-expanded="false" aria-controls="flyout">
+              <div class="wx" aria-hidden="true">☀️</div>
+              <div class="hero lg">27°</div>
+              <div class="sub">晴 · 上海</div>
+              <div class="aqi">优</div>
+            </button>
+
+            <div class="stamp">
+              <div class="weekday">周二</div>
+              <div class="day">6</div>
+              <i class="rule"></i>
+              <div class="when">09:30</div>
+              <div class="event">产品设计评审</div>
+            </div>
+
+            <div class="stamp quote">
+              <div class="name">贵州茅台</div>
+              <div class="meta"><i class="badge">A</i><span>600519</span></div>
+              <div class="hero">1,428.00</div>
+              <div class="chg up">+1.24%</div>
+              <svg class="spark" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M0 18 C12 17 22 15 32 14 S50 16 60 9 S80 7 100 3 V24 H0 Z" fill="url(#fill-up)"/>
+                <path d="M0 18 C12 17 22 15 32 14 S50 16 60 9 S80 7 100 3" fill="none" stroke="#FF453A" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+              </svg>
+            </div>
+
+            <div class="stamp notes">
+              <p>下午改侧边。<br>日期在上，<br>报价在下。</p>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <div class="flyout" id="flyout" role="dialog" aria-label="天气" aria-hidden="true" inert>
+        <div class="fly-head">
+          <strong>上海</strong>
+          <button type="button" class="x" id="fly-close" aria-label="关闭">×</button>
+        </div>
+        <div class="fly-temp">27°</div>
+        <div class="fly-cond">晴</div>
+        <p class="fly-meta">体感 29° · 湿度 61% · AQI 42</p>
+      </div>
+
+      <div class="taskbar" aria-hidden="true">
+        <span class="tb on"></span><span class="tb"></span><span class="tb on"></span><span class="tb"></span>
+      </div>
+    </div>
+    <p class="caption">岛贴工作区边缘并垂直居中，不拉满整条边。运行点在图标靠屏幕的一侧。点天气，弹出层向内侧展开，距岛 8 像素。侧边不再分紧凑 / 展开两种横宽。</p>
+  </section>
+
+  <section class="compare">
+    <h2>横药丸放不进侧边</h2>
+    <p class="section-lead">上沿的药丸按内容变宽。侧边厚度仍是大约 62 像素时，右侧的价格、日程标题会被裁掉。竖章把同一份信息改成上下叠。</p>
+
+    <div class="case">
+      <p class="case-name">股票</p>
+      <div class="triptych">
+        <div class="step">
+          <h3>上沿 · 高 50</h3>
+          <div class="top-island glass">
+            <div class="pill">
+              <svg class="pill-ico"><use href="#i-chart"/></svg>
+              <div class="pill-copy">
+                <div class="name">贵州茅台</div>
+                <div class="meta"><i class="badge">A</i><span>600519</span></div>
+              </div>
+              <div class="pill-quote">
+                <div class="hero">1,428.00</div>
+                <div class="chg up">+1.24%</div>
+                <svg class="pill-spark" viewBox="0 0 72 12" aria-hidden="true">
+                  <path d="M0 10 C8 10 14 7 22 7 S36 8 44 4 S60 3 72 1" fill="none" stroke="#FF453A" stroke-width="1.25" stroke-linecap="round"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <h3>原样塞进侧边 · 宽 62</h3>
+          <div class="mask glass">
+            <div class="pill">
+              <svg class="pill-ico"><use href="#i-chart"/></svg>
+              <div class="pill-copy">
+                <div class="name">贵州茅台</div>
+                <div class="meta"><i class="badge">A</i><span>600519</span></div>
+              </div>
+              <div class="pill-quote">
+                <div class="hero">1,428.00</div>
+                <div class="chg up">+1.24%</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <h3>侧边竖章 · 岛宽 120</h3>
+          <div class="well glass">
+            <div class="stamp quote">
+              <div class="name">贵州茅台</div>
+              <div class="meta"><i class="badge">A</i><span>600519</span></div>
+              <div class="hero">1,428.00</div>
+              <div class="chg up">+1.24%</div>
+              <svg class="spark" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M0 18 C12 17 22 15 32 14 S50 16 60 9 S80 7 100 3 V24 H0 Z" fill="url(#fill-up)"/>
+                <path d="M0 18 C12 17 22 15 32 14 S50 16 60 9 S80 7 100 3" fill="none" stroke="#FF453A" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="case">
+      <p class="case-name">日程</p>
+      <div class="triptych">
+        <div class="step">
+          <h3>上沿 · 高 50</h3>
+          <div class="top-island glass">
+            <div class="pill">
+              <div class="datecol">
+                <span class="weekday">周二</span>
+                <span class="day">6</span>
+              </div>
+              <div class="agenda">
+                <span class="when">09:30</span>
+                <span class="event">产品设计评审</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <h3>原样塞进侧边 · 宽 62</h3>
+          <div class="mask glass">
+            <div class="pill">
+              <div class="datecol">
+                <span class="weekday">周二</span>
+                <span class="day">6</span>
+              </div>
+              <div class="agenda">
+                <span class="when">09:30</span>
+                <span class="event">产品设计评审</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <h3>侧边竖章 · 岛宽 120</h3>
+          <div class="well glass">
+            <div class="stamp">
+              <div class="weekday">周二</div>
+              <div class="day">6</div>
+              <i class="rule"></i>
+              <div class="when">09:30</div>
+              <div class="event">产品设计评审</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <h2>章面一览</h2>
+    <p class="section-lead">每块都是岛里的一章，宽和侧边岛一致。双环并排、左右分栏、横排操作都收成这一列。岛上只留当前一项，其余仍进弹出层。</p>
+    <div class="groups">
+      <div class="group">
+        <h3>时间</h3>
+        <div class="grid">
+          <figure>
+            <figcaption>时钟</figcaption>
+            <div class="well glass"><div class="stamp">
+              <svg class="face" viewBox="0 0 32 32" aria-hidden="true">
+                <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="1.25" opacity="0.35"/>
+                <line x1="16" y1="16" x2="16" y2="9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" transform="rotate(76 16 16)"/>
+                <line x1="16" y1="16" x2="16" y2="6.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" transform="rotate(192 16 16)"/>
+                <circle cx="16" cy="16" r="1.3" fill="currentColor"/>
+              </svg>
+              <div class="hero">14:32</div>
+              <div class="sub">10月6日</div>
+            </div></div>
+          </figure>
+          <figure>
+            <figcaption>闹钟</figcaption>
+            <div class="well glass"><div class="stamp">
+              <svg class="glyph alarm"><use href="#i-alarm"/></svg>
+              <div class="hero">07:30</div>
+              <div class="sub">明天</div>
+            </div></div>
+          </figure>
+          <figure>
+            <figcaption>倒计时</figcaption>
+            <div class="well glass"><div class="stamp">
+              <svg class="glyph"><use href="#i-hour"/></svg>
+              <div class="hero">12:04</div>
+              <div class="sub">倒计时</div>
+            </div></div>
+          </figure>
+          <figure>
+            <figcaption>秒表</figcaption>
+            <div class="well glass"><div class="stamp">
+              <svg class="glyph"><use href="#i-stop"/></svg>
+              <div class="hero">00:12.4</div>
+              <div class="sub">运行中</div>
+            </div></div>
+          </figure>
+          <figure>
+            <figcaption>专注</figcaption>
+            <div class="well glass"><div class="stamp">
+              <svg class="ring" viewBox="0 0 36 36" aria-hidden="true">
+                <circle cx="18" cy="18" r="14" fill="none" stroke="var(--track)" stroke-width="3"/>
+                <circle cx="18" cy="18" r="14" fill="none" stroke="#A78BFA" stroke-width="3" stroke-linecap="round" stroke-dasharray="88" stroke-dashoffset="23" transform="rotate(-90 18 18)"/>
+              </svg>
+              <div class="hero">18:24</div>
+              <div class="sub">专注</div>
+            </div></div>
+          </figure>
+          <figure>
+            <figcaption>时间进度</figcaption>
+            <div class="well glass"><div class="stamp meters">
+              <div>
+                <div class="meter-top"><span>今日</span><b>42%</b></div>
+                <div class="track"><i style="width:42%;background:var(--progress)"></i></div>
+              </div>
+            </div></div>
+          </figure>
+          <figure>
+            <figcaption>日程</figcaption>
+            <div class="well glass"><div class="stamp">
+              <div class="weekday">周二</div>
+              <div class="day">6</div>
+              <i class="rule"></i>
+              <div class="when">09:30</div>
+              <div class="event">设计评审</div>
+            </div></div>
+          </figure>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>系统</h3>
+        <div class="grid">
+          <figure>
+            <figcaption>系统状态</figcaption>
+            <div class="well glass"><div class="stamp meters">
+              <div>
+                <div class="meter-top"><span>CPU</span><b>23%</b></div>
+                <div class="track"><i style="width:23%;background:#C084FC"></i></div>
+              </div>
+              <div>
+                <div class="meter-top"><span>内存</span><b>61%</b></div>
+                <div class="track"><i style="width:61%;background:#3B82F6"></i></div>
+              </div>
+            </div></div>
+          </figure>
+          <figure>
+            <figcaption>网络</figcaption>
+            <div class="well glass"><div class="stamp meters quote">
+              <div class="rate down"><span>↓</span><b>3.2 MB/s</b></div>
+              <div class="rate up"><span>↑</span><b>840 KB/s</b></div>
+              <svg class="spark short" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M0 16 C14 16 22 12 34 13 S52 18 64 10 S84 8 100 5 V24 H0 Z" fill="url(#fill-net)"/>
+                <path d="M0 16 C14 16 22 12 34 13 S52 18 64 10 S84 8 100 5" fill="none" stroke="#3B82F6" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+              </svg>
+            </div></div>
+          </figure>
+          <figure>
+            <figcaption>电源</figcaption>
+            <div class="well glass"><div class="stamp">
+              <svg class="batt" viewBox="0 0 28 28" aria-hidden="true">
+                <rect x="11" y="3.5" width="6" height="2.2" rx="0.6" fill="currentColor"/>
+                <rect x="7" y="6" width="14" height="18.5" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                <rect x="9" y="10.2" width="10" height="12" rx="1" fill="#34D399"/>
+              </svg>
+              <div class="hero">86%</div>
+              <div class="sub">2 小时</div>
+            </div></div>
+          </figure>
+          <figure>
+            <figcaption>磁盘</figcaption>
+            <div class="well glass"><div class="stamp meters">
+              <div>
+                <div class="meter-top"><span>C:</span><b>72%</b></div>
+                <div class="track"><i style="width:72%;background:#34D399"></i></div>
+              </div>
+              <div class="sub left">128 GB 可用</div>
+            </div></div>
+          </figure>
+          <figure>
+            <figcaption>GPU</figcaption>
+            <div class="well glass"><div class="stamp meters">
+              <div>
+                <div class="meter-top"><span>GPU</span><b>41%</b></div>
+                <div class="track"><i style="width:41%;background:#F59E0B"></i></div>
+              </div>
+            </div></div>
+          </figure>
+          <figure>
+            <figcaption>进程</figcaption>
+            <div class="well glass"><div class="stamp">
+              <div class="proc"><svg><use href="#i-code"/></svg></div>
+              <div class="hero">22%</div>
+              <div class="sub">Code</div>
+            </div></div>
+          </figure>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>天气、股票、便笺、壁纸</h3>
+        <div class="grid">
+          <figure>
+            <figcaption>天气</figcaption>
+            <div class="well glass"><div class="stamp">
+              <div class="wx">☀️</div>
+              <div class="hero lg">27°</div>
+              <div class="sub">晴 · 上海</div>
+              <div class="aqi">优</div>
+            </div></div>
+          </figure>
+          <figure>
+            <figcaption>股票</figcaption>
+            <div class="well glass"><div class="stamp quote">
+              <div class="name">贵州茅台</div>
+              <div class="meta"><i class="badge">A</i><span>600519</span></div>
+              <div class="hero">1,428.00</div>
+              <div class="chg up">+1.24%</div>
+              <svg class="spark" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M0 18 C12 17 22 15 32 14 S50 16 60 9 S80 7 100 3 V24 H0 Z" fill="url(#fill-up)"/>
+                <path d="M0 18 C12 17 22 15 32 14 S50 16 60 9 S80 7 100 3" fill="none" stroke="#FF453A" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+              </svg>
+            </div></div>
+          </figure>
+          <figure>
+            <figcaption>股票 · 下跌</figcaption>
+            <div class="well glass"><div class="stamp quote">
+              <div class="name">平安银行</div>
+              <div class="meta"><i class="badge">A</i><span>000001</span></div>
+              <div class="hero">11.20</div>
+              <div class="chg down">-0.86%</div>
+              <svg class="spark" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M0 4 C16 6 28 5 40 10 S62 12 74 16 S90 18 100 20 V24 H0 Z" fill="#30D158" opacity="0.18"/>
+                <path d="M0 4 C16 6 28 5 40 10 S62 12 74 16 S90 18 100 20" fill="none" stroke="#30D158" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+              </svg>
+            </div></div>
+          </figure>
+          <figure>
+            <figcaption>便笺</figcaption>
+            <div class="well glass"><div class="stamp notes">
+              <p>下午改侧边。<br>日期在上，<br>报价在下。</p>
+            </div></div>
+          </figure>
+          <figure>
+            <figcaption>Bing 壁纸</figcaption>
+            <div class="well glass"><div class="stamp bing">
+              <div class="photo" aria-hidden="true"><i class="sun"></i><i class="mesa"></i></div>
+              <div class="sub">峡谷日出</div>
+              <div class="bing-actions">
+                <button type="button" class="quiet" title="前一天"><svg><use href="#i-left"/></svg></button>
+                <button type="button" class="quiet" title="设为桌面"><svg><use href="#i-down"/></svg></button>
+                <button type="button" class="quiet" title="下一张"><svg><use href="#i-right"/></svg></button>
+              </div>
+            </div></div>
+          </figure>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+  const root = document.documentElement;
+  const desk = document.getElementById("desk");
+  const slot = document.getElementById("slot");
+  const weather = document.getElementById("live-weather");
+  const flyout = document.getElementById("flyout");
+
+  function placeFlyout() {
+    const dr = desk.getBoundingClientRect();
+    const sr = weather.getBoundingClientRect();
+    const ir = slot.getBoundingClientRect();
+    const height = flyout.offsetHeight || 160;
+    let top = sr.top - dr.top;
+    const maxTop = dr.height - height - 52;
+    top = Math.max(12, Math.min(top, maxTop));
+    flyout.style.top = top + "px";
+    if (root.dataset.edge === "right") {
+      flyout.style.left = "auto";
+      flyout.style.right = (dr.right - ir.left + 8) + "px";
+    } else {
+      flyout.style.right = "auto";
+      flyout.style.left = (ir.right - dr.left + 8) + "px";
+    }
+  }
+
+  function setFlyout(open) {
+    flyout.classList.toggle("show", open);
+    flyout.inert = !open;
+    flyout.setAttribute("aria-hidden", open ? "false" : "true");
+    weather.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) placeFlyout();
+  }
+
+  document.querySelectorAll(".seg").forEach((group) => {
+    group.addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      root.dataset[group.dataset.set] = button.dataset.value;
+      group.querySelectorAll("button").forEach((item) => {
+        item.setAttribute("aria-pressed", item === button ? "true" : "false");
+      });
+      placeFlyout();
+    });
+  });
+
+  weather.addEventListener("click", () => {
+    setFlyout(weather.getAttribute("aria-expanded") !== "true");
+  });
+  document.getElementById("fly-close").addEventListener("click", () => setFlyout(false));
+  desk.addEventListener("click", (event) => {
+    if (event.target.closest(".flyout") || event.target.closest("#live-weather")) return;
+    setFlyout(false);
+  });
+  window.addEventListener("resize", placeFlyout);
+</script>
+</body>
+</html>

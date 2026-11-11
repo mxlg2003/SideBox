@@ -21,7 +21,7 @@ internal static class DockMenu
         var hover = DockTokens.ResolveTileFill(isLight, backdrop);
         var menu = new ContextMenu
         {
-            FontFamily = new FontFamily("Segoe UI Variable, Segoe UI"),
+            FontFamily = UiFont.Family,
             FontSize = 13,
             HasDropShadow = true,
             Background = Brushes.Transparent,
@@ -82,6 +82,7 @@ internal static class DockMenu
 
     private static Style ItemStyle(uint text, uint hover)
     {
+        PhosphorIcon.TryGet(PhosphorIcon.Check, out var checkPath);
         var style = new Style(typeof(MenuItem));
         style.Setters.Add(new Setter(Control.ForegroundProperty, TokenBrushes.From(text)));
         style.Setters.Add(new Setter(Control.BackgroundProperty, Brushes.Transparent));
@@ -98,8 +99,8 @@ internal static class DockMenu
                     <ColumnDefinition Width="22"/>
                     <ColumnDefinition Width="*"/>
                   </Grid.ColumnDefinitions>
-                  <TextBlock x:Name="Check" Grid.Column="0" Text="&#xE73E;" FontFamily="Segoe MDL2 Assets"
-                             FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed"/>
+                  <Path x:Name="Check" Grid.Column="0" Data="F1 {checkPath}" Fill="{Hex(text)}"
+                        Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed"/>
                   <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="True"/>
                 </Grid>
               </Border>

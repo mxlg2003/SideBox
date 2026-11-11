@@ -9,7 +9,7 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class StopwatchWidget : UserControl, IWidgetOpenable, IKeepAliveWhileRunning, ILocalizable, IWidgetDetachable
+public sealed class StopwatchWidget : UserControl, IWidgetOpenable, IKeepAliveWhileRunning, ILocalizable, IWidgetDetachable, IDockEdgeAware
 {
     private const uint Accent = 0xFF0078D4;
     private const uint QuietFill = 0x14000000;
@@ -69,15 +69,15 @@ public sealed class StopwatchWidget : UserControl, IWidgetOpenable, IKeepAliveWh
         _flyoutTitle.Text = BuiltInWidgets.DisplayName(BuiltInWidgets.Stopwatch);
         _flyoutTitle.FontSize = 12;
         _flyoutTitle.VerticalAlignment = VerticalAlignment.Center;
-        var close = new TextBlock
+        _popup = new Popup
         {
-            Text = "\u00D7",
-            FontSize = 18,
-            Opacity = 0.45,
-            Padding = new Thickness(6, 0, 0, 0),
-            Cursor = Cursors.Hand,
-            VerticalAlignment = VerticalAlignment.Center
+            Placement = PlacementMode.Bottom,
+            PlacementTarget = _tile,
+            StaysOpen = false,
+            AllowsTransparency = true,
+            VerticalOffset = 8
         };
+        var close = WidgetChrome.HeaderClose(() => _popup.IsOpen = false);
         var header = new Grid();
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -108,21 +108,8 @@ public sealed class StopwatchWidget : UserControl, IWidgetOpenable, IKeepAliveWh
         panel.RenderTransformOrigin = new Point(0.5, 0);
         panel.RenderTransform = new ScaleTransform(1, 1);
 
-        _popup = new Popup
-        {
-            Placement = PlacementMode.Bottom,
-            PlacementTarget = _tile,
-            StaysOpen = false,
-            AllowsTransparency = true,
-            VerticalOffset = 8,
-            Child = panel
-        };
+        _popup.Child = panel;
         WidgetFlyout.Attach(_popup);
-        close.MouseLeftButtonUp += (_, e) =>
-        {
-            _popup.IsOpen = false;
-            e.Handled = true;
-        };
         _popup.Opened += (_, _) =>
         {
             var scale = (ScaleTransform)panel.RenderTransform;
@@ -161,6 +148,16 @@ public sealed class StopwatchWidget : UserControl, IWidgetOpenable, IKeepAliveWh
     }
 
     public bool IsAlive => _running;
+
+    public void ApplyDockEdge(DockEdge edge)
+    {
+        var side = WidgetChrome.IsSide(edge);
+        _tileTime.HorizontalAlignment = HorizontalAlignment.Center;
+        _tileTime.TextAlignment = TextAlignment.Center;
+        _tileStatus.HorizontalAlignment = HorizontalAlignment.Center;
+        _tileStatus.TextAlignment = TextAlignment.Center;
+        WidgetChrome.FitEdge(_tile, side, 72);
+    }
 
     public void Detach()
     {
@@ -236,7 +233,7 @@ public sealed class StopwatchWidget : UserControl, IWidgetOpenable, IKeepAliveWh
         var border = new Border
         {
             MinWidth = 88,
-            Height = 34,
+            Height = DockTokens.FlyoutControlHeight,
             CornerRadius = new CornerRadius(DockTokens.IslandCornerRadius),
             Padding = new Thickness(16, 0, 16, 0),
             Margin = new Thickness(4, 0, 4, 0),

@@ -5,6 +5,11 @@
     <Description>Built-in WPF widget views. No DllImport.</Description>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\Shared\PhosphorGlyph.cs" Link="PhosphorGlyph.cs" />
+    <Compile Include="..\Shared\FolderCaption.cs" Link="FolderCaption.cs" />
+    <Compile Include="..\Shared\UiFont.cs" Link="UiFont.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\WinDock.Core\WinDock.Core.csproj" />
   </ItemGroup>
 </Project>

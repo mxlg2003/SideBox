@@ -4,7 +4,7 @@ public readonly record struct KnownLocalPlayer(string ProcessName, string Displa
 
 /// <summary>
 /// Win32 players that often skip GSMTC or publish a session without titles or transport.
-/// WinDock can still read their window title and send documented media commands.
+/// Sidebox can still read their window title and send documented media commands.
 /// </summary>
 public static class KnownLocalPlayers
 {

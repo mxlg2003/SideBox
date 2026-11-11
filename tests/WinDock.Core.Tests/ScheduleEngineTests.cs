@@ -156,6 +156,8 @@ public class ScheduleEngineTests
         using (UiLocale.Push(UiLanguage.Chinese))
         {
             Assert.Equal("团队", engine.Settings.GetCategoryTitle(ScheduleColorId.Blue));
+            Assert.Equal("", ScheduleSettings.StoredCategoryTitle(ScheduleColorId.Blue, "团队"));
+            Assert.Equal("项目", ScheduleSettings.StoredCategoryTitle(ScheduleColorId.Blue, " 项目 "));
         }
     }
 
@@ -208,6 +210,18 @@ public class ScheduleEngineTests
         Assert.Equal("第3件事", upcoming[2].Title);
     }
 
+    [Fact]
+    public void Layout_falls_back_and_is_part_of_equality()
+    {
+        var fallback = ScheduleSettings.Normalize(new ScheduleSettings { Layout = "nope" });
+        Assert.Equal(ScheduleLayouts.DateAgenda, fallback.Layout);
+
+        var dateOnly = ScheduleSettings.Normalize(new ScheduleSettings { Layout = ScheduleLayouts.Date });
+        Assert.Equal(ScheduleLayouts.Date, dateOnly.Layout);
+        Assert.False(ScheduleSettings.Same(fallback, dateOnly));
+        Assert.True(ScheduleSettings.Same(dateOnly, dateOnly));
+    }
+
     [Theory]
     [InlineData("9:00", 9, 0)]
     [InlineData("14:30", 14, 30)]
@@ -258,5 +272,102 @@ public class ScheduleEngineTests
         Assert.Equal(ScheduleSettings.MaxItems, next.Items.Count);
         Assert.Contains(next.Items, item => item.Title == "newest");
         Assert.DoesNotContain(next.Items, item => item.Title == "item-0");
+    }
+
+    [Fact]
+    public void Update_changes_clock_time_and_can_return_to_all_day()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var item = new ScheduleItem
+        {
+            Id = "meet",
+            Title = "评审",
+            Date = today,
+            IsAllDay = true,
+            IsCompleted = true,
+            ColorId = ScheduleColorId.Blue,
+            Remark = "带上稿"
+        };
+        var engine = new ScheduleEngine(new ScheduleSettings { Items = [item] });
+
+        Assert.True(engine.TryUpdate("meet", " 方案评审 ", today, new TimeSpan(14, 30, 45), false, out var next));
+        var updated = Assert.Single(next.Items);
+        Assert.Equal("方案评审", updated.Title);
+        Assert.Equal(new TimeSpan(14, 30, 0), updated.Time);
+        Assert.False(updated.IsAllDay);
+        Assert.True(updated.IsCompleted);
+        Assert.Equal(ScheduleColorId.Blue, updated.ColorId);
+        Assert.Equal("带上稿", updated.Remark);
+        Assert.Equal(today, updated.Date);
+
+        var (timed, allDay) = engine.GetTodayEvents(today);
+        Assert.Equal("方案评审", Assert.Single(timed).Title);
+        Assert.Empty(allDay);
+
+        Assert.True(engine.TryUpdate("meet", "方案评审", today, new TimeSpan(9, 0, 0), true, out next));
+        updated = Assert.Single(next.Items);
+        Assert.Null(updated.Time);
+        Assert.True(updated.IsAllDay);
+        (_, allDay) = engine.GetTodayEvents(today);
+        Assert.Equal("方案评审", Assert.Single(allDay).Title);
+
+        Assert.False(engine.TryUpdate("meet", "  ", today.AddDays(1), new TimeSpan(8, 0, 0), false, out next));
+        Assert.Equal("方案评审", Assert.Single(next.Items).Title);
+        Assert.Equal(today, Assert.Single(next.Items).Date);
+        Assert.True(Assert.Single(next.Items).IsAllDay);
+
+        Assert.False(engine.TryUpdate("missing", "别的", today, new TimeSpan(9, 0, 0), false, out next));
+        Assert.Single(next.Items);
+    }
+
+    [Fact]
+    public void Update_can_move_an_event_to_another_day()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var item = new ScheduleItem
+        {
+            Id = "meet",
+            Title = "评审",
+            Date = today,
+            Time = new TimeSpan(9, 0, 0)
+        };
+        var engine = new ScheduleEngine(new ScheduleSettings { Items = [item] });
+        var nextDay = today.AddDays(3);
+
+        Assert.True(engine.TryUpdate("meet", "评审", nextDay, new TimeSpan(11, 15, 0), false, out var next));
+        var updated = Assert.Single(next.Items);
+        Assert.Equal(nextDay, updated.Date);
+        Assert.Equal(new TimeSpan(11, 15, 0), updated.Time);
+        Assert.Empty(engine.GetTodayEvents(today).Timed);
+        Assert.Equal("评审", Assert.Single(engine.GetUpcomingEvents(today)).Title);
+
+        Assert.True(engine.TryUpdate("meet", "评审", today.AddDays(-1), new TimeSpan(11, 15, 0), false, out next));
+        Assert.Empty(engine.GetUpcomingEvents(today));
+        Assert.Equal("评审", Assert.Single(engine.GetOverdueEvents(today)).Title);
+    }
+
+    [Fact]
+    public void Update_countdown_changes_date_without_becoming_an_event()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var item = new ScheduleItem
+        {
+            Id = "trip",
+            Title = "出发",
+            Kind = ScheduleKind.Countdown,
+            Date = today.AddDays(3),
+            ColorId = ScheduleColorId.Purple
+        };
+        var engine = new ScheduleEngine(new ScheduleSettings { Items = [item] });
+        var moved = today.AddDays(12);
+
+        Assert.True(engine.TryUpdate("trip", " 出发 ", moved, new TimeSpan(8, 0, 0), true, out var next));
+        var updated = Assert.Single(next.Items);
+        Assert.Equal(ScheduleKind.Countdown, updated.Kind);
+        Assert.Equal("出发", updated.Title);
+        Assert.Equal(moved, updated.Date);
+        Assert.Null(updated.Time);
+        Assert.False(updated.IsAllDay);
+        Assert.Equal(ScheduleColorId.Purple, updated.ColorId);
     }
 }

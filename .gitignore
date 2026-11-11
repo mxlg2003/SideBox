@@ -2,6 +2,8 @@ bin/
 obj/
 .vs/
 .idea/
+.vscode/
+.cursor/
 *.user
 *.suo
 *.userosscache
@@ -13,6 +15,28 @@ obj/
 TestResults/
 *.coverage
 artifacts/
+pack/output/
+*.exe
 *.DotSettings.user
 .DS_Store
 Thumbs.db
+node_modules/
+admin/dist/
+website/dist/
+
+# Security & Credentials
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12
+*.cer
+*.id_rsa
+cert/
+certs/
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3

@@ -16,24 +16,30 @@ namespace WinDock.Widgets;
 
 public sealed class WidgetViewRegistry
 {
-    public UIElement Create(DockItem item, IProviderHub hub, Func<Task>? applyBingWallpaper = null)
+    public UIElement Create(DockItem item, IProviderHub hub, Func<Task>? applyBingWallpaper = null, Func<Task>? applyWallpaper = null)
     {
         return item.WidgetId switch
         {
-            BuiltInWidgets.Clock => new ClockWidget(hub.Clock),
+            BuiltInWidgets.Clock => new ClockWidget(hub.Clock, item.Density),
             BuiltInWidgets.Notes => new NotesWidget(hub.Notes, item.Id),
             BuiltInWidgets.Power => new PowerWidget(hub.Power),
             BuiltInWidgets.SysActivity => new SysActivityWidget(hub.Perf),
-            BuiltInWidgets.Network => new NetworkWidget(hub.Network),
-            BuiltInWidgets.NowPlaying => new NowPlayingWidget(hub.Media),
+            BuiltInWidgets.Network => new NetworkWidget(hub.Network, item.Density),
+            BuiltInWidgets.NowPlaying => new NowPlayingWidget(hub.Media, item.Density),
+            BuiltInWidgets.Wallpaper => new WallpaperWidget(hub.Wallpaper, applyWallpaper ?? applyBingWallpaper),
             BuiltInWidgets.BingWallpaper => new BingWallpaperWidget(hub.Bing, applyBingWallpaper),
             BuiltInWidgets.Stopwatch => new StopwatchWidget(),
             BuiltInWidgets.Countdown => new CountdownWidget(),
             BuiltInWidgets.Alarm => new AlarmWidget(),
             BuiltInWidgets.FocusTimer => new FocusTimerWidget(),
-            BuiltInWidgets.TimeProgress => new TimeProgressWidget(hub.Clock),
-            BuiltInWidgets.Weather => new WeatherWidget(hub.Weather),
+            BuiltInWidgets.TimeProgress => new TimeProgressWidget(hub.Clock, item.Density),
+            BuiltInWidgets.Weather => new WeatherWidget(hub.Weather, item.Density),
             BuiltInWidgets.Schedule => new ScheduleWidget(),
+            BuiltInWidgets.Disk => new DiskWidget(hub.Disk),
+            BuiltInWidgets.Gpu => new GpuWidget(hub.Gpu),
+            BuiltInWidgets.Processes => new ProcessWidget(hub.Processes),
+            BuiltInWidgets.Stocks => new StockWidget(hub.Stocks),
+            BuiltInWidgets.WhiteNoise => new WhiteNoiseWidget(),
             _ => new PlaceholderWidget(item.WidgetId ?? string.Empty)
         };
     }
@@ -73,6 +79,40 @@ public static partial class WidgetChrome
         return border;
     }
 
+    public static bool IsSide(DockEdge edge) => edge is DockEdge.Left or DockEdge.Right;
+
+    public static void FitEdge(Border tile, bool side, double topMinWidth = 64, Thickness? topPadding = null)
+    {
+        if (side)
+        {
+            tile.Width = DockTokens.SideTileWidth;
+            tile.MinWidth = DockTokens.SideTileWidth;
+            tile.MaxWidth = DockTokens.SideTileWidth;
+            tile.Height = double.NaN;
+            tile.MinHeight = 0;
+            tile.MaxHeight = double.PositiveInfinity;
+            tile.HorizontalAlignment = HorizontalAlignment.Center;
+            tile.VerticalAlignment = VerticalAlignment.Center;
+            tile.Padding = new Thickness(6, 6, 6, 6);
+            return;
+        }
+
+        tile.Width = double.NaN;
+        tile.MinWidth = topMinWidth;
+        tile.MaxWidth = double.PositiveInfinity;
+        tile.Height = DockTokens.TileHeight;
+        tile.MinHeight = DockTokens.TileHeight;
+        tile.MaxHeight = DockTokens.TileHeight;
+        tile.HorizontalAlignment = HorizontalAlignment.Center;
+        tile.VerticalAlignment = VerticalAlignment.Center;
+        tile.Padding = topPadding ?? new Thickness(DockTokens.TilePaddingX, DockTokens.TilePaddingY, DockTokens.TilePaddingX, DockTokens.TilePaddingY);
+    }
+
+    public static void FitHost(FrameworkElement host, bool side)
+    {
+        host.MaxHeight = side ? double.PositiveInfinity : DockTokens.TileHeight;
+    }
+
     public static Border Flyout(UIElement content, double minWidth = 280)
     {
         var card = new Border
@@ -90,7 +130,7 @@ public static partial class WidgetChrome
         return Shadow(card);
     }
 
-    public static Border Field(UIElement content, double height = 34)
+    public static Border Field(UIElement content, double height = DockTokens.FlyoutControlHeight)
     {
         var border = new Border
         {
@@ -140,14 +180,97 @@ public static partial class WidgetChrome
         ClipToRadius();
     }
 
-    public static TextBlock Glyph(string glyph, uint? tint = null) => new()
+    public static PhosphorGlyph Glyph(string icon, uint? tint = null)
     {
-        Text = glyph,
-        FontFamily = new FontFamily("Segoe MDL2 Assets"),
-        FontSize = DockTokens.GlyphSize,
+        var glyph = new PhosphorGlyph(icon, DockTokens.GlyphSize)
+        {
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0),
+            Tag = tint is uint ? "tint" : null,
+            Foreground = TokenBrushes.From(tint ?? DockTokens.Dark.Text)
+        };
+        return glyph;
+    }
+
+    public static PhosphorGlyph HeaderIcon(string icon, Action click, double size = DockTokens.FlyoutGlyphSize, Brush? foreground = null, string? tag = null, double opacity = 0.45, Thickness? padding = null)
+    {
+        _ = padding;
+        var box = DockTokens.FlyoutControlHeight;
+        var glyphSize = size > 0 ? size : DockTokens.FlyoutGlyphSize;
+        var glyph = new PhosphorGlyph(icon, glyphSize)
+        {
+            Width = box,
+            Height = box,
+            Opacity = opacity,
+            Margin = new Thickness(4, 0, 0, 0),
+            Cursor = Cursors.Hand,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        if (foreground is not null)
+        {
+            glyph.Foreground = foreground;
+        }
+
+        if (tag is not null)
+        {
+            glyph.Tag = tag;
+        }
+
+        glyph.MouseLeftButtonUp += (_, e) =>
+        {
+            click();
+            e.Handled = true;
+        };
+        return glyph;
+    }
+
+    public static Border HeaderClose(Action click, double size = DockTokens.FlyoutCloseFont, Brush? foreground = null, string? tag = null, double opacity = 0.45, Thickness? padding = null)
+    {
+        _ = size;
+        _ = padding;
+        var box = DockTokens.FlyoutControlHeight;
+        var mark = new TextBlock
+        {
+            Text = "\u00D7",
+            FontFamily = WidgetFonts.Ui,
+            FontSize = DockTokens.FlyoutCloseFont,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsHitTestVisible = false,
+            Tag = tag
+        };
+        if (foreground is not null)
+        {
+            mark.Foreground = foreground;
+        }
+
+        var border = new Border
+        {
+            Width = box,
+            Height = box,
+            Margin = new Thickness(4, 0, 0, 0),
+            CornerRadius = new CornerRadius(DockTokens.TileCornerRadius),
+            Background = Brushes.Transparent,
+            Opacity = opacity,
+            Cursor = Cursors.Hand,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = mark
+        };
+        border.MouseLeftButtonUp += (_, e) =>
+        {
+            click();
+            e.Handled = true;
+        };
+        return border;
+    }
+
+    public static PhosphorGlyph AccentCheck(uint color, double size = 13) => new(PhosphorIcon.Check, size)
+    {
+        Tag = "tint",
+        Foreground = TokenBrushes.From(color),
         VerticalAlignment = VerticalAlignment.Center,
-        Margin = new Thickness(0, 0, 8, 0),
-        Foreground = tint is uint color ? TokenBrushes.From(color) : TokenBrushes.From(DockTokens.Dark.Text)
+        Visibility = Visibility.Collapsed
     };
 
     public static StackPanel Row(UIElement glyph, UIElement body) => new()
@@ -233,8 +356,20 @@ public static partial class WidgetChrome
         }
     }
 
-    public static void ApplyTheme(Border border, bool isLight, DockBackdrop backdrop = DockBackdrop.Mica)
+    internal static DockBackdrop ThemeBackdrop => _themeBackdrop;
+
+    public static void PaintSurfaces(Border tile, Border flyoutHost, bool isLight)
     {
+        ApplyTheme(tile, isLight, _themeBackdrop);
+        if (flyoutHost.Child is Border card)
+        {
+            ApplyTheme(card, isLight, _themeBackdrop);
+        }
+    }
+
+    public static void ApplyTheme(Border border, bool isLight, DockBackdrop? backdrop = null)
+    {
+        var targetBackdrop = backdrop ?? _themeBackdrop;
         if (Equals(border.Tag, NotesTag))
         {
             // Paper fill and ink are owned by NotesWidget; theme text would wash them out.
@@ -247,11 +382,11 @@ public static partial class WidgetChrome
         }
         else if (Equals(border.Tag, FlyoutTag))
         {
-            border.Background = TokenBrushes.From(DockTokens.ResolveMenuFill(isLight, true, backdrop));
+            border.Background = TokenBrushes.From(DockTokens.ResolveMenuFill(isLight, true, targetBackdrop));
         }
         else if (Equals(border.Tag, FieldTag) || Equals(border.Tag, QuietTag))
         {
-            border.Background = TokenBrushes.From(DockTokens.ResolveQuietFill(isLight, backdrop));
+            border.Background = TokenBrushes.From(DockTokens.ResolveQuietFill(isLight, targetBackdrop));
             border.BorderBrush = TokenBrushes.From(isLight ? DockTokens.Light.Stroke : DockTokens.Dark.Stroke);
             border.BorderThickness = new Thickness(1);
         }
@@ -261,7 +396,7 @@ public static partial class WidgetChrome
         }
         else
         {
-            border.Background = TokenBrushes.From(DockTokens.ResolveTileFill(isLight, backdrop));
+            border.Background = TokenBrushes.From(DockTokens.ResolveTileFill(isLight, targetBackdrop));
         }
 
         SetForeground(border, isLight ? DockTokens.Light.Text : DockTokens.Dark.Text);
@@ -283,8 +418,16 @@ public static partial class WidgetChrome
         TextOptions.SetTextFormattingMode(box, TextFormattingMode.Display);
     }
 
-    private static void SetForeground(DependencyObject root, uint argb)
+    private static void SetForeground(DependencyObject root, uint argb) =>
+        SetForeground(root, argb, []);
+
+    private static void SetForeground(DependencyObject root, uint argb, HashSet<DependencyObject> seen)
     {
+        if (!seen.Add(root))
+        {
+            return;
+        }
+
         if (root is FrameworkElement element &&
             (Equals(element.Tag, NotesTag) || element.Tag as string is "tint" or "ink"))
         {
@@ -302,6 +445,11 @@ public static partial class WidgetChrome
             text.Foreground = brush;
         }
 
+        if (root is PhosphorGlyph glyph)
+        {
+            glyph.Foreground = brush;
+        }
+
         if (root is AnalogClockFace face)
         {
             face.Stroke = brush;
@@ -315,12 +463,12 @@ public static partial class WidgetChrome
         var count = VisualTreeHelper.GetChildrenCount(root);
         for (var i = 0; i < count; i++)
         {
-            SetForeground(VisualTreeHelper.GetChild(root, i), argb);
+            SetForeground(VisualTreeHelper.GetChild(root, i), argb, seen);
         }
 
         if (root is Decorator decorator && decorator.Child is not null)
         {
-            SetForeground(decorator.Child, argb);
+            SetForeground(decorator.Child, argb, seen);
         }
         else if (root is Panel panel)
         {
@@ -328,17 +476,17 @@ public static partial class WidgetChrome
             {
                 if (child is DependencyObject d)
                 {
-                    SetForeground(d, argb);
+                    SetForeground(d, argb, seen);
                 }
             }
         }
         else if (root is ContentControl content && content.Content is DependencyObject inner)
         {
-            SetForeground(inner, argb);
+            SetForeground(inner, argb, seen);
         }
         else if (root is Popup popup && popup.Child is DependencyObject popupChild)
         {
-            SetForeground(popupChild, argb);
+            SetForeground(popupChild, argb, seen);
         }
     }
 }
@@ -354,7 +502,7 @@ internal static class TokenBrushes
 
 internal static class WidgetFonts
 {
-    public static readonly FontFamily Ui = new("Segoe UI Variable, Segoe UI");
+    public static readonly FontFamily Ui = UiFont.Family;
     public static readonly FontFamily Notes = new("Candara, Microsoft YaHei UI, Segoe UI");
 }
 
@@ -397,7 +545,7 @@ internal static class WidgetCopy
     }
 }
 
-public sealed class PlaceholderWidget : UserControl, ILocalizable
+public sealed class PlaceholderWidget : UserControl, ILocalizable, IDockEdgeAware
 {
     private readonly string _widgetId;
     private readonly TextBlock _label;
@@ -418,6 +566,18 @@ public sealed class PlaceholderWidget : UserControl, ILocalizable
     }
 
     public void ApplyLocale() => _label.Text = BuiltInWidgets.DisplayName(_widgetId);
+
+    public void ApplyDockEdge(DockEdge edge)
+    {
+        if (Content is Border tile)
+        {
+            var side = WidgetChrome.IsSide(edge);
+            _label.TextAlignment = side ? TextAlignment.Center : TextAlignment.Left;
+            _label.TextWrapping = side ? TextWrapping.Wrap : TextWrapping.NoWrap;
+            _label.TextTrimming = TextTrimming.CharacterEllipsis;
+            WidgetChrome.FitEdge(tile, side, 64);
+        }
+    }
 }
 
 internal static class WidgetMode
@@ -426,7 +586,7 @@ internal static class WidgetMode
         density == WidgetDensity.Expanded ? Visibility.Visible : Visibility.Collapsed;
 }
 
-public sealed class ClockWidget : UserControl, IWidgetModeAware, IWidgetOpenable, IWidgetCustomizable, IClockConfigurable, ILocalizable
+public sealed class ClockWidget : UserControl, IWidgetModeAware, IDockEdgeAware, IWidgetOpenable, IWidgetCustomizable, IClockConfigurable, ILocalizable, IIslandLayoutAware
 {
     private readonly IClockProvider _clock;
     private readonly AnalogClockFace _tileFace = new(DockTokens.ClockFaceSize)
@@ -450,19 +610,26 @@ public sealed class ClockWidget : UserControl, IWidgetModeAware, IWidgetOpenable
     private readonly Popup _popup;
     private readonly DispatcherTimer _timer;
     private WidgetDensity _density = WidgetDensity.Expanded;
+    private bool _side;
     private string? _timeZoneId;
     private readonly Popup _customize;
     private readonly TextBlock _flyoutTitle = WidgetCopy.Secondary();
     private readonly TextBlock _zoneCaption = new() { FontSize = 13 };
     private readonly ComboBox _zoneBox = new();
 
-    public event EventHandler<string>? PaperChanged;
+    public event EventHandler<string>? PaperChanged
+    {
+        add { }
+        remove { }
+    }
 
     public event EventHandler<string?>? TimeZoneChanged;
+    public event EventHandler? IslandLayoutChanged;
 
-    public ClockWidget(IClockProvider clock)
+    public ClockWidget(IClockProvider clock, WidgetDensity density = WidgetDensity.Expanded)
     {
         _clock = clock;
+        _density = density;
         _time.FontSize = 17;
         _date.Margin = new Thickness(0);
         _copy = new StackPanel
@@ -502,15 +669,15 @@ public sealed class ClockWidget : UserControl, IWidgetModeAware, IWidgetOpenable
         _flyoutTitle.Text = BuiltInWidgets.DisplayName(BuiltInWidgets.Clock);
         _flyoutTitle.FontSize = 12;
         _flyoutTitle.VerticalAlignment = VerticalAlignment.Center;
-        var close = new TextBlock
+        _popup = new Popup
         {
-            Text = "\u00D7",
-            FontSize = 18,
-            Opacity = 0.45,
-            Padding = new Thickness(6, 0, 0, 0),
-            Cursor = Cursors.Hand,
-            VerticalAlignment = VerticalAlignment.Center
+            Placement = PlacementMode.Bottom,
+            PlacementTarget = _tile,
+            StaysOpen = false,
+            AllowsTransparency = true,
+            VerticalOffset = 8
         };
+        var close = WidgetChrome.HeaderClose(() => _popup.IsOpen = false);
         var header = new Grid();
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -532,22 +699,8 @@ public sealed class ClockWidget : UserControl, IWidgetModeAware, IWidgetOpenable
         });
         panel.RenderTransformOrigin = new Point(0.5, 0);
         panel.RenderTransform = new ScaleTransform(1, 1);
-
-        _popup = new Popup
-        {
-            Placement = PlacementMode.Bottom,
-            PlacementTarget = _tile,
-            StaysOpen = false,
-            AllowsTransparency = true,
-            VerticalOffset = 8,
-            Child = panel
-        };
+        _popup.Child = panel;
         WidgetFlyout.Attach(_popup);
-        close.MouseLeftButtonUp += (_, e) =>
-        {
-            _popup.IsOpen = false;
-            e.Handled = true;
-        };
         _popup.Opened += (_, _) =>
         {
             var scale = (ScaleTransform)panel.RenderTransform;
@@ -600,23 +753,45 @@ public sealed class ClockWidget : UserControl, IWidgetModeAware, IWidgetOpenable
         Tick();
     }
 
+    public void ApplyDockEdge(DockEdge edge)
+    {
+        _side = WidgetChrome.IsSide(edge);
+        ApplyDensity(_density);
+    }
+
     public void ApplyDensity(WidgetDensity density)
     {
+        var changed = _density != density;
         _density = density;
         var expanded = density == WidgetDensity.Expanded;
-        _tileFace.Visibility = WidgetMode.Extra(density);
-        _tileFace.Width = expanded ? DockTokens.ClockFaceSize : 0;
-        _tileFace.Margin = expanded ? new Thickness(0, 0, 8, 0) : new Thickness(0);
-        var align = expanded ? HorizontalAlignment.Left : HorizontalAlignment.Center;
-        var textAlign = expanded ? TextAlignment.Left : TextAlignment.Center;
+        if (_tile.Child is StackPanel row)
+        {
+            row.Orientation = _side ? Orientation.Vertical : Orientation.Horizontal;
+            row.HorizontalAlignment = HorizontalAlignment.Center;
+        }
+
+        var showFace = _side || expanded;
+        _tileFace.Visibility = showFace ? Visibility.Visible : Visibility.Collapsed;
+        _tileFace.Width = showFace ? (_side ? 28 : DockTokens.ClockFaceSize) : 0;
+        _tileFace.Height = _tileFace.Width;
+        _tileFace.HorizontalAlignment = HorizontalAlignment.Center;
+        _tileFace.Margin = !_side && expanded ? new Thickness(0, 0, 8, 0) : new Thickness(0, 0, 0, _side && showFace ? 2 : 0);
+        _time.FontSize = _side ? DockTokens.PrimaryFontSize : 17;
+        var align = _side || !expanded ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        var textAlign = _side || !expanded ? TextAlignment.Center : TextAlignment.Left;
         _copy.HorizontalAlignment = align;
-        _time.HorizontalAlignment = expanded ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
-        _date.HorizontalAlignment = expanded ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
+        _time.HorizontalAlignment = _side || !expanded ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        _date.HorizontalAlignment = _time.HorizontalAlignment;
         _time.TextAlignment = textAlign;
         _date.TextAlignment = textAlign;
+        WidgetChrome.FitEdge(_tile, _side, 0);
         Tick();
         _tile.InvalidateMeasure();
         InvalidateMeasure();
+        if (changed)
+        {
+            IslandLayoutChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public void Open()
@@ -629,7 +804,7 @@ public sealed class ClockWidget : UserControl, IWidgetModeAware, IWidgetOpenable
     {
         var now = _clock.LocalNow;
         _time.Text = ClockFormat.Time(now);
-        _date.Text = _density == WidgetDensity.Expanded
+        _date.Text = !_side && _density == WidgetDensity.Expanded
             ? ClockFormat.ExpandedDate(now)
             : ClockFormat.CompactDate(now);
         _tileFace.Time = now;
@@ -647,7 +822,7 @@ public sealed class ClockWidget : UserControl, IWidgetModeAware, IWidgetOpenable
 
         var there = ClockFormat.ConvertLocal(now, zone);
         _second.Text = $"{ClockFormat.Time(there)} · {ClockFormat.PlaceName(zone)}";
-        _second.Visibility = _density == WidgetDensity.Expanded ? Visibility.Visible : Visibility.Collapsed;
+        _second.Visibility = !_side && _density == WidgetDensity.Expanded ? Visibility.Visible : Visibility.Collapsed;
         _panelSecond.Text = ClockFormat.ZoneLine(zone, there);
         _panelSecond.Visibility = Visibility.Visible;
     }
@@ -768,6 +943,11 @@ public interface IWidgetModeAware
     void ApplyDensity(WidgetDensity density);
 }
 
+public interface IDockEdgeAware
+{
+    void ApplyDockEdge(DockEdge edge);
+}
+
 public interface IFocusTimerConfigurable
 {
     void ApplySettings(FocusTimerSettings settings);
@@ -817,6 +997,27 @@ public interface INetworkConfigurable
     event EventHandler<NetworkWidgetSettings>? SettingsChanged;
 }
 
+public interface IDiskConfigurable
+{
+    void ApplySettings(DiskWidgetSettings settings);
+
+    event EventHandler<DiskWidgetSettings>? SettingsChanged;
+}
+
+public interface IGpuConfigurable
+{
+    void ApplySettings(GpuWidgetSettings settings);
+
+    event EventHandler<GpuWidgetSettings>? SettingsChanged;
+}
+
+public interface IProcessConfigurable
+{
+    void ApplySettings(ProcessWidgetSettings settings);
+
+    event EventHandler<ProcessWidgetSettings>? SettingsChanged;
+}
+
 public interface IWeatherConfigurable
 {
     void ApplySettings(WeatherSettings settings);
@@ -824,11 +1025,39 @@ public interface IWeatherConfigurable
     event EventHandler<WeatherSettings>? SettingsChanged;
 }
 
+public interface IStockConfigurable
+{
+    void ApplySettings(StockWidgetSettings settings);
+
+    event EventHandler<StockWidgetSettings>? SettingsChanged;
+}
+
 public interface IScheduleConfigurable
 {
     void ApplySettings(ScheduleSettings settings);
 
     event EventHandler<ScheduleSettings>? SettingsChanged;
+}
+
+public interface IWhiteNoiseConfigurable
+{
+    void ApplySettings(WhiteNoiseSettings settings);
+
+    event EventHandler<WhiteNoiseSettings>? SettingsChanged;
+}
+
+public interface IBingWallpaperConfigurable
+{
+    void ApplySettings(BingWallpaperSettings settings);
+
+    event EventHandler<BingWallpaperSettings>? SettingsChanged;
+}
+
+public interface IWallpaperConfigurable
+{
+    void ApplySettings(WallpaperSettings settings);
+
+    event EventHandler<WallpaperSettings>? SettingsChanged;
 }
 
 public interface IWidgetThemeAware
@@ -841,18 +1070,19 @@ public interface ILocalizable
     void ApplyLocale();
 }
 
-public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAware, IWidgetThemeAware, ILocalizable
+public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IDockEdgeAware, IPrivacyAware, IWidgetThemeAware, ILocalizable, IIslandLayoutAware
 {
-    private const string GlyphPrevious = "\uE892";
-    private const string GlyphPlay = "\uE768";
-    private const string GlyphPause = "\uE769";
-    private const string GlyphNext = "\uE893";
-    private const string GlyphMusic = "\uE8D6";
+    public event EventHandler? IslandLayoutChanged;
+    private const string GlyphPrevious = PhosphorIcon.SkipBack;
+    private const string GlyphPlay = PhosphorIcon.Play;
+    private const string GlyphPause = PhosphorIcon.Pause;
+    private const string GlyphNext = PhosphorIcon.SkipForward;
+    private const string GlyphMusic = PhosphorIcon.Headphones;
 
     private readonly IMediaProvider _media;
     private readonly TextBlock _title = WidgetCopy.Primary();
     private readonly TextBlock _artist = WidgetCopy.Secondary();
-    private readonly TextBlock _artGlyph = WidgetChrome.Glyph(GlyphMusic);
+    private readonly PhosphorGlyph _artGlyph = WidgetChrome.Glyph(GlyphMusic);
     private readonly Image _artImage = new() { Stretch = Stretch.UniformToFill, Visibility = Visibility.Collapsed };
     private readonly TextBlock _elapsed = WidgetCopy.Secondary();
     private readonly TextBlock _remaining = WidgetCopy.Secondary();
@@ -866,8 +1096,8 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
     };
     private readonly Grid _progressTrack;
     private readonly StackPanel _progressRow;
-    private readonly TextBlock _inlinePlayGlyph;
-    private readonly TextBlock _pillPlayGlyph;
+    private readonly PhosphorGlyph _inlinePlayGlyph;
+    private readonly PhosphorGlyph _pillPlayGlyph;
     private readonly Border _prevButton;
     private readonly Border _playButton;
     private readonly Border _nextButton;
@@ -878,9 +1108,10 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
     private readonly EventHandler _changed;
     private WidgetDensity _density = WidgetDensity.Expanded;
 
-    public NowPlayingWidget(IMediaProvider media)
+    public NowPlayingWidget(IMediaProvider media, WidgetDensity density = WidgetDensity.Expanded)
     {
         _media = media;
+        _density = density;
         _title.FontSize = 12;
         _title.TextTrimming = TextTrimming.CharacterEllipsis;
         _title.MaxWidth = 110;
@@ -893,12 +1124,10 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
         _elapsed.Margin = new Thickness(0);
         _remaining.FontSize = 10;
         _remaining.Margin = new Thickness(0);
-        _artGlyph.Tag = "tint";
-        _artGlyph.FontSize = 14;
+        _artGlyph.IconSize = 14;
         _artGlyph.Margin = new Thickness(0);
         _artGlyph.HorizontalAlignment = HorizontalAlignment.Center;
         _artGlyph.VerticalAlignment = VerticalAlignment.Center;
-        _artGlyph.TextAlignment = TextAlignment.Center;
         _inlinePlayGlyph = MediaGlyph(GlyphPlay, 11);
         _pillPlayGlyph = MediaGlyph(GlyphPlay, 14);
         _prevButton = TransportButton(GlyphPrevious, UiText.PreviousTrack, () => _ = _media.TrySkipPreviousAsync());
@@ -1003,12 +1232,48 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
         ApplyDensity(_density);
     }
 
+    public void ApplyDockEdge(DockEdge edge) => ArrangeDock(WidgetChrome.IsSide(edge));
+
     public void ApplyDensity(WidgetDensity density)
     {
+        var changed = _density != density;
         _density = density;
-        var expanded = density == WidgetDensity.Expanded;
+        ArrangeDock(WidgetChrome.IsSide(_edge));
+        if (changed)
+        {
+            IslandLayoutChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private DockEdge _edge = DockEdge.Top;
+
+    private void ArrangeDock(bool side)
+    {
+        _edge = side ? DockEdge.Left : DockEdge.Top;
+        var expanded = _density == WidgetDensity.Expanded;
+        if (_tile.Child is StackPanel row)
+        {
+            row.Orientation = side ? Orientation.Vertical : Orientation.Horizontal;
+            row.HorizontalAlignment = HorizontalAlignment.Center;
+        }
+
+        _detail.Orientation = side ? Orientation.Vertical : Orientation.Horizontal;
+        _detail.HorizontalAlignment = HorizontalAlignment.Center;
+        if (_detail.Children.Count > 0 && _detail.Children[0] is FrameworkElement art)
+        {
+            art.Margin = side ? new Thickness(0, 0, 0, 4) : new Thickness(0, 0, 8, 0);
+            art.HorizontalAlignment = HorizontalAlignment.Center;
+        }
+
+        _progressTrack.Width = side ? 48 : 72;
         _detail.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
         _playPill.Visibility = expanded ? Visibility.Collapsed : Visibility.Visible;
+        _playPill.HorizontalAlignment = HorizontalAlignment.Center;
+        _title.TextAlignment = side ? TextAlignment.Center : TextAlignment.Left;
+        _title.MaxWidth = side ? DockTokens.SideTileWidth - 16 : 110;
+        _artist.TextAlignment = side ? TextAlignment.Center : TextAlignment.Left;
+        _artist.HorizontalAlignment = side ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        WidgetChrome.FitEdge(_tile, side, 0);
         Render();
         _tile.InvalidateMeasure();
     }
@@ -1032,8 +1297,8 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
     {
         var wasPlaying = _media.Current?.IsPlaying == true;
         var next = wasPlaying ? GlyphPlay : GlyphPause;
-        _inlinePlayGlyph.Text = next;
-        _pillPlayGlyph.Text = next;
+        _inlinePlayGlyph.Icon = next;
+        _pillPlayGlyph.Icon = next;
         _playPill.ToolTip = wasPlaying ? UiText.Play : UiText.Pause;
         _inlinePlayGlyph.ToolTip = _playPill.ToolTip;
         await _media.TryPlayPauseAsync();
@@ -1056,8 +1321,8 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
             _artist.Text = string.Empty;
             _artist.Visibility = Visibility.Collapsed;
             _controls.Visibility = Visibility.Collapsed;
-            _inlinePlayGlyph.Text = GlyphPlay;
-            _pillPlayGlyph.Text = GlyphPlay;
+            _inlinePlayGlyph.Icon = GlyphPlay;
+            _pillPlayGlyph.Icon = GlyphPlay;
             _playPill.ToolTip = UiText.NoPlaybackSession;
             SetTransportEnabled(false, false, false);
             _artImage.Source = null;
@@ -1074,8 +1339,8 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
         _artist.Visibility = string.IsNullOrWhiteSpace(_artist.Text) ? Visibility.Collapsed : Visibility.Visible;
         _controls.Visibility = Visibility.Visible;
         var glyph = session.IsPlaying ? GlyphPause : GlyphPlay;
-        _inlinePlayGlyph.Text = glyph;
-        _pillPlayGlyph.Text = glyph;
+        _inlinePlayGlyph.Icon = glyph;
+        _pillPlayGlyph.Icon = glyph;
         _playPill.ToolTip = session.IsPlaying ? UiText.Pause : UiText.Play;
         SetTransportEnabled(session.CanPlayPause, session.CanSkipPrevious, session.CanSkipNext);
         _artImage.Source = ImageThumbCache.Load(session.ThumbnailPath, 64);
@@ -1120,7 +1385,7 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
     private static string FormatClock(TimeSpan value) =>
         value.TotalHours >= 1 ? value.ToString(@"h\:mm\:ss") : value.ToString(@"m\:ss");
 
-    private static Border TransportButton(string glyph, string tooltip, Action click, TextBlock? content = null)
+    private static Border TransportButton(string glyph, string tooltip, Action click, PhosphorGlyph? content = null)
     {
         var icon = content ?? MediaGlyph(glyph, 11);
         var button = new Border
@@ -1140,230 +1405,19 @@ public sealed class NowPlayingWidget : UserControl, IWidgetModeAware, IPrivacyAw
         return button;
     }
 
-    private static TextBlock MediaGlyph(string glyph, double size) => new()
+    private static PhosphorGlyph MediaGlyph(string glyph, double size) => new(glyph, size)
     {
-        Text = glyph,
-        FontFamily = new FontFamily("Segoe MDL2 Assets"),
-        FontSize = size,
         HorizontalAlignment = HorizontalAlignment.Center,
         VerticalAlignment = VerticalAlignment.Center
     };
 }
 
-public sealed class BingWallpaperWidget : UserControl, IWidgetModeAware, ILocalizable
-{
-    private const string GlyphPhoto = "\uE91B";
-    private const string GlyphPrevious = "\uE892";
-    private const string GlyphApply = "\uE8FB";
-    private const string GlyphNext = "\uE893";
-    private const double CopyWidth = 72;
-    private const double ThumbSize = 38;
-    private const double ThumbRadius = 8;
-
-    private readonly IBingWallpaperProvider _bing;
-    private readonly Func<Task>? _applyDesktop;
-    private readonly TextBlock _artGlyph = WidgetChrome.Glyph(GlyphPhoto, DockTokens.Bing);
-    private readonly Border _thumb;
-    private readonly TextBlock _title = WidgetCopy.Primary();
-    private readonly TextBlock _detail = WidgetCopy.Secondary();
-    private readonly StackPanel _copy;
-    private readonly Border _prev;
-    private readonly Border _apply;
-    private readonly Border _restore;
-    private readonly Border _next;
-    private readonly StackPanel _controls;
-    private readonly Border _tile;
-    private readonly EventHandler _changed;
-    private WidgetDensity _density = WidgetDensity.Expanded;
-
-    public BingWallpaperWidget(IBingWallpaperProvider bing, Func<Task>? applyDesktop = null)
-    {
-        _bing = bing;
-        _applyDesktop = applyDesktop;
-        _title.TextTrimming = TextTrimming.CharacterEllipsis;
-        _title.TextWrapping = TextWrapping.NoWrap;
-        _title.Width = CopyWidth;
-        _detail.TextTrimming = TextTrimming.CharacterEllipsis;
-        _detail.TextWrapping = TextWrapping.NoWrap;
-        _detail.Width = CopyWidth;
-        _artGlyph.Tag = "tint";
-        _artGlyph.FontSize = 13;
-        _artGlyph.Margin = new Thickness(0);
-        _artGlyph.HorizontalAlignment = HorizontalAlignment.Center;
-        _artGlyph.VerticalAlignment = VerticalAlignment.Center;
-        _prev = IconButton(GlyphPrevious, UiText.PreviousDay, () => _ = _bing.SelectRelativeAsync(-1));
-        _apply = IconButton(GlyphApply, UiText.SetAsDesktop, () => _ = ApplyDesktopAsync());
-        _restore = IconButton("\uE7A7", UiText.RestorePreviousWallpaper, () => _ = RestoreDesktopAsync());
-        _next = IconButton(GlyphNext, UiText.NextDay, () => _ = _bing.SelectRelativeAsync(1));
-        _thumb = new Border
-        {
-            Width = ThumbSize,
-            Height = ThumbSize,
-            CornerRadius = new CornerRadius(ThumbRadius),
-            Margin = new Thickness(0, 0, 8, 0),
-            SnapsToDevicePixels = true,
-            Child = _artGlyph
-        };
-        WidgetChrome.MarkQuietOverlay(_thumb);
-        _copy = new StackPanel
-        {
-            Width = CopyWidth,
-            MinWidth = CopyWidth,
-            MaxWidth = CopyWidth,
-            VerticalAlignment = VerticalAlignment.Center,
-            Children = { _title, _detail }
-        };
-        _changed = UiPump.Coalesce(Dispatcher, Render);
-        _controls = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center,
-            Children = { _prev, _apply, _restore, _next }
-        };
-        _tile = WidgetChrome.Wrap(new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center,
-            Children = { _thumb, _copy, _controls }
-        }, 0);
-        Content = _tile;
-        MouseLeftButtonUp += (_, e) =>
-        {
-            if (_bing.Current.Selected is null)
-            {
-                _ = _bing.RefreshAsync();
-                e.Handled = true;
-            }
-        };
-        Loaded += (_, _) =>
-        {
-            _bing.Changed += _changed;
-            Render();
-            _ = _bing.RefreshAsync();
-        };
-        Unloaded += (_, _) => _bing.Changed -= _changed;
-        ApplyDensity(_density);
-    }
-
-    public void ApplyDensity(WidgetDensity density)
-    {
-        _density = density;
-        var compact = density != WidgetDensity.Expanded;
-        _copy.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        _controls.Margin = compact ? new Thickness(0) : new Thickness(8, 0, 0, 0);
-        _tile.InvalidateMeasure();
-        InvalidateMeasure();
-    }
-
-    public void ApplyLocale()
-    {
-        _prev.ToolTip = UiText.PreviousDay;
-        _apply.ToolTip = UiText.SetAsDesktop;
-        _restore.ToolTip = UiText.RestorePreviousWallpaper;
-        _next.ToolTip = UiText.NextDay;
-        Render();
-    }
-
-    private void Render()
-    {
-        var snapshot = _bing.Current;
-        var selected = snapshot.Selected;
-        _prev.IsEnabled = !snapshot.IsBusy;
-        _next.IsEnabled = !snapshot.IsBusy;
-        _apply.IsEnabled = !snapshot.IsBusy && selected is not null;
-        _restore.Visibility = _bing.CanRestorePreviousWallpaper ? Visibility.Visible : Visibility.Collapsed;
-        _restore.IsEnabled = !snapshot.IsBusy && _bing.CanRestorePreviousWallpaper;
-        if (selected is null)
-        {
-            _title.Text = UiText.WidgetBing;
-            _detail.Text = snapshot.Error ?? (snapshot.IsBusy ? UiText.Loading : UiText.ClickRetry);
-            ShowThumb(null);
-            return;
-        }
-
-        _title.Text = selected.Title;
-        _detail.Text = snapshot.Error
-                       ?? (snapshot.AppliedKey == selected.Key
-                           ? UiText.SetAsDesktopDone
-                           : snapshot.IsBusy ? UiText.Loading : BingWallpaperArchive.FormatDate(selected.StartDate));
-        ToolTip = selected.Copyright;
-        ShowThumb(ImageThumbCache.Load(snapshot.LocalPath, 96));
-    }
-
-    private async Task ApplyDesktopAsync()
-    {
-        if (_applyDesktop is not null)
-        {
-            await _applyDesktop().ConfigureAwait(true);
-        }
-        else
-        {
-            await _bing.TryApplyCurrentAsync().ConfigureAwait(true);
-        }
-
-        Render();
-    }
-
-    private async Task RestoreDesktopAsync()
-    {
-        var ok = await _bing.TryRestorePreviousAsync().ConfigureAwait(true);
-        UserAlerts.Show("WinDock", ok ? UiText.WallpaperRestored : UiText.WallpaperRestoreFailed);
-        Render();
-    }
-
-    private void ShowThumb(ImageSource? image)
-    {
-        if (image is null)
-        {
-            WidgetChrome.MarkQuietOverlay(_thumb);
-            _thumb.Child = _artGlyph;
-            return;
-        }
-
-        var brush = new ImageBrush(image)
-        {
-            Stretch = Stretch.UniformToFill,
-            AlignmentX = AlignmentX.Center,
-            AlignmentY = AlignmentY.Center
-        };
-        brush.Freeze();
-        _thumb.Tag = null;
-        _thumb.Background = brush;
-        _thumb.Child = null;
-    }
-
-    private static Border IconButton(string glyph, string tooltip, Action click)
-    {
-        var icon = new TextBlock
-        {
-            Text = glyph,
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 11,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        var button = new Border
-        {
-            Width = 22,
-            Height = 22,
-            Background = Brushes.Transparent,
-            Cursor = Cursors.Hand,
-            ToolTip = tooltip,
-            Child = icon
-        };
-        AutomationProperties.SetName(button, tooltip);
-        button.MouseLeftButtonUp += (_, e) =>
-        {
-            click();
-            e.Handled = true;
-        };
-        return button;
-    }
-}
 
 internal static class ImageThumbCache
 {
+    private const int MaxEntries = 48;
     private static readonly Dictionary<string, ImageSource> Cache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Queue<string> Order = new();
 
     public static ImageSource? Load(string? path, int decodeWidth)
     {
@@ -1392,7 +1446,13 @@ internal static class ImageThumbCache
             bitmap.Freeze();
             lock (Cache)
             {
+                while (Cache.Count >= MaxEntries && Order.TryDequeue(out var oldest))
+                {
+                    Cache.Remove(oldest);
+                }
+
                 Cache[key] = bitmap;
+                Order.Enqueue(key);
             }
 
             return bitmap;

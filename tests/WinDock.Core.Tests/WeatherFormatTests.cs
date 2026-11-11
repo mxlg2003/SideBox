@@ -149,6 +149,76 @@ public class WeatherFormatTests
     }
 
     [Fact]
+    public void WeatherProvider_keeps_per_city_snapshots()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var cache = new
+        {
+            cities = new Dictionary<string, WeatherSnapshot>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["北京"] = new WeatherSnapshot
+                {
+                    City = "北京",
+                    TemperatureC = 11,
+                    AirQualityIndex = 40,
+                    Condition = WeatherCondition.Clear,
+                    ConditionText = "晴",
+                    UpdatedTime = DateTime.Now,
+                    Error = WeatherError.None
+                },
+                ["上海"] = new WeatherSnapshot
+                {
+                    City = "上海",
+                    TemperatureC = 22,
+                    AirQualityIndex = 80,
+                    Condition = WeatherCondition.Rain,
+                    ConditionText = "雨",
+                    UpdatedTime = DateTime.Now,
+                    Error = WeatherError.None
+                }
+            }
+        };
+        File.WriteAllText(
+            Path.Combine(dir, "weather-cache.json"),
+            System.Text.Json.JsonSerializer.Serialize(cache));
+
+        using var provider = new WinDock.Providers.WeatherProvider(dir);
+        var beijing = provider.SnapshotFor(new WeatherSettings { City = "北京" });
+        var shanghai = provider.SnapshotFor(new WeatherSettings { City = "上海" });
+
+        Assert.Equal(11, beijing?.TemperatureC);
+        Assert.Equal(22, shanghai?.TemperatureC);
+        Assert.Equal("北京", beijing?.City);
+        Assert.Equal("上海", shanghai?.City);
+    }
+
+    [Fact]
+    public void WeatherProvider_reads_legacy_single_city_cache()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var snapshot = new WeatherSnapshot
+        {
+            City = "成都",
+            TemperatureC = 18,
+            AirQualityIndex = 55,
+            Condition = WeatherCondition.Overcast,
+            ConditionText = "阴",
+            UpdatedTime = DateTime.Now,
+            Error = WeatherError.None
+        };
+        File.WriteAllText(
+            Path.Combine(dir, "weather-cache.json"),
+            System.Text.Json.JsonSerializer.Serialize(snapshot));
+
+        using var provider = new WinDock.Providers.WeatherProvider(dir);
+        var loaded = provider.SnapshotFor(new WeatherSettings { City = "成都" });
+        Assert.Equal(18, loaded?.TemperatureC);
+        Assert.True(loaded?.IsOffline);
+    }
+
+    [Fact]
     public void WidgetChrome_scroll_bar_style_created_and_applied()
     {
         Exception? error = null;

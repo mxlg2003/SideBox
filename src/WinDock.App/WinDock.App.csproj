@@ -3,11 +3,18 @@
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
     <RootNamespace>WinDock.App</RootNamespace>
-    <AssemblyName>WinDock</AssemblyName>
+    <AssemblyName>SideBox</AssemblyName>
+    <Product>SideBox</Product>
+    <AssemblyTitle>SideBox</AssemblyTitle>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\WinDock.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <EnableDefaultApplicationDefinition>true</EnableDefaultApplicationDefinition>
   </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Assets\WinDock.png" />
+    <Resource Include="Assets\preview-wallpaper.jpg" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\WinDock.Core\WinDock.Core.csproj" />
     <ProjectReference Include="..\WinDock.Shell\WinDock.Shell.csproj" />

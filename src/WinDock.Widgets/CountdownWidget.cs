@@ -11,10 +11,10 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownConfigurable, IKeepAliveWhileRunning, ILocalizable, IWidgetDetachable
+public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownConfigurable, IKeepAliveWhileRunning, ILocalizable, IWidgetDetachable, IDockEdgeAware
 {
     private const uint Accent = 0xFF0078D4;
-    private const string GlyphTimer = "\uE916";
+    private const string GlyphTimer = PhosphorIcon.Timer;
 
     private readonly CountdownEngine _engine = new();
     private readonly TextBlock _tileTime = WidgetCopy.Primary();
@@ -22,7 +22,7 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
     private readonly TextBlock _panelTime = WidgetCopy.Primary();
     private readonly TextBlock _primaryLabel = WidgetCopy.Primary();
     private readonly TextBlock _saved = WidgetCopy.Secondary();
-    private readonly TextBlock _glyph = WidgetChrome.Glyph(GlyphTimer);
+    private readonly PhosphorGlyph _glyph = WidgetChrome.Glyph(GlyphTimer);
     private readonly TextBox _name = FieldBox();
     private readonly TextBox _hours = DigitBox();
     private readonly TextBox _minutes = DigitBox();
@@ -46,6 +46,8 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
     private TextBlock _resetLabel = null!;
     private Action? _repeatClick;
     private bool _applying;
+    private bool _side;
+    private readonly StackPanel _dock;
     private bool _suppressFields;
 
     public CountdownWidget()
@@ -65,7 +67,7 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
         _saved.HorizontalAlignment = HorizontalAlignment.Center;
         _saved.Margin = new Thickness(0, 10, 0, 0);
         _saved.Visibility = Visibility.Collapsed;
-        _glyph.FontSize = 16;
+        _glyph.IconSize = 16;
         _glyph.Margin = new Thickness(0, 0, 8, 0);
 
         var copy = new StackPanel
@@ -73,15 +75,16 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
             VerticalAlignment = VerticalAlignment.Center,
             Children = { _tileTime, _tileStatus }
         };
-        _tile = WidgetChrome.Wrap(new StackPanel
+        _dock = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
             Children = { _glyph, copy }
-        }, 0);
+        };
+        _tile = WidgetChrome.Wrap(_dock, 0);
 
         _flyoutTitle = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.Countdown));
-        var close = HeaderGlyph("\u00D7", ClosePopup, 18);
+        var close = WidgetChrome.HeaderClose(ClosePopup, 18);
         var header = HeaderRow(_flyoutTitle, close);
 
         _presetsCaption = Caption(CountdownFormat.Presets);
@@ -101,7 +104,7 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
         _nameLabel = Caption(CountdownFormat.TimerName);
         _nameLabel.VerticalAlignment = VerticalAlignment.Center;
         _nameLabel.Margin = new Thickness(0, 0, 12, 0);
-        var nameHost = WidgetChrome.Field(_name, 34);
+        var nameHost = WidgetChrome.Field(_name);
         Grid.SetColumn(nameHost, 1);
         nameRow.Children.Add(_nameLabel);
         nameRow.Children.Add(nameHost);
@@ -240,6 +243,25 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
     public event EventHandler<CountdownSettings>? SettingsChanged;
 
     public bool IsAlive => _engine.Running;
+
+    public void ApplyDockEdge(DockEdge edge)
+    {
+        _side = WidgetChrome.IsSide(edge);
+        _dock.Orientation = _side ? Orientation.Vertical : Orientation.Horizontal;
+        _dock.HorizontalAlignment = HorizontalAlignment.Center;
+        _glyph.Margin = _side ? new Thickness(0, 0, 0, 2) : new Thickness(0, 0, 8, 0);
+        _glyph.HorizontalAlignment = HorizontalAlignment.Center;
+        if (_dock.Children.Count > 1 && _dock.Children[1] is StackPanel copy)
+        {
+            copy.HorizontalAlignment = HorizontalAlignment.Center;
+        }
+
+        _tileTime.HorizontalAlignment = HorizontalAlignment.Center;
+        _tileTime.TextAlignment = _side ? TextAlignment.Center : TextAlignment.Left;
+        _tileStatus.HorizontalAlignment = HorizontalAlignment.Center;
+        _tileStatus.TextAlignment = _side ? TextAlignment.Center : TextAlignment.Left;
+        WidgetChrome.FitEdge(_tile, _side, 0);
+    }
 
     public void Detach()
     {
@@ -592,8 +614,7 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
         time.Text = CountdownFormat.Time(CountdownSettings.ToDuration(preset.Hours, preset.Minutes, preset.Seconds));
         time.Margin = new Thickness(8, 0, 4, 0);
         time.VerticalAlignment = VerticalAlignment.Center;
-        var remove = HeaderGlyph("\u00D7", () => DeletePreset(preset.Id), 16);
-        remove.Padding = new Thickness(8, 4, 4, 4);
+        var remove = WidgetChrome.HeaderClose(() => DeletePreset(preset.Id));
         var row = new Grid();
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -737,7 +758,7 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
             TextAlignment = TextAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Center,
-            Padding = new Thickness(4, 8, 0, 4)
+            Padding = new Thickness(0)
         };
         InputMethod.SetIsInputMethodEnabled(box, false);
         return box;
@@ -750,8 +771,8 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 2, 6, 0)
         };
-        spinner.Children.Add(SpinnerButton("\uE70E", () => NudgePart(part, 1, max)));
-        spinner.Children.Add(SpinnerButton("\uE70D", () => NudgePart(part, -1, max)));
+        spinner.Children.Add(SpinnerButton(PhosphorIcon.CaretUp, () => NudgePart(part, 1, max)));
+        spinner.Children.Add(SpinnerButton(PhosphorIcon.CaretDown, () => NudgePart(part, -1, max)));
         Panel.SetZIndex(spinner, 1);
         _spinners.Add(spinner);
 
@@ -806,11 +827,8 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
 
     private Border SpinnerButton(string glyph, Action click)
     {
-        var icon = new TextBlock
+        var icon = new PhosphorGlyph(glyph, 8)
         {
-            Text = glyph,
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 8,
             Opacity = 0.55,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
@@ -864,7 +882,7 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
         var border = new Border
         {
             MinWidth = 88,
-            Height = 34,
+            Height = DockTokens.FlyoutControlHeight,
             CornerRadius = new CornerRadius(DockTokens.IslandCornerRadius),
             Padding = new Thickness(16, 0, 16, 0),
             Margin = new Thickness(4, 0, 4, 0),
@@ -920,25 +938,6 @@ public sealed class CountdownWidget : UserControl, IWidgetOpenable, ICountdownCo
         VerticalAlignment = VerticalAlignment.Center
     };
 
-    private static TextBlock HeaderGlyph(string glyph, Action click, double size = 13)
-    {
-        var block = new TextBlock
-        {
-            Text = glyph,
-            FontFamily = glyph == "\u00D7" ? WidgetFonts.Ui : new FontFamily("Segoe MDL2 Assets"),
-            FontSize = size,
-            Opacity = 0.45,
-            Padding = new Thickness(8, 4, 0, 4),
-            Cursor = Cursors.Hand,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        block.MouseLeftButtonUp += (_, e) =>
-        {
-            click();
-            e.Handled = true;
-        };
-        return block;
-    }
 
     private static DateTimeOffset Now => DateTimeOffset.UtcNow;
 }

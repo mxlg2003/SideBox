@@ -32,8 +32,11 @@ internal static class DwmBackdrop
 
             ForceLayered(hwnd);
 
-            var none = DwmsbtNone;
-            DwmSetWindowAttribute(hwnd, DwmwaSystemBackdropType, ref none, sizeof(int));
+            if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621))
+            {
+                var none = DwmsbtNone;
+                DwmSetWindowAttribute(hwnd, DwmwaSystemBackdropType, ref none, sizeof(int));
+            }
             ClearAccent(hwnd);
             return true;
         }

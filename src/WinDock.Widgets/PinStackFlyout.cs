@@ -13,7 +13,20 @@ namespace WinDock.Widgets;
 public sealed class PinStackFlyout
 {
     private readonly Popup _popup = new();
-    private readonly StackPanel _row = new();
+    private readonly ScrollViewer _scroll = new()
+    {
+        Focusable = false,
+        HorizontalAlignment = HorizontalAlignment.Left,
+        VerticalAlignment = VerticalAlignment.Top,
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        VerticalScrollBarVisibility = ScrollBarVisibility.Disabled
+    };
+    private readonly StackPanel _bands = new()
+    {
+        HorizontalAlignment = HorizontalAlignment.Left,
+        VerticalAlignment = VerticalAlignment.Top
+    };
+    private readonly List<Border> _tiles = [];
     private readonly Border _host;
     private readonly Border _card;
     private readonly ScaleTransform _scale = new(1, 1);
@@ -27,9 +40,10 @@ public sealed class PinStackFlyout
 
     public PinStackFlyout()
     {
-        _row.Orientation = Orientation.Horizontal;
-        _host = WidgetChrome.Flyout(_row, minWidth: 0);
-        _card = _host.Child as Border ?? new Border { Child = _row, Tag = WidgetChrome.FlyoutTag };
+        _scroll.Content = _bands;
+        WidgetChrome.PaintScrollViewer(_scroll, false);
+        _host = WidgetChrome.Flyout(_scroll, minWidth: 0);
+        _card = _host.Child as Border ?? new Border { Child = _scroll, Tag = WidgetChrome.FlyoutTag };
         _card.Padding = new Thickness(
             DockTokens.TilePaddingX,
             DockTokens.TilePaddingY,
@@ -55,7 +69,9 @@ public sealed class PinStackFlyout
             _dismissedKind = _kind;
             _dismissedAt = DateTime.UtcNow;
             _kind = null;
-            _row.Children.Clear();
+            _bands.Children.Clear();
+            _tiles.Clear();
+            ResetScroll();
             _popup.StaysOpen = false;
         };
     }
@@ -75,18 +91,19 @@ public sealed class PinStackFlyout
         _isLight = isLight;
         _backdrop = backdrop;
         WidgetChrome.ApplyTheme(_card, isLight, backdrop);
-        foreach (UIElement child in _row.Children)
+        WidgetChrome.PaintScrollViewer(_scroll, isLight);
+        foreach (var tile in _tiles)
         {
-            PaintPin(child);
+            PaintPin(tile);
         }
     }
 
     public void SetRunning(IReadOnlySet<string> runningIds)
     {
         _running = runningIds;
-        foreach (UIElement child in _row.Children)
+        foreach (var tile in _tiles)
         {
-            if (child is FrameworkElement { Tag: DockItem item } tile && FindDot(tile) is { } dot)
+            if (tile.Tag is DockItem item && FindDot(tile) is { } dot)
             {
                 dot.Visibility = runningIds.Contains(item.Id) ? Visibility.Visible : Visibility.Collapsed;
             }
@@ -100,7 +117,9 @@ public sealed class PinStackFlyout
         Func<DockItem, ImageSource?>? icon,
         bool isLight,
         DockBackdrop backdrop,
-        IReadOnlySet<string> runningIds)
+        IReadOnlySet<string> runningIds,
+        RectLogical workArea,
+        RectLogical island)
     {
         if (_popup.IsOpen && _kind == kind)
         {
@@ -115,7 +134,7 @@ public sealed class PinStackFlyout
             return;
         }
 
-        Show(target, kind, members, icon, isLight, backdrop, runningIds);
+        Show(target, kind, members, icon, isLight, backdrop, runningIds, workArea, island);
     }
 
     public void Show(
@@ -125,35 +144,105 @@ public sealed class PinStackFlyout
         Func<DockItem, ImageSource?>? icon,
         bool isLight,
         DockBackdrop backdrop,
-        IReadOnlySet<string> runningIds)
+        IReadOnlySet<string> runningIds,
+        RectLogical workArea,
+        RectLogical island)
     {
         _kind = kind;
         _icon = icon;
         _running = runningIds;
         _popup.PlacementTarget = target;
-        _row.Orientation = WidgetFlyout.Edge is DockEdge.Left or DockEdge.Right
-            ? Orientation.Vertical
-            : Orientation.Horizontal;
-        _row.Children.Clear();
-        for (var i = 0; i < members.Count; i++)
+        var edge = WidgetFlyout.Edge;
+        var horizontal = edge is not DockEdge.Left and not DockEdge.Right;
+        _bands.Children.Clear();
+        _tiles.Clear();
+        ResetScroll();
+        var tiles = new List<Border>(members.Count);
+        foreach (var member in members)
         {
-            var tile = CreatePin(members[i]);
-            if (i < members.Count - 1)
-            {
-                tile.Margin = _row.Orientation == Orientation.Horizontal
-                    ? new Thickness(0, 0, DockTokens.TileGap, 0)
-                    : new Thickness(0, 0, 0, DockTokens.TileGap);
-            }
-
-            _row.Children.Add(tile);
+            tiles.Add(CreatePin(member));
         }
 
+        var arrangement = PinStackGrid.Arrange(
+            tiles.Select(tile => tile.Width).ToArray(),
+            horizontal,
+            PinStackGrid.Budget(workArea, island, edge));
+        Fill(arrangement, tiles);
+        ApplyScroll(arrangement);
         ApplyTheme(isLight, backdrop);
         SetRunning(runningIds);
         _popup.IsOpen = true;
     }
 
     public void Hide() => _popup.IsOpen = false;
+
+    private void Fill(PinStackGrid.Arrangement arrangement, IReadOnlyList<Border> tiles)
+    {
+        _bands.Orientation = arrangement.Horizontal ? Orientation.Vertical : Orientation.Horizontal;
+        _tiles.AddRange(tiles);
+        for (var bandIndex = 0; bandIndex < arrangement.Bands.Count; bandIndex++)
+        {
+            var indexes = arrangement.Bands[bandIndex];
+            var line = new StackPanel
+            {
+                Orientation = arrangement.Horizontal ? Orientation.Horizontal : Orientation.Vertical,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top
+            };
+            for (var i = 0; i < indexes.Count; i++)
+            {
+                var tile = tiles[indexes[i]];
+                var last = i == indexes.Count - 1;
+                tile.Margin = arrangement.Horizontal
+                    ? new Thickness(0, 0, last ? 0 : DockTokens.TileGap, 0)
+                    : new Thickness(0, 0, 0, last ? 0 : DockTokens.TileGap);
+                line.Children.Add(tile);
+            }
+
+            var lastBand = bandIndex == arrangement.Bands.Count - 1;
+            line.Margin = arrangement.Horizontal
+                ? new Thickness(0, 0, 0, lastBand ? 0 : DockTokens.TileGap)
+                : new Thickness(0, 0, lastBand ? 0 : DockTokens.TileGap, 0);
+            _bands.Children.Add(line);
+        }
+    }
+
+    private void ApplyScroll(PinStackGrid.Arrangement arrangement)
+    {
+        _scroll.HorizontalScrollBarVisibility = arrangement.ScrollsHorizontally
+            ? ScrollBarVisibility.Auto
+            : ScrollBarVisibility.Disabled;
+        _scroll.VerticalScrollBarVisibility = arrangement.ScrollsVertically
+            ? ScrollBarVisibility.Auto
+            : ScrollBarVisibility.Disabled;
+        if (arrangement.ScrollWidth is null && arrangement.ScrollHeight is null)
+        {
+            return;
+        }
+
+        _bands.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var extraWidth = Math.Max(0, _bands.DesiredSize.Width - arrangement.ContentWidth);
+        var extraHeight = Math.Max(0, _bands.DesiredSize.Height - arrangement.ContentHeight);
+        if (arrangement.ScrollWidth is > 0 and var width)
+        {
+            _scroll.Width = width + (arrangement.ScrollsHorizontally ? 0 : extraWidth);
+        }
+
+        if (arrangement.ScrollHeight is > 0 and var height)
+        {
+            _scroll.Height = height + (arrangement.ScrollsVertically ? 0 : extraHeight);
+        }
+    }
+
+    private void ResetScroll()
+    {
+        _scroll.ClearValue(FrameworkElement.WidthProperty);
+        _scroll.ClearValue(FrameworkElement.HeightProperty);
+        _scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        _scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        _scroll.ScrollToHorizontalOffset(0);
+        _scroll.ScrollToVerticalOffset(0);
+    }
 
     private Border CreatePin(DockItem item)
     {
@@ -187,11 +276,8 @@ public sealed class PinStackFlyout
         }
         else
         {
-            face = new TextBlock
+            face = new PhosphorGlyph(Glyph(item.Type, missing), 26)
             {
-                Text = Glyph(item.Type, missing),
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                FontSize = 26,
                 Opacity = missing ? 0.45 : 0.9,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
@@ -266,7 +352,7 @@ public sealed class PinStackFlyout
     {
         var menu = new ContextMenu
         {
-            FontFamily = new FontFamily("Segoe UI Variable, Segoe UI"),
+            FontFamily = UiFont.Family,
             FontSize = 13,
             PlacementTarget = target
         };
@@ -304,6 +390,9 @@ public sealed class PinStackFlyout
                 break;
             case Ellipse { Tag: "pin-running" } dot:
                 dot.Fill = TokenBrushes.From(_isLight ? 0xFF1A1A1A : 0xFFFFFFFF);
+                break;
+            case PhosphorGlyph icon:
+                icon.Foreground = TokenBrushes.From(_isLight ? DockTokens.Light.Text : DockTokens.Dark.Text);
                 break;
             case TextBlock text:
                 if (text.Tag as string == "pin-badge")
@@ -362,14 +451,14 @@ public sealed class PinStackFlyout
     {
         if (missing)
         {
-            return "\uE783";
+            return PhosphorIcon.Warning;
         }
 
         return type switch
         {
-            DockItemType.Folder => "\uE8B7",
-            DockItemType.App => "\uE756",
-            _ => "\uE8A5"
+            DockItemType.Folder => PhosphorIcon.Folder,
+            DockItemType.App => PhosphorIcon.AppWindow,
+            _ => PhosphorIcon.File
         };
     }
 
@@ -379,9 +468,8 @@ public sealed class PinStackFlyout
         var label = new TextBlock
         {
             Tag = "pin-badge",
-            Text = DockPins.FolderBadge(title),
-            FontFamily = new FontFamily("Segoe UI Variable, Segoe UI"),
             FontSize = 9,
+            FontWeight = FontWeights.Normal,
             TextAlignment = TextAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
             TextWrapping = TextWrapping.NoWrap,
@@ -390,6 +478,7 @@ public sealed class PinStackFlyout
             VerticalAlignment = VerticalAlignment.Center,
             Foreground = TokenBrushes.From(0xFF1A1A1A)
         };
+        FolderCaption.Apply(label, DockPins.FolderBadge(title));
         return new Border
         {
             Tag = "pin-badge",

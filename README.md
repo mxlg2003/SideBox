@@ -1,15 +1,15 @@
-# WinDock
+# SideBox
 
-Windows 11 上的情境化桌面控制面：常驻边缘 Dock（模块直接嵌在条上）。手动换情景默认关闭。
+Windows 10 / 11 上贴在屏幕边缘的悬浮岛：钉程序，并查看时钟、便笺等模块。手动换情景默认打开，放在设置的「高级」里。系统专注、显示器和时间的自动切换默认关闭。
 
-WinDock 不是 macOS Dock 的逐像素复刻，也不是 Explorer / 任务栏替换。它只切换启动项、信息和轻量动作，默认不接管窗口管理。
+SideBox 不是 macOS Dock 的逐像素复刻，也不是 Explorer / 任务栏替换。它只切换启动项、信息和轻量动作，默认不接管窗口管理。
 
 手动换情景**默认打开**（`ProductFeatures.ProfilesEnabled`）。系统专注 / 显示器 / 时间**自动切换尚未开放**。出厂日常为时钟 + 便笺，默认不自动隐藏。`general`（日常）不能删除。
 
 ## 最低环境
 
-- Windows 11 22H2（build 22621）或更新
-- .NET 10 SDK（本机已有 Windows Desktop Runtime 即可）
+- Windows 10 2004（build 19041）或更新（全面兼容 Windows 10 与 Windows 11）
+- .NET 10 SDK（开发）。发布用的安装包是自包含的，不要求用户另装桌面运行时
 - Visual Studio 2022 或 `dotnet` CLI
 
 ## 仓库入口
@@ -33,8 +33,8 @@ dotnet run --project src/WinDock.App
 dotnet run --project src/WinDock.App -- --safe
 ```
 
-配置目录：`%AppData%\WinDock\`  
-日志目录：`%LocalAppData%\WinDock\logs\`
+配置目录：`%AppData%\SideBox\`  
+日志目录：`%LocalAppData%\SideBox\logs\`
 
 ## 发布
 
@@ -42,6 +42,16 @@ dotnet run --project src/WinDock.App -- --safe
 powershell -NoProfile -File pack/publish.ps1
 ```
 
-用 [Inno Setup](https://jrsoftware.org/isinfo.php) 编译 `pack/WinDock.iss`。安装器会拷贝 publish 输出、开始菜单快捷方式，可选任务「开机启动」。卸载删除 Run 键，**保留** `%AppData%\WinDock` 与日志。
+用 [Inno Setup](https://jrsoftware.org/isinfo.php) 编译 `pack/WinDock.iss`。安装器会拷贝 publish 输出、开始菜单快捷方式，可选任务「开机启动」。卸载删除 Run 键，**保留** `%AppData%\SideBox` 与日志。安装包文件为 `pack/output/SideBox-setup.exe`，图标与程序相同。
 
 有 Authenticode 证书时，再按脚本注释打开 `SignTool`。仓库不内置证书。
+
+## 官网
+
+项目展示官网位于 `website/`。开发地址 `http://127.0.0.1:5175`。
+
+```powershell
+cd website
+npm install
+npm run dev
+```

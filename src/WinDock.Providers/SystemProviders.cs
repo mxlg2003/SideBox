@@ -94,6 +94,7 @@ public sealed class Win32PowerProvider : IPowerProvider, IDisposable
 {
     private readonly System.Threading.Timer _timer;
     private BluetoothPresenceWatcher? _bluetooth;
+    private PowerSampleOptions _options = PowerSampleOptions.Default;
     private int _busy;
     private int _disposed;
     private int _started;
@@ -101,7 +102,7 @@ public sealed class Win32PowerProvider : IPowerProvider, IDisposable
 
     public Win32PowerProvider()
     {
-        Current = Combine(ReadSystem(), []);
+        Current = Combine(ReadSystem(PowerSampleOptions.Default), []);
         _timer = new System.Threading.Timer(_ => Pulse(), null, Timeout.Infinite, Timeout.Infinite);
     }
 
@@ -139,6 +140,15 @@ public sealed class Win32PowerProvider : IPowerProvider, IDisposable
         ThreadPool.QueueUserWorkItem(_ => Pulse());
     }
 
+    public void SetOptions(PowerSampleOptions options)
+    {
+        _options = options ?? PowerSampleOptions.Default;
+        if (Volatile.Read(ref _started) == 1)
+        {
+            ThreadPool.QueueUserWorkItem(_ => Pulse());
+        }
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 1)
@@ -150,7 +160,7 @@ public sealed class Win32PowerProvider : IPowerProvider, IDisposable
         _timer.Dispose();
     }
 
-    public static PowerSnapshot Read() => Combine(ReadSystem(), []);
+    public static PowerSnapshot Read() => Combine(ReadSystem(PowerSampleOptions.Default), []);
 
     private void RequestBurst()
     {
@@ -177,7 +187,7 @@ public sealed class Win32PowerProvider : IPowerProvider, IDisposable
 
         try
         {
-            var snapshot = Combine(ReadSystem(), PowerDeviceEnumerator.TryRead());
+            var snapshot = Combine(ReadSystem(_options), PowerDeviceEnumerator.TryRead());
             if (PowerPoll.PresenceChanged(Current.Devices, snapshot.Devices))
             {
                 Volatile.Write(ref _burstUntilTicks, Environment.TickCount64 + (long)PowerPoll.BurstFor.TotalMilliseconds);
@@ -254,7 +264,7 @@ public sealed class Win32PowerProvider : IPowerProvider, IDisposable
         return system with { Devices = devices };
     }
 
-    private static PowerSnapshot ReadSystem()
+    private static PowerSnapshot ReadSystem(PowerSampleOptions options)
     {
         try
         {
@@ -264,17 +274,54 @@ public sealed class Win32PowerProvider : IPowerProvider, IDisposable
             }
 
             var noBattery = (status.BatteryFlag & 128) != 0 || status.BatteryLifePercent == 255;
-            return new PowerSnapshot
+            var remaining = options.Remaining && !noBattery && status.ACLineStatus != 1 && status.BatteryLifeTime >= 0
+                ? status.BatteryLifeTime
+                : (int?)null;
+            var snapshot = new PowerSnapshot
             {
                 Timestamp = DateTimeOffset.UtcNow,
                 HasBattery = !noBattery,
                 OnAcPower = status.ACLineStatus == 1,
-                PercentRemaining = noBattery ? null : status.BatteryLifePercent
+                PercentRemaining = noBattery ? null : status.BatteryLifePercent,
+                RemainingSeconds = remaining
             };
+            return options.Watts || options.Health ? MergeBatteryReport(snapshot, options) : snapshot;
         }
         catch (Exception)
         {
             return Empty();
+        }
+    }
+
+    private static PowerSnapshot MergeBatteryReport(PowerSnapshot system, PowerSampleOptions options)
+    {
+        try
+        {
+            var report = Windows.Devices.Power.Battery.AggregateBattery.GetReport();
+            int? watts = null;
+            int? health = null;
+            if (options.Watts && report.ChargeRateInMilliwatts is int rate)
+            {
+                watts = rate;
+            }
+
+            if (options.Health
+                && report.FullChargeCapacityInMilliwattHours is int full
+                && report.DesignCapacityInMilliwattHours is int design
+                && design > 0)
+            {
+                health = (int)Math.Clamp(Math.Round(full * 100.0 / design), 0, 100);
+            }
+
+            return system with
+            {
+                ChargeRateMilliwatts = watts,
+                HealthPercent = health
+            };
+        }
+        catch (Exception)
+        {
+            return system;
         }
     }
 
@@ -302,8 +349,21 @@ public sealed class Win32PowerProvider : IPowerProvider, IDisposable
 public sealed class PerformanceCounterSampler : IPerfSampler, IDisposable
 {
     private readonly System.Threading.Timer _timer;
-    private System.Diagnostics.PerformanceCounter? _cpu;
-    private bool _cpuReady;
+    private readonly object _optionsGate = new();
+    private PerfSampleOptions _options = PerfSampleOptions.Default;
+    private System.Diagnostics.PerformanceCounter? _frequency;
+    private System.Diagnostics.PerformanceCounter? _commitUsed;
+    private System.Diagnostics.PerformanceCounter? _commitLimit;
+    private long _cpuIdle;
+    private long _cpuKernel;
+    private long _cpuUser;
+    private bool _cpuPrimed;
+    private long[] _coreIdle = [];
+    private long[] _coreTotal = [];
+    private bool _coresPrimed;
+    private bool _frequencyReady;
+    private bool _commitReady;
+    private TimeSpan _period = TimeSpan.FromSeconds(2);
     private int _started;
     private int _busy;
     private int _disposed;
@@ -341,7 +401,39 @@ public sealed class PerformanceCounterSampler : IPerfSampler, IDisposable
             Sample();
         });
 
-        _timer.Change(TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+        Arm();
+    }
+
+    public void SetQuiet(bool quiet)
+    {
+        lock (_optionsGate)
+        {
+            _period = quiet ? TimeSpan.FromSeconds(10) : TimeSpan.FromSeconds(2);
+        }
+
+        Arm();
+    }
+
+    private void Arm()
+    {
+        if (Volatile.Read(ref _started) == 0 || Volatile.Read(ref _disposed) == 1)
+        {
+            return;
+        }
+
+        TimeSpan period;
+        lock (_optionsGate)
+        {
+            period = _period;
+        }
+
+        try
+        {
+            _timer.Change(period, period);
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     public void Stop()
@@ -368,8 +460,28 @@ public sealed class PerformanceCounterSampler : IPerfSampler, IDisposable
         }
 
         _timer.Dispose();
-        _cpu?.Dispose();
+        _frequency?.Dispose();
+        _commitUsed?.Dispose();
+        _commitLimit?.Dispose();
     }
+
+    public void SetOptions(PerfSampleOptions options)
+    {
+        lock (_optionsGate)
+        {
+            _options = options ?? PerfSampleOptions.Default;
+        }
+
+        if (Volatile.Read(ref _started) == 1)
+        {
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                EnsureCounters();
+                Sample();
+            });
+        }
+    }
+
 
     private void Sample()
     {
@@ -385,29 +497,50 @@ public sealed class PerformanceCounterSampler : IPerfSampler, IDisposable
 
         try
         {
-        double? cpu = null;
-        PhysicalMemory? phys = null;
-        try
+        PerfSampleOptions options;
+        lock (_optionsGate)
         {
-            if (_cpuReady && _cpu is not null)
-            {
-                cpu = Math.Clamp(_cpu.NextValue(), 0, 100);
-            }
-        }
-        catch (Exception)
-        {
-            cpu = null;
+            options = _options;
         }
 
-        phys = TryReadPhysical();
+        var cpu = TryReadCpu();
+        var phys = TryReadPhysical();
         var memory = phys?.Percent;
+        var frequency = options.Frequency ? TryReadFrequency() : null;
+        if (!options.Frequency)
+        {
+            DisposeFrequency();
+        }
+
+        var cores = options.PerCore ? TryReadCores() : [];
+        if (!options.PerCore)
+        {
+            DisposeCores();
+        }
+
+        ulong commitUsed = 0, commitLimit = 0;
+        var commit = false;
+        if (options.Commit)
+        {
+            commit = TryReadCommit(out commitUsed, out commitLimit);
+        }
+        else
+        {
+            DisposeCommit();
+        }
+
         Current = PerfHistory.Push(
             Current,
             DateTimeOffset.UtcNow,
             cpu,
             memory,
             phys?.Used ?? 0,
-            phys?.Total ?? 0);
+            phys?.Total ?? 0,
+            frequency,
+            cores,
+            commitUsed,
+            commitLimit,
+            commit);
         Updated?.Invoke(this, Current);
         }
         finally
@@ -416,27 +549,199 @@ public sealed class PerformanceCounterSampler : IPerfSampler, IDisposable
         }
     }
 
+    private double? TryReadCpu()
+    {
+        if (!CpuTimes.TryReadTotal(out var idle, out var kernel, out var user))
+        {
+            return null;
+        }
+
+        if (!_cpuPrimed)
+        {
+            _cpuIdle = idle;
+            _cpuKernel = kernel;
+            _cpuUser = user;
+            _cpuPrimed = true;
+            return null;
+        }
+
+        var percent = CpuTimes.BusyPercent(idle - _cpuIdle, kernel - _cpuKernel, user - _cpuUser);
+        _cpuIdle = idle;
+        _cpuKernel = kernel;
+        _cpuUser = user;
+        return percent;
+    }
+
     private void EnsureCounters()
     {
-        if (_cpu is not null || _cpuReady)
+        PerfSampleOptions options;
+        lock (_optionsGate)
+        {
+            options = _options;
+        }
+
+        if (options.Frequency)
+        {
+            EnsureFrequency();
+        }
+
+        if (options.Commit)
+        {
+            EnsureCommit();
+        }
+    }
+
+    private void EnsureFrequency()
+    {
+        if (_frequencyReady)
         {
             return;
         }
 
-        var cpu = TryCreate("Processor", "% Processor Time", "_Total");
-        if (cpu is not null)
+        var counter = TryCreate("Processor Information", "Processor Frequency", "_Total")
+                      ?? TryCreate("Processor Information", "Processor Frequency", "0,0");
+        if (counter is null)
         {
-            try
-            {
-                _ = cpu.NextValue();
-                _cpu = cpu;
-                _cpuReady = true;
-            }
-            catch (Exception)
-            {
-                cpu.Dispose();
-            }
+            return;
         }
+
+        try
+        {
+            _ = counter.NextValue();
+            _frequency = counter;
+            _frequencyReady = true;
+        }
+        catch (Exception)
+        {
+            counter.Dispose();
+        }
+    }
+
+    private IReadOnlyList<double> TryReadCores()
+    {
+        if (!CpuTimes.TryReadCores(out var idle, out var kernel, out var user) || idle.Length == 0)
+        {
+            return [];
+        }
+
+        var totals = new long[idle.Length];
+        for (var i = 0; i < idle.Length; i++)
+        {
+            totals[i] = kernel[i] + user[i];
+        }
+
+        if (!_coresPrimed || _coreIdle.Length != idle.Length)
+        {
+            _coreIdle = idle;
+            _coreTotal = totals;
+            _coresPrimed = true;
+            return [];
+        }
+
+        var values = new double[idle.Length];
+        for (var i = 0; i < idle.Length; i++)
+        {
+            values[i] = CpuTimes.BusyPercent(idle[i] - _coreIdle[i], totals[i] - _coreTotal[i], 0);
+        }
+
+        _coreIdle = idle;
+        _coreTotal = totals;
+        return values;
+    }
+
+    private void EnsureCommit()
+    {
+        if (_commitReady)
+        {
+            return;
+        }
+
+        var used = TryCreate("Memory", "Committed Bytes", null);
+        var limit = TryCreate("Memory", "Commit Limit", null);
+        if (used is null || limit is null)
+        {
+            used?.Dispose();
+            limit?.Dispose();
+            return;
+        }
+
+        try
+        {
+            _ = used.NextValue();
+            _ = limit.NextValue();
+            _commitUsed = used;
+            _commitLimit = limit;
+            _commitReady = true;
+        }
+        catch (Exception)
+        {
+            used.Dispose();
+            limit.Dispose();
+        }
+    }
+
+    private double? TryReadFrequency()
+    {
+        EnsureFrequency();
+        if (!_frequencyReady || _frequency is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var mhz = _frequency.NextValue();
+            return mhz > 0 ? mhz : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private bool TryReadCommit(out ulong used, out ulong limit)
+    {
+        used = 0;
+        limit = 0;
+        EnsureCommit();
+        if (!_commitReady || _commitUsed is null || _commitLimit is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            used = (ulong)Math.Max(0, _commitUsed.NextValue());
+            limit = (ulong)Math.Max(0, _commitLimit.NextValue());
+            return limit > 0;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private void DisposeFrequency()
+    {
+        _frequency?.Dispose();
+        _frequency = null;
+        _frequencyReady = false;
+    }
+
+    private void DisposeCores()
+    {
+        _coreIdle = [];
+        _coreTotal = [];
+        _coresPrimed = false;
+    }
+
+    private void DisposeCommit()
+    {
+        _commitUsed?.Dispose();
+        _commitLimit?.Dispose();
+        _commitUsed = null;
+        _commitLimit = null;
+        _commitReady = false;
     }
 
     private readonly record struct PhysicalMemory(double Percent, ulong Used, ulong Total);

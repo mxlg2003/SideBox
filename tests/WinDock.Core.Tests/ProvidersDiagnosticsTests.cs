@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using WinDock.Core;
 using WinDock.Providers;
 using Xunit;
@@ -46,6 +47,36 @@ public sealed class ProvidersDiagnosticsTests
                 try { Directory.Delete(tempDir, true); } catch { }
             }
         }
+    }
+
+    [Fact]
+    public void System_process_table_sees_current_process()
+    {
+        using var current = Process.GetCurrentProcess();
+        var self = SystemProcessTable.Capture().FirstOrDefault(row => row.Pid == current.Id);
+        Assert.Equal(current.Id, self.Pid);
+        Assert.Equal(current.ProcessName, self.Name);
+        Assert.InRange((long)self.WorkingSet, current.WorkingSet64 / 4, current.WorkingSet64 * 4);
+        Assert.True(self.CpuTicks > 0);
+    }
+
+    [Fact]
+    public void Gpu_engine_query_reads_a_single_wildcard_counter()
+    {
+        var adapters = DxgiAdapters.TryRead();
+        Assert.NotEmpty(adapters);
+        using var query = new GpuEngineQuery();
+        Assert.True(query.TryOpen());
+        var ok = false;
+        var reading = default(EngineReading);
+        for (var attempt = 0; attempt < 6 && !ok; attempt++)
+        {
+            Thread.Sleep(300);
+            ok = query.TryCollect(adapters[0].Id, true, out reading);
+        }
+
+        Assert.True(ok);
+        Assert.InRange(reading.Percent, 0, 100);
     }
 
     [Fact]

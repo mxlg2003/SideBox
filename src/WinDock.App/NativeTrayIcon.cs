@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using WinDock.Core;
 
 namespace WinDock.App;
 
@@ -28,7 +29,8 @@ public sealed class NativeTrayIcon : IDisposable
     private NotifyIconData _data;
     private bool _added;
     private bool _disposed;
-    private string _text = "WinDock";
+    private bool _ownsIcon;
+    private string _text = ProductInfo.Name;
 
     public event EventHandler? LeftClick;
     public event EventHandler? DoubleClick;
@@ -53,7 +55,7 @@ public sealed class NativeTrayIcon : IDisposable
             uID = 1,
             uFlags = NifMessage | NifIcon | NifTip,
             uCallbackMessage = WmTrayCallback,
-            hIcon = LoadIcon(nint.Zero, 32512),
+            hIcon = LoadTrayIcon(out _ownsIcon),
             szTip = _text
         };
 
@@ -108,6 +110,13 @@ public sealed class NativeTrayIcon : IDisposable
         {
             Shell_NotifyIcon(NimDelete, ref _data);
             _added = false;
+        }
+
+        if (_ownsIcon && _data.hIcon != nint.Zero)
+        {
+            DestroyIcon(_data.hIcon);
+            _data.hIcon = nint.Zero;
+            _ownsIcon = false;
         }
 
         _source.RemoveHook(WndProc);
@@ -174,8 +183,52 @@ public sealed class NativeTrayIcon : IDisposable
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(nint hWnd);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint PrivateExtractIcons(
+        string szFileName,
+        int nIconIndex,
+        int cxIcon,
+        int cyIcon,
+        nint[] phicon,
+        int[] piconid,
+        uint nIcons,
+        uint flags);
+
     [DllImport("user32.dll")]
     private static extern nint LoadIcon(nint hInstance, nint lpIconName);
+
+    [DllImport("user32.dll")]
+    private static extern bool DestroyIcon(nint hIcon);
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int nIndex);
+
+    private static nint LoadTrayIcon(out bool owns)
+    {
+        owns = false;
+        var path = Environment.ProcessPath;
+        if (!string.IsNullOrEmpty(path))
+        {
+            var size = GetSystemMetrics(SmCxSmIcon);
+            if (size < 16)
+            {
+                size = 16;
+            }
+
+            var icons = new nint[1];
+            var ids = new int[1];
+            var extracted = PrivateExtractIcons(path, 0, size, size, icons, ids, 1, 0);
+            if (extracted > 0 && icons[0] != nint.Zero)
+            {
+                owns = true;
+                return icons[0];
+            }
+        }
+
+        return LoadIcon(nint.Zero, 32512);
+    }
+
+    private const int SmCxSmIcon = 49;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct NotifyIconData

@@ -3,11 +3,14 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>WinDock.Shell</RootNamespace>
     <Description>Dock window host, display topology, AppBar, and z-order.</Description>
+    <DefineConstants>$(DefineConstants);SHELL</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\WinDock.Core\WinDock.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Fonts\NotoSansSC-Regular.otf" />
+    <Compile Include="..\Shared\PhosphorGlyph.cs" Link="PhosphorGlyph.cs" />
+    <Compile Include="..\Shared\FolderCaption.cs" Link="FolderCaption.cs" />
+    <Compile Include="..\Shared\UiFont.cs" Link="UiFont.cs" />
   </ItemGroup>
 </Project>

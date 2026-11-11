@@ -1,10 +1,10 @@
-# WinDock 技术架构
+# Sidebox 技术架构
 
 ## 选型结论
 
 主干：**C# / .NET 10 WPF 原生宿主 + CsWinRT**。
 
-目标框架：`net10.0-windows10.0.22621.0`。操作系统下限仍是 Windows 11 22H2（`SupportedOSPlatformVersion` 10.0.22621.0 / UniversalApiContract 15，以便使用 `FocusSessionManager`）。WPF 依赖 **Windows Desktop Runtime**，不是只有 `Microsoft.NETCore.App`。本仓库跟本机已装的 .NET 10 Desktop 对齐，避免再下载一份 .NET 8 Desktop。
+目标框架：`net10.0-windows10.0.22621.0`。操作系统下限支持 Windows 10 2004+（`SupportedOSPlatformVersion` 10.0.19041.0）。针对 Windows 11 22H2 引入的特性（如 `FocusSessionManager` 与 `DWMWA_SYSTEMBACKDROP_TYPE`）进行运行时探测与优雅降级。WPF 依赖 **Windows Desktop Runtime**，不是只有 `Microsoft.NETCore.App`。本仓库跟本机已装的 .NET 10 Desktop 对齐，避免再下载一份 .NET 8 Desktop。
 
 | 候选 | 结论 |
 |---|---|
@@ -64,7 +64,7 @@ Infrastructure → Core
 Core.Tests → Core
 ```
 
-`WinDock.App` 与 `WinDock.Widgets` **禁止** `DllImport`。P/Invoke 只允许出现在 `WinDock.Shell` 与 `WinDock.Providers`。
+`WinDock.App` 与 `WinDock.Widgets` **禁止** `DllImport`。P/Invoke 只允许出现在 `WinDock.Shell` 与 `WinDock.Providers`。例外：`NativeTrayIcon` 的托盘窗口和 `Shell_NotifyIcon` 留在 `WinDock.App`，因为托盘菜单走 WinForms，不进 Shell 的 Dock 窗口。
 
 ## 模块职责
 
@@ -127,13 +127,13 @@ DPI：`app.manifest` 声明 Per-Monitor v2；按窗口缓存 `GetDpiForWindow`�
 
 | Provider | API | 约束 |
 |---|---|---|
-| Focus | `Windows.UI.Shell.FocusSessionManager` | 先 `IsSupported`；不支持则禁用触发器与 widget 中的系统状态 |
-| Media | `GlobalSystemMediaTransportControlsSessionManager` | 事件订阅；控制失败静默；元数据受 `media.read` 门闩 |
+| Focus | `Windows.UI.Shell.FocusSessionManager` | 仅在 Win11 22H2+（Build 22621+）启用；Win10 / 不支持环境下自动回退为禁用触发器与相关状态 |
+| Media | `GlobalSystemMediaTransportControlsSessionManager` | 事件订阅；已有正在播放的 GSMTC 会话时不再扫描本地播放器进程；控制失败静默；元数据受 `media.read` 门闩。模块当前未上架（`NowPlayingEnabled = false`） |
 | CPU / Memory | `PerformanceCounter("% Processor Time")` + `GlobalMemoryStatusEx` 物理内存 | 仅当 Dock 上有系统状态模块时 `Start`；2s；失败显示「—」 |
 | Network | `NetworkInterface` 速率差值 + `NetworkChange` | 仅当有网络模块时采样；`networkDetails=false` 时只查联通、不枚举适配器；过滤 loopback / vEthernet / Hyper-V / Bluetooth |
-| Power | `GetSystemPowerStatus` + Hands-Free / 已配对蓝牙电量属性 | 仅当有电源模块时 `Start`；无电池台式机显示「这台电脑没有电池」 |
+| Power | `GetSystemPowerStatus` + Hands-Free / 已配对蓝牙电量属性 | 仅当有电源模块时 `Start`；无电池时岛上显示「无电池」，悬停说明「未检测到本机电池」 |
 | Time | 本地时钟 | 不访问网络 |
-| Notes | `%AppData%\WinDock\notes\{id}.txt` | 仅本地；编辑自动保存 |
+| Notes | `%AppData%\Sidebox\notes\{id}.txt` | 仅本地；编辑自动保存 |
 
 Focus 禁止：轮询 WNF、读 Focus Assist 注册表、推断“正在开会 / 游戏”。
 
@@ -145,19 +145,19 @@ Focus 禁止：轮询 WNF、读 Focus Assist 注册表、推断“正在开会 /
 
 - 热键：`RegisterHotKey` 挂在消息窗口上（下一个 / 撤销）。**禁止** `WH_KEYBOARD_LL`。
 - 托盘：监听 `TaskbarCreated` 后重建图标；单击打开设置；文案不超过 63 字符，开启情景时带当前情景名。
-- 单实例：`Local\WinDock.SingleInstance`。
+- 单实例：`Local\Sidebox.SingleInstance`。
 - AppBar 模式尚未开放。
 - 自启：设置「开机启动」写 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`（用户级，`asInvoker`）。
 - 运行身份：`asInvoker`。需要提权的功能不得抬升整个进程。
 
 ## 持久化与路径
 
-- 配置：`%AppData%\WinDock\settings.json`
+- 配置：`%AppData%\Sidebox\settings.json`
 - 备份：同目录 `settings.bak`
-- 便笺：`%AppData%\WinDock\notes\{id}.txt`（旧版单文件 `notes.txt` 迁入第一份）
-- 日志：`%LocalAppData%\WinDock\logs\`
-- 图标缓存：`%LocalAppData%\WinDock\icon-cache\`
-- 媒体封面：`%LocalAppData%\WinDock\media-thumbs\`
+- 便笺：`%AppData%\Sidebox\notes\{id}.txt`（旧版单文件 `notes.txt` 迁入第一份）
+- 日志：`%LocalAppData%\Sidebox\logs\`
+- 图标缓存：`%LocalAppData%\Sidebox\icon-cache\`
+- 媒体封面：`%LocalAppData%\Sidebox\media-thumbs\`
 
 写入协议：写 temp → flush → replace；成功后复制一份 bak。读取失败则尝试 bak，再失败则把损坏文件改名为 `settings.corrupt.<timestamp>` 并写入出厂默认。更高 `schemaVersion` **不覆盖**用户文件，内存使用出厂默认并提示。未知 widget / 非法 dock 项会被丢掉而不是抛错。`id` 缺省时生成 GUID 并写回磁盘。
 

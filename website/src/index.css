@@ -1,0 +1,280 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    color-scheme: dark;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+
+  body {
+    margin: 0;
+    background-color: #0c0c0f;
+    background-image: 
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(47, 111, 237, 0.15), transparent 70%),
+      radial-gradient(ellipse 60% 30% at 50% 100%, rgba(168, 85, 247, 0.08), transparent 70%);
+    background-attachment: fixed;
+    color: #f5f5f5;
+    font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background: #2f6fed;
+    color: #ffffff;
+  }
+}
+
+@layer components {
+  .page {
+    @apply mx-auto w-full max-w-page px-5;
+  }
+
+  .display {
+    font-family: Newsreader, "Noto Serif SC", "Songti SC", Georgia, serif;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  .btn {
+    @apply inline-flex h-10 items-center justify-center rounded-xl px-4 text-sm font-medium transition-all duration-200;
+  }
+
+  .btn:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+
+  .btn-primary {
+    background: #f5f5f5;
+    color: #0e0e11;
+    box-shadow: 0 4px 16px rgba(255, 255, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+
+  .btn-primary:hover {
+    background: #ffffff;
+    box-shadow: 0 6px 22px rgba(255, 255, 255, 0.22), inset 0 1px 0 rgba(255, 255, 255, 1);
+    transform: translateY(-1px);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+
+  .btn-quiet {
+    background: rgba(255, 255, 255, 0.08);
+    color: #f5f5f5;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+  }
+
+  .btn-quiet:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .btn-line {
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: #f5f5f5;
+  }
+
+  .btn-line:hover {
+    border-color: rgba(255, 255, 255, 0.32);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .field {
+    @apply h-11 w-full rounded-xl border border-white/10 bg-[#16161c] px-3 text-sm text-ink outline-none transition-colors;
+  }
+
+  .field:focus {
+    border-color: rgba(47, 111, 237, 0.6);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.2);
+  }
+
+  .link {
+    color: #79a6fe;
+  }
+
+  .link:hover {
+    color: #9ec1ff;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  .panel {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 24px;
+    background: rgba(22, 22, 28, 0.7);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+  }
+
+  /* Editorial Feature Label (like dockset.app) */
+  .feature-label {
+    @apply inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1 text-xs font-medium tracking-wide text-white/80 backdrop-blur-md;
+  }
+
+  .keycap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: inherit;
+    color: #e5e5e5;
+  }
+
+  /* Bento Card with fine hairline border */
+  .bento-card {
+    @apply relative overflow-hidden rounded-3xl border border-white/[0.08] bg-[#14141a]/80 p-6 backdrop-blur-xl transition-all duration-300;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  }
+
+  .bento-card:hover {
+    @apply border-white/20 bg-[#181820]/90;
+    transform: translateY(-2px);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* Hover pause for Marquee ticker */
+.marquee-row:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+/* Float card in hero */
+.float-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(24, 24, 30, 0.92);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45);
+}
+
+.float-card.note {
+  background: #f6e27a;
+  color: #1c1b19;
+  border-color: rgba(246, 226, 122, 0.4);
+}
+
+/* Simulated Desktop Stage in Hero */
+.desk-simulator {
+  position: relative;
+  aspect-ratio: 16 / 9.8;
+  overflow: hidden;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 25px 70px -10px rgba(0, 0, 0, 0.7);
+  background-color: #0b111e;
+  background-image: 
+    radial-gradient(at 10% 20%, rgba(56, 189, 248, 0.28) 0px, transparent 50%),
+    radial-gradient(at 85% 15%, rgba(168, 85, 247, 0.32) 0px, transparent 50%),
+    radial-gradient(at 50% 65%, rgba(47, 111, 237, 0.35) 0px, transparent 65%),
+    linear-gradient(135deg, #0e1526 0%, #151a2e 50%, #0d121f 100%);
+}
+
+@media (max-width: 640px) {
+  .desk-simulator {
+    aspect-ratio: 4 / 3.4;
+  }
+}
+
+/* Windows 11 Taskbar simulation */
+.win11-taskbar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  background: rgba(18, 20, 29, 0.68);
+  backdrop-filter: blur(24px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 20;
+}
+
+/* Sidebox Island in simulator */
+.sim-island {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 12px;
+  z-index: 30;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+}
+
+/* Materials for Island */
+.material-mica {
+  background: rgba(30, 32, 44, 0.85);
+  backdrop-filter: blur(28px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.material-frosted {
+  background: rgba(22, 23, 30, 0.98);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.material-glass {
+  background: rgba(36, 40, 60, 0.45);
+  backdrop-filter: blur(36px);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* Positions for Island */
+.pos-top {
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: row;
+}
+
+.pos-top.is-hidden {
+  top: -46px;
+}
+
+.pos-left {
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  flex-direction: column;
+}
+
+.pos-left.is-hidden {
+  left: -46px;
+}
+
+.pos-right {
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  flex-direction: column;
+}
+
+.pos-right.is-hidden {
+  right: -46px;
+}

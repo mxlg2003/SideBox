@@ -71,6 +71,7 @@ public sealed class GatedNetworkProvider : INetworkProvider
 {
     private readonly IPermissionGate _gate;
     private readonly INetworkProvider _inner;
+    private bool _wantWifi;
 
     public GatedNetworkProvider(IPermissionGate gate, INetworkProvider inner)
     {
@@ -83,7 +84,7 @@ public sealed class GatedNetworkProvider : INetworkProvider
 
     public void Start()
     {
-        _inner.CollectDetails = _gate.Allows("network.details");
+        ApplyGates();
         _inner.Start();
     }
 
@@ -92,14 +93,32 @@ public sealed class GatedNetworkProvider : INetworkProvider
     public bool CollectDetails
     {
         get => _inner.CollectDetails;
-        set => _inner.CollectDetails = value;
+        set => _inner.CollectDetails = value && Allowed;
+    }
+
+    public bool CollectWifi
+    {
+        get => _inner.CollectWifi;
+        set
+        {
+            _wantWifi = value;
+            _inner.CollectWifi = value && Allowed;
+        }
     }
 
     public NetworkSnapshot Current => Filter(_inner.Current);
 
+    private bool Allowed => _gate.Allows("network.details");
+
+    private void ApplyGates()
+    {
+        _inner.CollectDetails = Allowed;
+        _inner.CollectWifi = _wantWifi && Allowed;
+    }
+
     private NetworkSnapshot Filter(NetworkSnapshot snapshot)
     {
-        if (_gate.Allows("network.details"))
+        if (Allowed)
         {
             return snapshot;
         }
@@ -108,6 +127,44 @@ public sealed class GatedNetworkProvider : INetworkProvider
         {
             Timestamp = snapshot.Timestamp,
             IsConnected = snapshot.IsConnected
+        };
+    }
+}
+
+/// <summary>Hides process names unless privacy.processNames is on.</summary>
+public sealed class GatedProcessListProvider : IProcessListProvider
+{
+    private readonly IPermissionGate _gate;
+    private readonly IProcessListProvider _inner;
+
+    public GatedProcessListProvider(IPermissionGate gate, IProcessListProvider inner)
+    {
+        _gate = gate;
+        _inner = inner;
+        _inner.Updated += (_, snapshot) => Updated?.Invoke(this, Filter(snapshot));
+    }
+
+    public event EventHandler<ProcessListSnapshot>? Updated;
+
+    public void Start() => _inner.Start();
+
+    public void Stop() => _inner.Stop();
+
+    public void SetLive(bool live) => _inner.SetLive(live);
+
+    public ProcessListSnapshot Current => Filter(_inner.Current);
+
+    private ProcessListSnapshot Filter(ProcessListSnapshot snapshot)
+    {
+        if (_gate.Allows("process.names"))
+        {
+            return snapshot with { Allowed = true };
+        }
+
+        return new ProcessListSnapshot
+        {
+            Timestamp = snapshot.Timestamp,
+            Allowed = false
         };
     }
 }

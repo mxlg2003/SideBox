@@ -33,7 +33,7 @@ public interface IDockSurface : IDisposable
 
     void ApplyTheme(bool isLight, DockBackdrop backdrop, int islandTransparency);
 
-    void ApplyProfileMenu(IReadOnlyList<Profile> profiles, string activeProfileId);
+    void ApplyProfileMenu(IReadOnlyList<Profile> profiles, string activeProfileId, bool canUndo = false);
 
     void Show();
 

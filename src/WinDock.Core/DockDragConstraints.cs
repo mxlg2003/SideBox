@@ -5,6 +5,27 @@ namespace WinDock.Core;
 /// </summary>
 public static class DockDragConstraints
 {
+    public const double DragStartSlop = 8;
+
+    public const double CrossAxisSlack = 16;
+
+    public const double IslandMonitorDragSlop = 48;
+
+    public static bool IsIslandMonitorDrag(double deltaX, double deltaY)
+    {
+        var slop = IslandMonitorDragSlop;
+        return (deltaX * deltaX) + (deltaY * deltaY) >= slop * slop;
+    }
+
+    /// <summary>
+    /// A click outside the island, such as dismissing a flyout, is not a drag.
+    /// </summary>
+    public static bool IsCrossAxisOutside(double cross, double extent, double slack = CrossAxisSlack) =>
+        extent > 1 && (cross < -slack || cross > extent + slack);
+
+    public static bool IsDragStart(double deltaX, double deltaY) =>
+        Math.Abs(deltaX) >= DragStartSlop || Math.Abs(deltaY) >= DragStartSlop;
+
     public static (double X, double Y) ConstrainLift(
         double layoutX,
         double layoutY,

@@ -453,7 +453,9 @@ public class PermissionGateTests
             IsConnected = true,
             AdapterName = "Ethernet",
             ReceiveBytesPerSecond = 100,
-            SendBytesPerSecond = 50
+            SendBytesPerSecond = 50,
+            IsWifi = true,
+            WifiSignalPercent = 80
         });
         var gated = new GatedNetworkProvider(gate, inner);
         Assert.True(gated.Current.IsConnected);
@@ -461,6 +463,8 @@ public class PermissionGateTests
         Assert.Equal(0, gated.Current.ReceiveBytesPerSecond);
         Assert.Empty(gated.Current.ReceiveHistory);
         Assert.Empty(gated.Current.SendHistory);
+        Assert.False(gated.Current.IsWifi);
+        Assert.Null(gated.Current.WifiSignalPercent);
     }
 
     [Fact]
@@ -576,7 +580,8 @@ public class BuiltInWidgetsTests
     [Fact]
     public void Canonical_ids_are_known()
     {
-        Assert.Equal(14, BuiltInWidgets.All.Count);
+        Assert.Equal(20, BuiltInWidgets.All.Count);
+        Assert.True(BuiltInWidgets.IsKnown("wallpaper"));
         Assert.True(BuiltInWidgets.IsKnown("nowplaying"));
         Assert.True(BuiltInWidgets.IsKnown("bing"));
         Assert.True(BuiltInWidgets.IsKnown("stopwatch"));
@@ -588,11 +593,16 @@ public class BuiltInWidgetsTests
         Assert.True(BuiltInWidgets.IsKnown("sysactivity"));
         Assert.True(BuiltInWidgets.IsKnown("weather"));
         Assert.True(BuiltInWidgets.IsKnown("schedule"));
+        Assert.True(BuiltInWidgets.IsKnown("disk"));
+        Assert.True(BuiltInWidgets.IsKnown("gpu"));
+        Assert.True(BuiltInWidgets.IsKnown("processes"));
+        Assert.True(BuiltInWidgets.IsKnown("whitenoise"));
         Assert.False(BuiltInWidgets.IsKnown("cpu"));
         Assert.False(BuiltInWidgets.IsKnown("memory"));
         Assert.False(BuiltInWidgets.IsKnown("battery"));
         Assert.False(BuiltInWidgets.IsKnown("focus"));
-        Assert.False(BuiltInWidgets.IsKnown("stocks"));
+        Assert.True(BuiltInWidgets.IsKnown("stocks"));
+        Assert.True(BuiltInWidgets.IsImplemented(BuiltInWidgets.Stocks));
         Assert.False(BuiltInWidgets.IsKnown("CLOCK"));
         Assert.True(BuiltInWidgets.IsImplemented(BuiltInWidgets.Clock));
         Assert.True(BuiltInWidgets.IsImplemented(BuiltInWidgets.Stopwatch));
@@ -609,8 +619,10 @@ public class BuiltInWidgetsTests
     public void Catalog_groups_cover_every_built_in_once()
     {
         var ids = WidgetCatalog.Groups.SelectMany(group => group.WidgetIds).ToArray();
-        Assert.Equal(BuiltInWidgets.All.Count, ids.Distinct(StringComparer.Ordinal).Count());
-        Assert.All(BuiltInWidgets.All, id => Assert.Contains(id, ids));
+        var offered = BuiltInWidgets.All.Where(BuiltInWidgets.IsOffered).ToArray();
+        Assert.Equal(offered.Length, ids.Distinct(StringComparer.Ordinal).Count());
+        Assert.All(offered, id => Assert.Contains(id, ids));
+        Assert.DoesNotContain(ids, BuiltInWidgets.IsShielded);
         Assert.DoesNotContain(WidgetCatalog.Groups, group => group.WidgetIds.Count == 0);
         Assert.True(WidgetCatalog.Matches(BuiltInWidgets.Clock, "时"));
         Assert.True(WidgetCatalog.Matches(BuiltInWidgets.Stopwatch, "秒表"));
@@ -624,8 +636,76 @@ public class BuiltInWidgetsTests
         Assert.True(WidgetCatalog.Matches(BuiltInWidgets.TimeProgress, "时间进度"));
         Assert.True(WidgetCatalog.Matches(BuiltInWidgets.SysActivity, "系统状态"));
         Assert.True(WidgetCatalog.Matches(BuiltInWidgets.SysActivity, "cpu"));
+        Assert.True(WidgetCatalog.Matches(BuiltInWidgets.Disk, "磁盘"));
+        Assert.True(WidgetCatalog.Matches(BuiltInWidgets.Gpu, "显卡"));
+        Assert.True(WidgetCatalog.Matches(BuiltInWidgets.Processes, "进程"));
+        Assert.True(WidgetCatalog.Matches(BuiltInWidgets.Stocks, "股票"));
+        Assert.True(WidgetCatalog.Matches(BuiltInWidgets.Stocks, "stock"));
         Assert.False(WidgetCatalog.Matches(BuiltInWidgets.Clock, "xyz"));
-        Assert.Equal(BuiltInWidgets.SysActivity, WidgetCatalog.VisibleGroups(WidgetCatalog.AllId, "cpu").Single().WidgetIds.Single());
+        var cpuHits = WidgetCatalog.VisibleGroups(WidgetCatalog.AllId, "cpu")
+            .SelectMany(group => group.WidgetIds)
+            .ToArray();
+        Assert.Contains(BuiltInWidgets.SysActivity, cpuHits);
+        Assert.False(ProductFeatures.ProcessesEnabled);
+        Assert.True(BuiltInWidgets.IsShielded(BuiltInWidgets.Processes));
+        Assert.DoesNotContain(BuiltInWidgets.Processes, cpuHits);
+    }
+
+    [Fact]
+    public void Shielded_now_playing_leaves_the_catalog_and_the_live_dock()
+    {
+        Assert.False(ProductFeatures.NowPlayingEnabled);
+        Assert.True(BuiltInWidgets.IsShielded(BuiltInWidgets.NowPlaying));
+        Assert.DoesNotContain(WidgetCatalog.Nav, category => category.Id == "media");
+
+        var settings = DefaultProfiles.CreateFactorySettings();
+        var general = settings.Profiles.First(profile => profile.Id == DefaultProfiles.GeneralId);
+        var chip = new DockItem
+        {
+            Id = "np",
+            Type = DockItemType.WidgetChip,
+            WidgetId = BuiltInWidgets.NowPlaying,
+            Title = BuiltInWidgets.DisplayName(BuiltInWidgets.NowPlaying)
+        };
+        var withMedia = general with
+        {
+            Dock = general.Dock with { Items = general.Dock.Items.Append(chip).ToArray() },
+            Widgets = general.Widgets.Append(BuiltInWidgets.DefaultPlacement(BuiltInWidgets.NowPlaying)).ToArray()
+        };
+        settings = settings with
+        {
+            Profiles = settings.Profiles.Select(profile => profile.Id == general.Id ? withMedia : profile).ToArray()
+        };
+
+        var local = new DateTime(2026, 9, 13, 10, 0, 0);
+        var diff = new ProfileEngine().Evaluate(settings, new ContextSnapshot
+        {
+            UtcNow = new DateTimeOffset(local, TimeSpan.FromHours(8)),
+            LocalNow = local,
+            FocusSupported = true,
+            FocusActive = false,
+            Topology = Fixtures.OneMonitor(),
+            SafeMode = false
+        });
+        Assert.DoesNotContain(diff.Dock.Items, item => item.WidgetId == BuiltInWidgets.NowPlaying);
+        Assert.DoesNotContain(diff.Widgets, widget => widget.Id == BuiltInWidgets.NowPlaying);
+        Assert.Contains(
+            settings.Profiles.First(profile => profile.Id == general.Id).Dock.Items,
+            item => item.Id == "np");
+
+        var unchanged = SettingsEditor.AddWidget(settings, DefaultProfiles.GeneralId, BuiltInWidgets.NowPlaying);
+        Assert.Equal(
+            1,
+            unchanged.Profiles.First(profile => profile.Id == general.Id).Dock.Items
+                .Count(item => item.WidgetId == BuiltInWidgets.NowPlaying));
+
+        var clock = new DockItem { Id = "clock", Type = DockItemType.WidgetChip, WidgetId = BuiltInWidgets.Clock };
+        var notes = new DockItem { Id = "notes", Type = DockItemType.WidgetChip, WidgetId = BuiltInWidgets.Notes };
+        DockItem[] stored = [chip, clock, notes];
+        var restored = SettingsEditor.RestoreShielded(stored, [notes, clock]);
+        Assert.Equal(["np", "notes", "clock"], restored.Select(item => item.Id));
+        Assert.Equal(2, SettingsEditor.MapInsertIndex(stored, [clock, notes], 1));
+        Assert.Equal(stored.Length, SettingsEditor.MapInsertIndex(stored, [clock, notes], 2));
     }
 }
 
@@ -729,4 +809,6 @@ internal sealed class FakeNetworkProvider : INetworkProvider
     }
 
     public bool CollectDetails { get; set; }
+
+    public bool CollectWifi { get; set; }
 }

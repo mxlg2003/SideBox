@@ -53,9 +53,6 @@ public sealed class ShellHost : IDisposable
         UnregisterHotKey(_source.Handle, HotkeyPrev);
         UnregisterHotKey(_source.Handle, HotkeyUndo);
         UnregisterHotKey(_source.Handle, HotkeyReveal);
-        TryRegister(HotkeyNext, hotkeys.NextProfile);
-        TryRegister(HotkeyPrev, hotkeys.PreviousProfile);
-        TryRegister(HotkeyUndo, hotkeys.UndoProfile);
         return TryRegister(HotkeyReveal, hotkeys.RevealDock);
     }
 

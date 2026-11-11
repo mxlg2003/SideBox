@@ -20,6 +20,12 @@ public sealed record SysActivitySettings
 {
     public string Layout { get; init; } = SysActivityLayouts.Numbers;
 
+    public bool ChartInDock { get; init; }
+
+    public bool ShowPerCore { get; init; }
+
+    public bool ShowFrequency { get; init; }
+
     public static SysActivitySettings Default { get; } = new();
 
     public static SysActivitySettings Normalize(SysActivitySettings? settings)
@@ -59,5 +65,18 @@ public static class SysActivityFormat
             ? Math.Round(total).ToString("0")
             : total.ToString("0.0");
         return $"{used:0.0} / {totalText} GiB";
+    }
+
+    public static string Frequency(double mhz, bool available)
+    {
+        if (!available || mhz <= 0)
+        {
+            return "—";
+        }
+
+        var ghz = mhz / 1000.0;
+        return ghz >= 1
+            ? $"{ghz:0.00} GHz"
+            : $"{mhz:0} MHz";
     }
 }

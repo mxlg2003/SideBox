@@ -10,8 +10,9 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, ISysActivityConfigurable, IWidgetThemeAware, ILocalizable
+public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, ISysActivityConfigurable, IWidgetThemeAware, ILocalizable, IDockEdgeAware, IIslandLayoutAware
 {
+    public event EventHandler? IslandLayoutChanged;
     private const uint QuietFill = 0x14000000;
     private const uint Accent = 0xFF0078D4;
     private const double DockRing = 34;
@@ -36,6 +37,7 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
     private readonly ProgressRing _memRing = new(DockRing) { Clockwise = true, StrokeThickness = DockRingStroke };
     private readonly SysActivityBar _cpuBar = new();
     private readonly SysActivityBar _memBar = new();
+    private readonly NetworkSparkline _dockChart = new();
     private readonly ProgressRing _panelCpuRing = new(FlyoutRing) { Clockwise = true };
     private readonly ProgressRing _panelMemRing = new(FlyoutRing) { Clockwise = true };
     private readonly TextBlock _panelCpuPercent = WidgetCopy.Primary();
@@ -44,7 +46,14 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
     private readonly TextBlock _panelMemCaption = WidgetCopy.Secondary();
     private readonly TextBlock _usedLabel = WidgetCopy.Secondary();
     private readonly TextBlock _usedValue = WidgetCopy.Primary();
-    private readonly List<(string Layout, Border Row, TextBlock Check)> _layoutMarks = [];
+    private readonly TextBlock _frequencyLabel = WidgetCopy.Secondary();
+    private readonly TextBlock _frequencyValue = WidgetCopy.Primary();
+    private readonly StackPanel _cores = new();
+    private readonly Grid _frequencyRow = new();
+    private readonly CheckBox _chartBox = new();
+    private readonly CheckBox _coreBox = new();
+    private readonly CheckBox _frequencyBox = new();
+    private readonly List<(string Layout, Border Row, PhosphorGlyph Check)> _layoutMarks = [];
     private readonly Border _tile;
     private readonly Border _panel;
     private readonly Grid _editorPage;
@@ -58,6 +67,7 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
     private SysActivitySettings _settings = SysActivitySettings.Default;
     private bool _applying;
     private bool _isLight = true;
+    private bool _side;
 
     public SysActivityWidget(IPerfSampler perf)
     {
@@ -68,6 +78,12 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
         _panelCpuCaption.Text = "CPU";
         _panelMemCaption.Text = UiText.Memory;
         _usedLabel.Text = UiText.MemoryUsed;
+        _frequencyLabel.Text = UiText.CpuFrequency;
+        _dockChart.Width = DockTokens.SparklineDockWidth;
+        _dockChart.Height = 28;
+        _dockChart.Margin = new Thickness(6, 0, 0, 0);
+        _dockChart.ReceiveStroke = TokenBrushes.From(DockTokens.Cpu);
+        _dockChart.SendStroke = TokenBrushes.From(DockTokens.Memory);
         _cpuPercent.HorizontalAlignment = HorizontalAlignment.Center;
         _memPercent.HorizontalAlignment = HorizontalAlignment.Center;
         _cpuRingPercent.FontSize = 11;
@@ -139,6 +155,7 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
         Loaded += (_, _) =>
         {
             _perf.Updated += _updated;
+            ApplyOptions();
             RebuildTile();
             Render(_perf.Current);
         };
@@ -165,6 +182,13 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
 
     public event EventHandler<SysActivitySettings>? SettingsChanged;
 
+    public void ApplyDockEdge(DockEdge edge)
+    {
+        _side = WidgetChrome.IsSide(edge);
+        RebuildTile();
+        WidgetChrome.FitEdge(_tile, _side, 0);
+    }
+
     public void ApplyPaper(string? paper)
     {
     }
@@ -185,6 +209,8 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
         _memBar.Fill = TokenBrushes.From(DockTokens.Memory);
         _cpuBar.Track = TokenBrushes.From(Fade(DockTokens.Cpu, 0x33));
         _memBar.Track = TokenBrushes.From(Fade(DockTokens.Memory, 0x33));
+        _dockChart.ReceiveStroke = TokenBrushes.From(DockTokens.Cpu);
+        _dockChart.SendStroke = TokenBrushes.From(DockTokens.Memory);
         _cpuDot.Fill = TokenBrushes.From(DockTokens.Cpu);
         _memDot.Fill = TokenBrushes.From(DockTokens.Memory);
     }
@@ -194,6 +220,10 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
         _memCaption.Text = UiText.MemoryShort;
         _panelMemCaption.Text = UiText.Memory;
         _usedLabel.Text = UiText.MemoryUsed;
+        _frequencyLabel.Text = UiText.CpuFrequency;
+        _chartBox.Content = UiText.DockChart;
+        _coreBox.Content = UiText.PerCore;
+        _frequencyBox.Content = UiText.CpuFrequency;
         _flyoutTitle.Text = BuiltInWidgets.DisplayName(BuiltInWidgets.SysActivity);
         _customizeTitle.Text = UiText.Customize;
         _backLabel.Text = UiText.Back;
@@ -209,11 +239,18 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
     public void ApplySettings(SysActivitySettings settings)
     {
         _applying = true;
+        var layoutChanged = !string.Equals(_settings.Layout, settings.Layout, StringComparison.OrdinalIgnoreCase)
+                            || _settings.ChartInDock != settings.ChartInDock;
         _settings = SysActivitySettings.Normalize(settings);
+        ApplyOptions();
         PaintCustomize();
         RebuildTile();
         Render(_perf.Current);
         _applying = false;
+        if (layoutChanged)
+        {
+            IslandLayoutChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public void Open()
@@ -228,6 +265,13 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
         ShowCustomize();
         _popup.IsOpen = true;
     }
+
+    private void ApplyOptions() =>
+        _perf.SetOptions(new PerfSampleOptions
+        {
+            PerCore = _settings.ShowPerCore,
+            Frequency = _settings.ShowFrequency
+        });
 
     private void Persist()
     {
@@ -253,20 +297,62 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
         Release(_memRing);
         Release(_cpuBar);
         Release(_memBar);
+        Release(_dockChart);
         _cpuCaption.ClearValue(FrameworkElement.WidthProperty);
         _memCaption.ClearValue(FrameworkElement.WidthProperty);
         _cpuCaption.Margin = new Thickness(0);
         _memCaption.Margin = new Thickness(0);
         _dockBody.Children.Clear();
+        if (_side)
+        {
+            var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Stretch };
+            stack.Children.Add(BarsTile());
+            if (_settings.ChartInDock)
+            {
+                _dockChart.Width = DockTokens.SideTileWidth - 12;
+                _dockChart.Height = 16;
+                _dockChart.Margin = new Thickness(0, 4, 0, 0);
+                _dockChart.HorizontalAlignment = HorizontalAlignment.Stretch;
+                stack.Children.Add(_dockChart);
+            }
+
+            _dockBody.Children.Add(stack);
+            _dockBody.Width = double.NaN;
+            _dockBody.MinWidth = 0;
+            _tile.InvalidateMeasure();
+            InvalidateMeasure();
+            return;
+        }
+
+        _dockChart.Width = DockTokens.SparklineDockWidth;
+        _dockChart.Height = 28;
+        _dockChart.Margin = new Thickness(6, 0, 0, 0);
         var layout = SysActivityLayouts.Normalize(_settings.Layout);
-        _dockBody.Children.Add(layout switch
+        UIElement meters = layout switch
         {
             SysActivityLayouts.Rings => RingsTile(),
             SysActivityLayouts.Bars => BarsTile(),
             _ => NumbersTile()
-        });
-        _dockBody.Width = DockWidth;
-        _dockBody.MinWidth = DockWidth;
+        };
+        if (_settings.ChartInDock)
+        {
+            var row = new Grid { Width = DockWidth + 6 + DockTokens.SparklineDockWidth };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(DockWidth) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.Children.Add(meters);
+            Grid.SetColumn(_dockChart, 1);
+            row.Children.Add(_dockChart);
+            _dockBody.Children.Add(row);
+            _dockBody.Width = DockWidth + 6 + DockTokens.SparklineDockWidth;
+            _dockBody.MinWidth = _dockBody.Width;
+        }
+        else
+        {
+            _dockBody.Children.Add(meters);
+            _dockBody.Width = DockWidth;
+            _dockBody.MinWidth = DockWidth;
+        }
+
         _tile.InvalidateMeasure();
         InvalidateMeasure();
     }
@@ -293,12 +379,12 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
         _memPercent.HorizontalAlignment = HorizontalAlignment.Right;
         _cpuCaption.HorizontalAlignment = HorizontalAlignment.Left;
         _memCaption.HorizontalAlignment = HorizontalAlignment.Left;
-        _cpuBar.Height = 6;
-        _memBar.Height = 6;
-        _cpuBar.Margin = new Thickness(8, 0, 8, 0);
+        _cpuBar.Height = _side ? 3 : 6;
+        _memBar.Height = _side ? 3 : 6;
+        _cpuBar.Margin = new Thickness(_side ? 6 : 8, 0, _side ? 6 : 8, 0);
         var stack = new StackPanel
         {
-            Width = DockWidth,
+            Width = _side ? DockTokens.SideTileWidth - 12 : DockWidth,
             VerticalAlignment = VerticalAlignment.Center
         };
         stack.Children.Add(BarRow(_cpuCaption, _cpuBar, _cpuPercent));
@@ -423,13 +509,54 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
         _cpuBar.Progress = _cpuRing.Progress;
         _memBar.Progress = _memRing.Progress;
         _usedValue.Text = SysActivityFormat.MemoryUsed(snapshot.MemoryUsedBytes, snapshot.MemoryTotalBytes);
+        _frequencyValue.Text = SysActivityFormat.Frequency(snapshot.FrequencyMhz, snapshot.FrequencyAvailable);
+        _frequencyRow.Visibility = _settings.ShowFrequency ? Visibility.Visible : Visibility.Collapsed;
+        _cores.Visibility = _settings.ShowPerCore ? Visibility.Visible : Visibility.Collapsed;
+        PaintCores(snapshot.CorePercents);
+        if (_settings.ChartInDock)
+        {
+            _dockChart.Render(snapshot.CpuHistory, snapshot.MemoryHistory, true, true);
+        }
+    }
+
+    private void PaintCores(IReadOnlyList<double> cores)
+    {
+        _cores.Children.Clear();
+        for (var i = 0; i < cores.Count; i++)
+        {
+            var label = WidgetCopy.Secondary();
+            label.Text = $"{i}";
+            label.Width = 20;
+            var bar = new SysActivityBar
+            {
+                Height = 6,
+                Margin = new Thickness(8, 0, 8, 0),
+                Progress = cores[i] / 100.0,
+                Fill = TokenBrushes.From(DockTokens.Cpu),
+                Track = TokenBrushes.From(Fade(DockTokens.Cpu, 0x33))
+            };
+            var percent = WidgetCopy.Secondary();
+            percent.Text = SysActivityFormat.Percent(cores[i], true);
+            percent.Width = 36;
+            percent.TextAlignment = TextAlignment.Right;
+            var row = new Grid { Margin = new Thickness(0, 4, 0, 0) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.Children.Add(label);
+            Grid.SetColumn(bar, 1);
+            row.Children.Add(bar);
+            Grid.SetColumn(percent, 2);
+            row.Children.Add(percent);
+            _cores.Children.Add(row);
+        }
     }
 
     private Grid BuildEditor()
     {
         _flyoutTitle = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.SysActivity));
-        var customize = HeaderGlyph("\uE8FD", OpenCustomize);
-        var close = HeaderGlyph("\u00D7", ClosePopup, 18);
+        var customize = WidgetChrome.HeaderIcon(PhosphorIcon.SlidersHorizontal, OpenCustomize);
+        var close = WidgetChrome.HeaderClose(ClosePopup, 18);
         var header = HeaderRow(_flyoutTitle, customize, close);
         var meters = new Grid { Margin = new Thickness(0, 12, 0, 8) };
         meters.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -481,10 +608,34 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
         used.Children.Add(_usedLabel);
         Grid.SetColumn(_usedValue, 1);
         used.Children.Add(_usedValue);
-        var page = new StackPanel { Children = { header, meters, divider, used } };
+        MetricRow(_frequencyRow, _frequencyLabel, _frequencyValue);
+        var coreScroll = new ScrollViewer
+        {
+            MaxHeight = 140,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = _cores,
+            Margin = new Thickness(0, 8, 0, 0)
+        };
+        WidgetChrome.PaintScrollViewer(coreScroll, true);
+        var page = new StackPanel
+        {
+            Children = { header, meters, divider, used, _frequencyRow, coreScroll }
+        };
         var grid = new Grid();
         grid.Children.Add(page);
         return grid;
+    }
+
+    private static void MetricRow(Grid row, TextBlock label, TextBlock value)
+    {
+        row.Margin = new Thickness(0, 8, 0, 0);
+        row.ColumnDefinitions.Clear();
+        row.Children.Clear();
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.Children.Add(label);
+        Grid.SetColumn(value, 1);
+        row.Children.Add(value);
     }
 
     private Grid BuildCustomize()
@@ -497,7 +648,7 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
             Cursor = Cursors.Hand,
             Children =
             {
-                HeaderGlyph("\uE76B", ShowEditor, 12),
+                WidgetChrome.HeaderIcon(PhosphorIcon.CaretLeft, ShowEditor, 12),
                 _backLabel
             }
         };
@@ -509,7 +660,7 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
         _customizeTitle = HeaderLabel(UiText.Customize);
         _customizeTitle.Margin = new Thickness(8, 0, 0, 0);
         _customizeTitle.FontWeight = FontWeights.SemiBold;
-        var close = HeaderGlyph("\u00D7", ClosePopup, 18);
+        var close = WidgetChrome.HeaderClose(ClosePopup, 18);
         var header = HeaderRow(new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -525,7 +676,23 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
             layouts.Children.Add(LayoutRow(layout));
         }
 
-        var page = new StackPanel { Children = { header, _layoutCaption, layouts } };
+        _chartBox.Content = UiText.DockChart;
+        _chartBox.Margin = new Thickness(0, 14, 0, 4);
+        _chartBox.Checked += (_, _) => SetExtra(chart: true);
+        _chartBox.Unchecked += (_, _) => SetExtra(chart: false);
+        _coreBox.Content = UiText.PerCore;
+        _coreBox.Margin = new Thickness(0, 4, 0, 4);
+        _coreBox.Checked += (_, _) => SetExtra(cores: true);
+        _coreBox.Unchecked += (_, _) => SetExtra(cores: false);
+        _frequencyBox.Content = UiText.CpuFrequency;
+        _frequencyBox.Margin = new Thickness(0, 4, 0, 4);
+        _frequencyBox.Checked += (_, _) => SetExtra(frequency: true);
+        _frequencyBox.Unchecked += (_, _) => SetExtra(frequency: false);
+
+        var page = new StackPanel
+        {
+            Children = { header, _layoutCaption, layouts, _chartBox, _coreBox, _frequencyBox }
+        };
         var grid = new Grid();
         grid.Children.Add(page);
         return grid;
@@ -533,26 +700,24 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
 
     private Border LayoutRow(string layout)
     {
-        var check = new TextBlock
-        {
-            Text = "\uE73E",
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 13,
-            Tag = "tint",
-            Foreground = TokenBrushes.From(Accent),
-            VerticalAlignment = VerticalAlignment.Center,
-            Visibility = Visibility.Collapsed
-        };
-        var glyph = new TextBlock
-        {
-            Text = LayoutGlyph(layout),
-            FontFamily = layout == SysActivityLayouts.Numbers ? WidgetFonts.Ui : new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 14,
-            Width = 22,
-            TextAlignment = TextAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 10, 0)
-        };
+        var check = WidgetChrome.AccentCheck(Accent);
+        UIElement glyph = layout == SysActivityLayouts.Numbers
+            ? new TextBlock
+            {
+                Text = "#",
+                FontFamily = WidgetFonts.Ui,
+                FontSize = 14,
+                Width = 22,
+                TextAlignment = TextAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 10, 0)
+            }
+            : new PhosphorGlyph(LayoutGlyph(layout), 14)
+            {
+                Width = 22,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 10, 0)
+            };
         var title = HeaderLabel(SysActivityFormat.LayoutTitle(layout));
         _layoutTitles[layout] = title;
         var content = new Grid();
@@ -594,6 +759,25 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
         ApplyTheme(_isLight);
     }
 
+    private void SetExtra(bool? chart = null, bool? cores = null, bool? frequency = null)
+    {
+        if (_applying)
+        {
+            return;
+        }
+
+        _settings = _settings with
+        {
+            ChartInDock = chart ?? _settings.ChartInDock,
+            ShowPerCore = cores ?? _settings.ShowPerCore,
+            ShowFrequency = frequency ?? _settings.ShowFrequency
+        };
+        ApplyOptions();
+        Persist();
+        RebuildTile();
+        Render(_perf.Current);
+    }
+
     private void PaintCustomize()
     {
         foreach (var (layout, row, check) in _layoutMarks)
@@ -602,6 +786,10 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
             row.Background = selected ? TokenBrushes.From(QuietFill) : Brushes.Transparent;
             check.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
         }
+
+        _chartBox.IsChecked = _settings.ChartInDock;
+        _coreBox.IsChecked = _settings.ShowPerCore;
+        _frequencyBox.IsChecked = _settings.ShowFrequency;
     }
 
     private void ShowEditor()
@@ -627,9 +815,8 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
 
     private static string LayoutGlyph(string layout) => layout switch
     {
-        SysActivityLayouts.Numbers => "#",
-        SysActivityLayouts.Rings => "\uEA3A",
-        _ => "\uE9D2"
+        SysActivityLayouts.Rings => PhosphorIcon.Circle,
+        _ => PhosphorIcon.ChartBar
     };
 
     private static Ellipse Dot() => new()
@@ -688,23 +875,4 @@ public sealed class SysActivityWidget : UserControl, IWidgetOpenable, IWidgetCus
         VerticalAlignment = VerticalAlignment.Center
     };
 
-    private static TextBlock HeaderGlyph(string glyph, Action click, double size = 13)
-    {
-        var block = new TextBlock
-        {
-            Text = glyph,
-            FontFamily = glyph == "\u00D7" ? WidgetFonts.Ui : new FontFamily("Segoe MDL2 Assets"),
-            FontSize = size,
-            Opacity = 0.45,
-            Padding = new Thickness(8, 4, 0, 4),
-            Cursor = Cursors.Hand,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        block.MouseLeftButtonUp += (_, e) =>
-        {
-            click();
-            e.Handled = true;
-        };
-        return block;
-    }
 }

@@ -55,4 +55,39 @@ public sealed class BingWallpaperArchiveTests
         Assert.Equal("9月13日", BingWallpaperArchive.FormatDate("20260913"));
         Assert.Equal("今日", BingWallpaperArchive.FormatDate("nope"));
     }
+
+    [Fact]
+    public void Parses_multi_day_catalog_correctly()
+    {
+        const string json = """
+            {
+                "images": [
+                    {"startdate":"20261008","url":"/th?id=OHR.Today_1920x1080.jpg","title":"Today Pic","hsh":"key0"},
+                    {"startdate":"20261007","url":"/th?id=OHR.Yesterday_1920x1080.jpg","title":"Yesterday Pic","hsh":"key1"},
+                    {"startdate":"20261006","url":"/th?id=OHR.TwoDaysAgo_1920x1080.jpg","title":"Two Days Ago Pic","hsh":"key2"}
+                ]
+            }
+            """;
+
+        var images = BingWallpaperArchive.Parse(json);
+        Assert.Equal(3, images.Count);
+        Assert.Equal("Today Pic", images[0].Title);
+        Assert.Equal("Yesterday Pic", images[1].Title);
+        Assert.Equal("Two Days Ago Pic", images[2].Title);
+        Assert.True(DockTokens.BingFlyoutWidth > 300);
+        Assert.True(DockTokens.BingHeroHeight > 100);
+    }
+
+    [Fact]
+    public void BingWallpaperSettings_defaults_and_normalization()
+    {
+        var settings = BingWallpaperSettings.Normalize(null);
+        Assert.False(settings.AutoApplyDaily);
+        Assert.Null(settings.LastAppliedKey);
+
+        var custom = new BingWallpaperSettings { AutoApplyDaily = true, LastAppliedKey = "20261008" };
+        var normalized = BingWallpaperSettings.Normalize(custom);
+        Assert.True(normalized.AutoApplyDaily);
+        Assert.Equal("20261008", normalized.LastAppliedKey);
+    }
 }

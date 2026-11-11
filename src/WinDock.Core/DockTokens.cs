@@ -11,12 +11,37 @@ public static class DockTokens
     public const double MinIslandLength = 160;
     /// <summary>Win11 control radius (buttons, pills, inputs).</summary>
     public const double TileCornerRadius = 4;
+    /// <summary>Market and board chips on a stock pill.</summary>
+    public const double StockMarkRadius = 3;
+    public const double StockSparkWidth = 72;
+    public const double StockSparkHeight = 12;
+    public const double StockChartHeight = 168;
+    public const double StockFlyoutWidth = 420;
+    public const double BingFlyoutWidth = 380;
+    public const double BingHeroHeight = 196;
     public const double TilePaddingX = 10;
     public const double TilePaddingY = 6;
     public const double TileHeight = 50;
+
+    /// <summary>Left/right island thickness. Stamps fill <see cref="SideTileWidth"/> inside the padding and stroke.</summary>
+    public const double SideIslandWidth = DockLayoutConstants.SideIslandWidth;
+
+    public const double SideTileWidth = SideIslandWidth - (2 * IslandPaddingX) - 2;
+
+    public const double SidePinHeight = 44;
     public const double TileGap = 3;
+    /// <summary>Date + agenda text column. Long titles ellipsize before the clock.</summary>
+    public const double ScheduleAgendaWidth = 96;
     public const double ArtCornerRadius = 4;
     public const double GlyphSize = 14;
+    /// <summary>Flyout inputs, chips, toolbar buttons, and primary actions share this height.</summary>
+    public const double FlyoutControlHeight = 32;
+    /// <summary>Glyph drawn inside a flyout toolbar button.</summary>
+    public const double FlyoutGlyphSize = 14;
+    /// <summary>Close mark inside a flyout toolbar button. Slightly larger than the icon so it matches optically.</summary>
+    public const double FlyoutCloseFont = 16;
+    /// <summary>Hourly forecast card in the weather flyout. Shared width so hours line up.</summary>
+    public const double WeatherHourCardWidth = 56;
     public const double PrimaryFontSize = 15;
     public const double SecondaryFontSize = 11;
     public const double ArtSize = 40;
@@ -150,6 +175,8 @@ public static class DockTokens
 
     public const uint Cpu = 0xFFC084FC;
     public const uint Memory = 0xFF3B82F6;
+    public const uint Disk = 0xFF34D399;
+    public const uint Gpu = 0xFFF59E0B;
     public const uint Network = 0xFF3B82F6;
     public const uint NetworkUp = 0xFFD946EF;
     public const uint BatteryOk = 0xFF34D399;
@@ -158,8 +185,13 @@ public static class DockTokens
     public const uint NotesLight = 0xF2FBF0C8;
     public const uint NotesDark = 0xE6C4A35A;
     public const uint Focus = 0xFFA78BFA;
+    public const uint Wallpaper = 0xFF06B6D4;
     public const uint Bing = 0xFF38BDF8;
     public const uint Alarm = 0xFFFF9F0A;
+    /// <summary>A-share quote colors: red up, green down.</summary>
+    public const uint StockUp = 0xFFFF453A;
+    public const uint StockDown = 0xFF30D158;
+    public const uint StockFlat = 0xFF8E8E93;
     public const uint QuietFill = 0x14000000;
     public const uint Danger = 0xFFE11D48;
 
@@ -170,7 +202,7 @@ public static class DockTokens
         public const uint AccentHover = 0xFF1D4ED8;
         public const uint OnAccent = 0xFFFFFFFF;
         public const uint FocusRing = 0xFF2563EB;
-        public const double ControlHeight = 32;
+        public const double ControlHeight = FlyoutControlHeight;
         public const double TabMinWidth = 96;
         public const double NavWidth = 168;
         public const double CatalogNavWidth = 168;

@@ -9,12 +9,13 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IWidgetModeAware, ITimeProgressConfigurable, IWidgetThemeAware, ILocalizable
+public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCustomizable, IWidgetModeAware, IDockEdgeAware, ITimeProgressConfigurable, IWidgetThemeAware, ILocalizable, IIslandLayoutAware
 {
+    public event EventHandler? IslandLayoutChanged;
     private const uint Accent = 0xFF0078D4;
     private const uint QuietFill = 0x14000000;
     private const double DockRing = 18;
-    private const double FlyoutRing = 88;
+    private const double FlyoutRing = 52;
     private const double ExpandedWidth = 124;
 
     private readonly IClockProvider _clock;
@@ -22,36 +23,39 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
     private readonly TextBlock _dockCaption = WidgetCopy.Secondary();
     private readonly TextBlock _dockPercent = WidgetCopy.Primary();
     private readonly TextBlock _ringPercent = WidgetCopy.Primary();
-    private readonly TextBlock _panelCaption = WidgetCopy.Primary();
-    private readonly TextBlock _panelPercent = WidgetCopy.Primary();
-    private readonly TextBlock _panelRingPercent = WidgetCopy.Primary();
     private readonly TimeProgressBars _dockBars = new();
-    private readonly TimeProgressBars _panelBars = new();
     private readonly ProgressRing _dockRing = new(DockRing) { Clockwise = true };
-    private readonly ProgressRing _panelRing = new(FlyoutRing) { Clockwise = true };
+    private readonly PeriodFace[] _faces =
+    [
+        new(TimeProgressPeriods.Day),
+        new(TimeProgressPeriods.Month),
+        new(TimeProgressPeriods.Year)
+    ];
     private readonly Border _tile;
     private readonly Border _panel;
     private readonly Grid _editorPage;
     private readonly Grid _customizePage;
     private readonly Popup _popup;
     private readonly ComboBox _periodBox = new();
+    private readonly Grid _root;
     private TextBlock _flyoutTitle = null!;
     private TextBlock _customizeTitle = null!;
     private TextBlock _backLabel = null!;
     private TextBlock _periodCaption = null!;
     private TextBlock _layoutCaption = null!;
     private readonly Dictionary<string, TextBlock> _layoutTitles = new(StringComparer.Ordinal);
-    private readonly List<(string Layout, Border Row, TextBlock Check)> _layoutMarks = [];
+    private readonly List<(string Layout, Border Row, PhosphorGlyph Check)> _layoutMarks = [];
     private readonly DispatcherTimer _timer;
-    private readonly StackPanel _panelVisual = new();
     private TimeProgressSettings _settings = TimeProgressSettings.Default;
     private WidgetDensity _density = WidgetDensity.Expanded;
     private bool _applying;
     private bool _isLight = true;
+    private bool _side;
 
-    public TimeProgressWidget(IClockProvider clock)
+    public TimeProgressWidget(IClockProvider clock, WidgetDensity density = WidgetDensity.Expanded)
     {
         _clock = clock;
+        _density = density;
         _dockBody.VerticalAlignment = VerticalAlignment.Center;
         _dockBody.HorizontalAlignment = HorizontalAlignment.Center;
         _dockCaption.HorizontalAlignment = HorizontalAlignment.Center;
@@ -61,16 +65,7 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
         _ringPercent.FontWeight = FontWeights.SemiBold;
         _ringPercent.HorizontalAlignment = HorizontalAlignment.Center;
         _ringPercent.VerticalAlignment = VerticalAlignment.Center;
-        _panelCaption.FontSize = 22;
-        _panelPercent.FontSize = 22;
-        _panelPercent.FontWeight = FontWeights.SemiBold;
-        _panelRingPercent.FontSize = 20;
-        _panelRingPercent.FontWeight = FontWeights.SemiBold;
-        _panelRingPercent.HorizontalAlignment = HorizontalAlignment.Center;
-        _panelRingPercent.VerticalAlignment = VerticalAlignment.Center;
         _dockBars.Height = 10;
-        _panelBars.Height = 28;
-        _panelBars.Margin = new Thickness(0, 16, 0, 4);
 
         _tile = WidgetChrome.Wrap(_dockBody, 0);
         _tile.MouseLeftButtonUp += (_, e) =>
@@ -124,10 +119,10 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
             _popup.IsOpen = false;
         };
 
-        var root = new Grid { HorizontalAlignment = HorizontalAlignment.Center };
-        root.Children.Add(_tile);
-        root.Children.Add(_popup);
-        Content = root;
+        _root = new Grid { HorizontalAlignment = HorizontalAlignment.Center };
+        _root.Children.Add(_tile);
+        _root.Children.Add(_popup);
+        Content = _root;
         ApplyTheme(true);
         RebuildTile();
         Tick();
@@ -153,12 +148,16 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
         var track = TokenBrushes.From(isLight ? 0x22000000u : 0x33FFFFFFu);
         _dockBars.Fill = fill;
         _dockBars.Track = track;
-        _panelBars.Fill = fill;
-        _panelBars.Track = track;
         _dockRing.Fill = fill;
         _dockRing.Track = track;
-        _panelRing.Fill = fill;
-        _panelRing.Track = track;
+        foreach (var face in _faces)
+        {
+            face.Bars.Fill = fill;
+            face.Bars.Track = track;
+            face.Ring.Fill = fill;
+            face.Ring.Track = track;
+        }
+
         WidgetChrome.PaintCombo(_periodBox, isLight);
     }
 
@@ -180,21 +179,39 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
         Tick();
     }
 
+    public void ApplyDockEdge(DockEdge edge)
+    {
+        _side = WidgetChrome.IsSide(edge);
+        RebuildTile();
+        WidgetChrome.FitEdge(_tile, _side, 0);
+        Tick();
+    }
+
     public void ApplyDensity(WidgetDensity density)
     {
+        var changed = _density != density;
         _density = density;
         RebuildTile();
         Tick();
+        if (changed)
+        {
+            IslandLayoutChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public void ApplySettings(TimeProgressSettings settings)
     {
         _applying = true;
+        var layoutChanged = !string.Equals(_settings.Layout, settings.Layout, StringComparison.OrdinalIgnoreCase);
         _settings = TimeProgressSettings.Normalize(settings);
         PaintCustomize();
         RebuildTile();
         Tick();
         _applying = false;
+        if (layoutChanged)
+        {
+            IslandLayoutChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public void Open()
@@ -227,9 +244,6 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
         Release(_dockBars);
         Release(_dockRing);
         Release(_ringPercent);
-        Release(_panelBars);
-        Release(_panelRing);
-        Release(_panelRingPercent);
         _dockBody.Children.Clear();
         var compact = _density != WidgetDensity.Expanded;
         var layout = TimeProgressLayouts.Normalize(_settings.Layout);
@@ -240,33 +254,47 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
             _ => BarsTile(compact)
         });
 
-        _panelVisual.Children.Clear();
-        if (layout == TimeProgressLayouts.Bars)
+        RebuildFlyout();
+        if (_side)
         {
-            _panelVisual.Children.Add(_panelBars);
+            _dockBody.Width = double.NaN;
+            _dockBody.MinWidth = 0;
         }
-        else if (layout == TimeProgressLayouts.Ring)
+        else
         {
-            var face = new Grid
-            {
-                Width = FlyoutRing,
-                Height = FlyoutRing,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 16, 0, 4),
-                Children = { _panelRing, _panelRingPercent }
-            };
-            _panelVisual.Children.Add(face);
+            _dockBody.Width = compact ? double.NaN : ExpandedWidth;
+            _dockBody.MinWidth = compact ? 0 : ExpandedWidth;
         }
-
-        _dockBody.Width = compact ? double.NaN : ExpandedWidth;
-        _dockBody.MinWidth = compact ? 0 : ExpandedWidth;
         WidgetChrome.ApplyTheme(_tile, _isLight);
+        _dockBody.InvalidateMeasure();
         _tile.InvalidateMeasure();
+        _root?.InvalidateMeasure();
         InvalidateMeasure();
     }
 
     private UIElement BarsTile(bool compact)
     {
+        if (_side)
+        {
+            var inner = DockTokens.SideTileWidth - 12;
+            _dockBars.Width = inner;
+            _dockBars.Height = 8;
+            _dockBars.BarCount = 24;
+            _dockBars.Margin = new Thickness(0, 4, 0, 0);
+            _dockPercent.FontSize = 15;
+            ResetCaption(HorizontalAlignment.Center);
+            _dockCaption.TextAlignment = TextAlignment.Center;
+            _dockPercent.HorizontalAlignment = HorizontalAlignment.Center;
+            _dockPercent.TextAlignment = TextAlignment.Center;
+            return new StackPanel
+            {
+                Width = inner,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Children = { _dockCaption, _dockPercent, _dockBars }
+            };
+        }
+
         _dockBars.Width = compact ? 88 : ExpandedWidth;
         _dockBars.Height = compact ? 9 : 11;
         _dockBars.BarCount = compact ? 22 : 36;
@@ -290,6 +318,21 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
 
     private UIElement PercentTile(bool compact)
     {
+        if (_side)
+        {
+            _dockPercent.FontSize = 18;
+            ResetCaption(HorizontalAlignment.Center);
+            _dockCaption.TextAlignment = TextAlignment.Center;
+            _dockPercent.HorizontalAlignment = HorizontalAlignment.Center;
+            _dockPercent.TextAlignment = TextAlignment.Center;
+            return new StackPanel
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Children = { _dockPercent, _dockCaption }
+            };
+        }
+
         _dockPercent.FontSize = compact ? 18 : 16;
         ResetCaption(compact ? HorizontalAlignment.Center : HorizontalAlignment.Left);
         if (compact)
@@ -310,6 +353,32 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
 
     private UIElement RingTile(bool compact)
     {
+        if (_side)
+        {
+            _dockRing.Width = DockRing;
+            _dockRing.Height = DockRing;
+            var ringFace = new Grid
+            {
+                Width = DockRing,
+                Height = DockRing,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Children = { _dockRing }
+            };
+            ResetCaption(HorizontalAlignment.Center);
+            _dockCaption.Margin = new Thickness(0, 1, 0, 0);
+            _dockCaption.TextAlignment = TextAlignment.Center;
+            _dockPercent.FontSize = 15;
+            _dockPercent.HorizontalAlignment = HorizontalAlignment.Center;
+            _dockPercent.TextAlignment = TextAlignment.Center;
+            _dockPercent.Margin = new Thickness(0, 2, 0, 0);
+            return new StackPanel
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Children = { ringFace, _dockPercent, _dockCaption }
+            };
+        }
+
         var size = compact ? 16 : DockRing;
         _dockRing.Width = size;
         _dockRing.Height = size;
@@ -388,15 +457,84 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
         _dockCaption.Text = caption;
         _dockPercent.Text = percent;
         _ringPercent.Text = percent;
-        _panelCaption.Text = caption;
-        _panelPercent.Text = percent;
-        _panelRingPercent.Text = percent;
         _dockBars.Progress = fraction;
-        _panelBars.Progress = fraction;
         _dockRing.Progress = fraction;
-        _panelRing.Progress = fraction;
-        _panelBars.Width = 288;
-        _panelBars.BarCount = 52;
+        foreach (var face in _faces)
+        {
+            var part = TimeProgressFormat.Fraction(now, face.Period);
+            var label = TimeProgressFormat.PercentLabel(now, face.Period);
+            face.Caption.Text = TimeProgressFormat.Caption(now, face.Period);
+            face.Percent.Text = label;
+            face.RingPercent.Text = label;
+            face.Bars.Progress = part;
+            face.Ring.Progress = part;
+            face.Bars.Width = 288;
+            face.Bars.BarCount = 40;
+        }
+    }
+
+    private void RebuildFlyout()
+    {
+        var layout = TimeProgressLayouts.Normalize(_settings.Layout);
+        foreach (var face in _faces)
+        {
+            Release(face.Caption);
+            Release(face.Percent);
+            Release(face.Bars);
+            Release(face.Ring);
+            Release(face.RingPercent);
+            face.Root.Children.Clear();
+            face.Caption.Margin = new Thickness(0);
+            face.Caption.FontSize = 15;
+            face.Percent.FontSize = layout == TimeProgressLayouts.Percentage ? 22 : 15;
+            face.Percent.FontWeight = FontWeights.SemiBold;
+            if (layout == TimeProgressLayouts.Ring)
+            {
+                face.Ring.Width = FlyoutRing;
+                face.Ring.Height = FlyoutRing;
+                face.RingPercent.FontSize = 13;
+                face.RingPercent.FontWeight = FontWeights.SemiBold;
+                var ring = new Grid
+                {
+                    Width = FlyoutRing,
+                    Height = FlyoutRing,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Children = { face.Ring, face.RingPercent }
+                };
+                face.Caption.Margin = new Thickness(14, 0, 0, 0);
+                face.Caption.VerticalAlignment = VerticalAlignment.Center;
+                face.Root.Children.Add(new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Children = { ring, face.Caption }
+                });
+                continue;
+            }
+
+            face.Root.Children.Add(PeriodHeader(face));
+            if (layout == TimeProgressLayouts.Bars)
+            {
+                face.Bars.Height = 14;
+                face.Bars.Margin = new Thickness(0, 8, 0, 0);
+                face.Root.Children.Add(face.Bars);
+            }
+        }
+    }
+
+    private static Grid PeriodHeader(PeriodFace face)
+    {
+        face.Caption.HorizontalAlignment = HorizontalAlignment.Left;
+        face.Caption.VerticalAlignment = VerticalAlignment.Center;
+        face.Percent.HorizontalAlignment = HorizontalAlignment.Right;
+        face.Percent.VerticalAlignment = VerticalAlignment.Center;
+        var header = new Grid();
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        header.Children.Add(face.Caption);
+        Grid.SetColumn(face.Percent, 1);
+        header.Children.Add(face.Percent);
+        return header;
     }
 
     private static void Release(FrameworkElement element)
@@ -421,16 +559,16 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
     private Grid BuildEditor()
     {
         _flyoutTitle = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.TimeProgress));
-        var customize = HeaderGlyph("\uE8FD", OpenCustomize);
-        var close = HeaderGlyph("\u00D7", ClosePopup, 18);
+        var customize = WidgetChrome.HeaderIcon(PhosphorIcon.SlidersHorizontal, OpenCustomize);
+        var close = WidgetChrome.HeaderClose(ClosePopup, 18);
         var header = HeaderRow(_flyoutTitle, customize, close);
-        var names = new Grid { Margin = new Thickness(0, 8, 0, 0) };
-        names.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        names.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        names.Children.Add(_panelCaption);
-        Grid.SetColumn(_panelPercent, 1);
-        names.Children.Add(_panelPercent);
-        var page = new StackPanel { Children = { header, names, _panelVisual } };
+        var periods = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
+        foreach (var face in _faces)
+        {
+            periods.Children.Add(face.Root);
+        }
+
+        var page = new StackPanel { Children = { header, periods } };
         var grid = new Grid();
         grid.Children.Add(page);
         return grid;
@@ -446,7 +584,7 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
             Cursor = Cursors.Hand,
             Children =
             {
-                HeaderGlyph("\uE76B", ShowEditor, 12),
+                WidgetChrome.HeaderIcon(PhosphorIcon.CaretLeft, ShowEditor, 12),
                 _backLabel
             }
         };
@@ -458,7 +596,7 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
         _customizeTitle = HeaderLabel(UiText.Customize);
         _customizeTitle.Margin = new Thickness(8, 0, 0, 0);
         _customizeTitle.FontWeight = FontWeights.SemiBold;
-        var close = HeaderGlyph("\u00D7", ClosePopup, 18);
+        var close = WidgetChrome.HeaderClose(ClosePopup, 18);
         var header = HeaderRow(new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -517,26 +655,24 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
 
     private Border LayoutRow(string layout)
     {
-        var check = new TextBlock
-        {
-            Text = "\uE73E",
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 13,
-            Tag = "tint",
-            Foreground = TokenBrushes.From(Accent),
-            VerticalAlignment = VerticalAlignment.Center,
-            Visibility = Visibility.Collapsed
-        };
-        var glyph = new TextBlock
-        {
-            Text = LayoutGlyph(layout),
-            FontFamily = layout == TimeProgressLayouts.Percentage ? WidgetFonts.Ui : new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 14,
-            Width = 22,
-            TextAlignment = TextAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 10, 0)
-        };
+        var check = WidgetChrome.AccentCheck(Accent);
+        UIElement glyph = layout == TimeProgressLayouts.Percentage
+            ? new TextBlock
+            {
+                Text = "%",
+                FontFamily = WidgetFonts.Ui,
+                FontSize = 14,
+                Width = 22,
+                TextAlignment = TextAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 10, 0)
+            }
+            : new PhosphorGlyph(LayoutGlyph(layout), 14)
+            {
+                Width = 22,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 10, 0)
+            };
         var title = HeaderLabel(TimeProgressFormat.LayoutTitle(layout));
         _layoutTitles[layout] = title;
         var content = new Grid();
@@ -613,9 +749,8 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
 
     private static string LayoutGlyph(string layout) => layout switch
     {
-        TimeProgressLayouts.Percentage => "%",
-        TimeProgressLayouts.Ring => "\uEA3A",
-        _ => "\uE9D2"
+        TimeProgressLayouts.Ring => PhosphorIcon.Circle,
+        _ => PhosphorIcon.ChartBar
     };
 
     private static Grid HeaderRow(UIElement left, params UIElement[] right)
@@ -648,23 +783,35 @@ public sealed class TimeProgressWidget : UserControl, IWidgetOpenable, IWidgetCu
         VerticalAlignment = VerticalAlignment.Center
     };
 
-    private static TextBlock HeaderGlyph(string glyph, Action click, double size = 13)
+    private sealed class PeriodFace
     {
-        var block = new TextBlock
+        public PeriodFace(string period)
         {
-            Text = glyph,
-            FontFamily = glyph == "\u00D7" ? WidgetFonts.Ui : new FontFamily("Segoe MDL2 Assets"),
-            FontSize = size,
-            Opacity = 0.45,
-            Padding = new Thickness(8, 4, 0, 4),
-            Cursor = Cursors.Hand,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        block.MouseLeftButtonUp += (_, e) =>
-        {
-            click();
-            e.Handled = true;
-        };
-        return block;
+            Period = period;
+            Caption.FontSize = 15;
+            Percent.FontSize = 15;
+            Percent.FontWeight = FontWeights.SemiBold;
+            RingPercent.FontSize = 13;
+            RingPercent.FontWeight = FontWeights.SemiBold;
+            RingPercent.HorizontalAlignment = HorizontalAlignment.Center;
+            RingPercent.VerticalAlignment = VerticalAlignment.Center;
+            Bars.Height = 14;
+            Root.Margin = new Thickness(0, 14, 0, 0);
+        }
+
+        public string Period { get; }
+
+        public TextBlock Caption { get; } = WidgetCopy.Primary();
+
+        public TextBlock Percent { get; } = WidgetCopy.Primary();
+
+        public TextBlock RingPercent { get; } = WidgetCopy.Primary();
+
+        public TimeProgressBars Bars { get; } = new();
+
+        public ProgressRing Ring { get; } = new(FlyoutRing) { Clockwise = true };
+
+        public StackPanel Root { get; } = new();
     }
+
 }

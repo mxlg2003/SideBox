@@ -11,7 +11,7 @@ using WinDock.Core;
 
 namespace WinDock.Widgets;
 
-public sealed class AlarmWidget : UserControl, IWidgetOpenable, IAlarmConfigurable, IKeepAliveWhileRunning, IWidgetThemeAware, IIslandLayoutAware, ILocalizable, IWidgetDetachable
+public sealed class AlarmWidget : UserControl, IWidgetOpenable, IAlarmConfigurable, IKeepAliveWhileRunning, IWidgetThemeAware, IIslandLayoutAware, ILocalizable, IWidgetDetachable, IDockEdgeAware
 {
     private const uint Accent = 0xFF0078D4;
     private const double TileGlyph = 16;
@@ -21,8 +21,12 @@ public sealed class AlarmWidget : UserControl, IWidgetOpenable, IAlarmConfigurab
     private readonly TextBlock _tileDay = WidgetCopy.Secondary();
     private readonly TextBlock _tileStatus = WidgetCopy.Secondary();
     private readonly TextBlock _tileRemain = WidgetCopy.Secondary();
-    private readonly AlarmClockGlyph _glyph = new(TileGlyph);
+    private readonly PhosphorGlyph _glyph = new(PhosphorIcon.Alarm, TileGlyph) { Tag = "tint" };
     private readonly StackPanel _headline;
+    private readonly StackPanel _trailing;
+    private readonly StackPanel _dockCopy;
+    private readonly Grid _dock;
+    private bool _side;
     private readonly TextBlock _panelTime = WidgetCopy.Primary();
     private readonly TextBlock _panelStatus = WidgetCopy.Secondary();
     private readonly TextBlock _panelLabel = WidgetCopy.Primary();
@@ -79,7 +83,7 @@ public sealed class AlarmWidget : UserControl, IWidgetOpenable, IAlarmConfigurab
         _primaryLabel.HorizontalAlignment = HorizontalAlignment.Center;
         _primaryLabel.VerticalAlignment = VerticalAlignment.Center;
 
-        var trailing = new StackPanel
+        _trailing = new StackPanel
         {
             Orientation = Orientation.Vertical,
             VerticalAlignment = VerticalAlignment.Center,
@@ -97,27 +101,27 @@ public sealed class AlarmWidget : UserControl, IWidgetOpenable, IAlarmConfigurab
         _tileStatus.HorizontalAlignment = HorizontalAlignment.Left;
         _tileTitle.SizeChanged += (_, _) => SyncTileLabelWidth();
         _tileDay.SizeChanged += (_, _) => SyncTileLabelWidth();
-        var copy = new StackPanel
+        _dockCopy = new StackPanel
         {
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Center,
             Children = { _headline, _tileStatus }
         };
-        var dock = new Grid { VerticalAlignment = VerticalAlignment.Center };
-        dock.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        dock.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        dock.Children.Add(copy);
-        Grid.SetColumn(trailing, 1);
-        dock.Children.Add(trailing);
-        _tile = WidgetChrome.Wrap(dock, 0);
+        _dock = new Grid { VerticalAlignment = VerticalAlignment.Center };
+        _dock.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        _dock.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        _dock.Children.Add(_dockCopy);
+        Grid.SetColumn(_trailing, 1);
+        _dock.Children.Add(_trailing);
+        _tile = WidgetChrome.Wrap(_dock, 0);
 
         _flyoutTitle = HeaderLabel(BuiltInWidgets.DisplayName(BuiltInWidgets.Alarm));
-        var close = HeaderGlyph("\u00D7", ClosePopup, 18);
+        var close = WidgetChrome.HeaderClose(ClosePopup, 18);
         var header = HeaderRow(_flyoutTitle, close);
 
         var timeRow = FormRow(AlarmFormat.Time, TimeChip(), out _timeCaption);
         timeRow.Margin = new Thickness(0, 8, 0, 10);
-        var labelRow = FormRow(AlarmFormat.Label, WidgetChrome.Field(_label, 34), out _labelCaption);
+        var labelRow = FormRow(AlarmFormat.Label, WidgetChrome.Field(_label), out _labelCaption);
         labelRow.Margin = new Thickness(0, 0, 0, 12);
 
         _primary = ActionButton(_primaryLabel, Accent, Toggle);
@@ -242,6 +246,56 @@ public sealed class AlarmWidget : UserControl, IWidgetOpenable, IAlarmConfigurab
         _timeCaption.Text = AlarmFormat.Time;
         _labelCaption.Text = AlarmFormat.Label;
         Render();
+    }
+
+    public void ApplyDockEdge(DockEdge edge)
+    {
+        _side = WidgetChrome.IsSide(edge);
+        _dock.ColumnDefinitions.Clear();
+        _dock.RowDefinitions.Clear();
+        if (_side)
+        {
+            _dock.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            _dock.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetColumn(_dockCopy, 0);
+            Grid.SetColumn(_trailing, 0);
+            Grid.SetRow(_trailing, 0);
+            Grid.SetRow(_dockCopy, 1);
+            _trailing.Margin = new Thickness(0, 0, 0, 2);
+            _trailing.HorizontalAlignment = HorizontalAlignment.Center;
+            _dockCopy.HorizontalAlignment = HorizontalAlignment.Center;
+            _headline.HorizontalAlignment = HorizontalAlignment.Center;
+            _tileTitle.HorizontalAlignment = HorizontalAlignment.Center;
+            _tileTitle.TextAlignment = TextAlignment.Center;
+            _tileDay.HorizontalAlignment = HorizontalAlignment.Center;
+            _tileStatus.HorizontalAlignment = HorizontalAlignment.Center;
+            _tileStatus.TextAlignment = TextAlignment.Center;
+            _tileRemain.HorizontalAlignment = HorizontalAlignment.Center;
+            _tileRemain.TextAlignment = TextAlignment.Center;
+        }
+        else
+        {
+            _dock.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            _dock.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            Grid.SetRow(_dockCopy, 0);
+            Grid.SetRow(_trailing, 0);
+            Grid.SetColumn(_dockCopy, 0);
+            Grid.SetColumn(_trailing, 1);
+            _trailing.Margin = new Thickness(10, 0, 0, 0);
+            _trailing.HorizontalAlignment = HorizontalAlignment.Right;
+            _dockCopy.HorizontalAlignment = HorizontalAlignment.Left;
+            _headline.HorizontalAlignment = HorizontalAlignment.Left;
+            _tileTitle.HorizontalAlignment = HorizontalAlignment.Left;
+            _tileTitle.TextAlignment = TextAlignment.Left;
+            _tileDay.HorizontalAlignment = HorizontalAlignment.Left;
+            _tileStatus.HorizontalAlignment = HorizontalAlignment.Left;
+            _tileStatus.TextAlignment = TextAlignment.Left;
+            _tileRemain.HorizontalAlignment = HorizontalAlignment.Right;
+            _tileRemain.TextAlignment = TextAlignment.Left;
+        }
+
+        SyncTileLabelWidth();
+        WidgetChrome.FitEdge(_tile, _side, 0);
     }
 
     public void ApplyTheme(bool isLight)
@@ -441,8 +495,8 @@ public sealed class AlarmWidget : UserControl, IWidgetOpenable, IAlarmConfigurab
         {
             _tileTitle.Text = AlarmFormat.IdleTitle;
             _tileDay.Visibility = Visibility.Collapsed;
-            _tileStatus.Text = AlarmFormat.IdleHint;
-            _tileStatus.Visibility = Visibility.Visible;
+            _tileStatus.Text = string.Empty;
+            _tileStatus.Visibility = Visibility.Collapsed;
             SyncTileLabelWidth();
             _tileRemain.Visibility = Visibility.Collapsed;
             _hint.Text = AlarmFormat.When(day, _engine.Settings.Hour, _engine.Settings.Minute);
@@ -473,6 +527,13 @@ public sealed class AlarmWidget : UserControl, IWidgetOpenable, IAlarmConfigurab
             return;
         }
 
+        if (_side)
+        {
+            WidgetCopy.TrimIslandText(_tileStatus, _engine.Settings.Label, DockTokens.SideTileWidth - 16);
+            _tileStatus.TextAlignment = TextAlignment.Center;
+            return;
+        }
+
         var width = HeadlineContentWidth();
         if (width <= 0)
         {
@@ -499,8 +560,8 @@ public sealed class AlarmWidget : UserControl, IWidgetOpenable, IAlarmConfigurab
     private void PaintAccent()
     {
         var ink = _isLight ? DockTokens.Light.Text : DockTokens.Dark.Text;
-        _glyph.Stroke = TokenBrushes.From(_engine.Armed ? DockTokens.Alarm : ink);
-        _glyph.Filled = _engine.Armed;
+        _glyph.Foreground = TokenBrushes.From(_engine.Armed ? DockTokens.Alarm : ink);
+        _glyph.Icon = _engine.Armed ? PhosphorIcon.AlarmFill : PhosphorIcon.Alarm;
         _glyph.Opacity = _engine.Armed ? 1 : 0.72;
         _primaryLabel.Tag = "tint";
         _primaryLabel.Foreground = TokenBrushes.From(_engine.Armed ? ink : DockTokens.Settings.OnAccent);
@@ -626,8 +687,8 @@ public sealed class AlarmWidget : UserControl, IWidgetOpenable, IAlarmConfigurab
         colon.FontSize = 14;
         colon.Margin = new Thickness(0, 0, 0, 1);
         colon.VerticalAlignment = VerticalAlignment.Center;
-        var clock = WidgetChrome.Glyph("\uE823");
-        clock.FontSize = 12;
+        var clock = WidgetChrome.Glyph(PhosphorIcon.Clock);
+        clock.IconSize = 12;
         clock.Opacity = 0.55;
         clock.Margin = new Thickness(8, 0, 2, 0);
         var hours = TimePart(_hours, "hours", 23);
@@ -639,7 +700,7 @@ public sealed class AlarmWidget : UserControl, IWidgetOpenable, IAlarmConfigurab
             HorizontalAlignment = HorizontalAlignment.Right,
             Children = { hours, colon, minutes, clock }
         };
-        var chip = WidgetChrome.Field(row, 34);
+        var chip = WidgetChrome.Field(row);
         chip.Padding = new Thickness(10, 0, 8, 0);
         chip.HorizontalAlignment = HorizontalAlignment.Right;
         chip.MinWidth = 108;
@@ -732,7 +793,7 @@ public sealed class AlarmWidget : UserControl, IWidgetOpenable, IAlarmConfigurab
         var border = new Border
         {
             MinWidth = 88,
-            Height = 34,
+            Height = DockTokens.FlyoutControlHeight,
             CornerRadius = new CornerRadius(DockTokens.IslandCornerRadius),
             Padding = new Thickness(16, 0, 16, 0),
             Background = TokenBrushes.From(fill),
@@ -777,25 +838,6 @@ public sealed class AlarmWidget : UserControl, IWidgetOpenable, IAlarmConfigurab
         VerticalAlignment = VerticalAlignment.Center
     };
 
-    private static TextBlock HeaderGlyph(string glyph, Action click, double size = 13)
-    {
-        var block = new TextBlock
-        {
-            Text = glyph,
-            FontFamily = glyph == "\u00D7" ? WidgetFonts.Ui : new FontFamily("Segoe MDL2 Assets"),
-            FontSize = size,
-            Opacity = 0.45,
-            Padding = new Thickness(8, 4, 0, 4),
-            Cursor = Cursors.Hand,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        block.MouseLeftButtonUp += (_, e) =>
-        {
-            click();
-            e.Handled = true;
-        };
-        return block;
-    }
 
     private static DateTimeOffset Now => DateTimeOffset.UtcNow;
 }

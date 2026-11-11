@@ -69,7 +69,6 @@ public sealed record AlarmSettings
 public static class AlarmFormat
 {
     public static string IdleTitle => UiText.WidgetAlarm;
-    public static string IdleHint => UiLocale.T("点击设定时间", "Click to set time");
     public static string Time => UiLocale.T("时间", "Time");
     public static string Label => UiLocale.T("标签", "Label");
     public static string Set => UiLocale.T("设定闹钟", "Set alarm");
@@ -208,19 +207,31 @@ public sealed class AlarmEngine
 
     public bool Tick(DateTimeOffset now)
     {
-        if (!Settings.Armed || Settings.RingsAt is not DateTimeOffset ringsAt)
+        Settings = Resolve(Settings, now, _zone, out var ring);
+        return ring;
+    }
+
+    public static AlarmSettings Resolve(AlarmSettings settings, DateTimeOffset now, TimeZoneInfo zone, out bool ring)
+    {
+        ring = false;
+        var value = AlarmSettings.Normalize(settings);
+        if (!value.Armed)
         {
-            return false;
+            return value with { RingsAt = null };
+        }
+
+        if (value.RingsAt is not DateTimeOffset ringsAt)
+        {
+            return value with { RingsAt = NextRing(now, value.Hour, value.Minute, zone) };
         }
 
         if (now < ringsAt)
         {
-            return false;
+            return value;
         }
 
-        var overdue = now - ringsAt;
-        Cancel();
-        return overdue <= AlarmSettings.MaxMissed;
+        ring = now - ringsAt <= AlarmSettings.MaxMissed;
+        return AlarmSettings.Normalize(value with { Armed = false, RingsAt = null });
     }
 
     private AlarmSettings WithResolvedRing(AlarmSettings settings, DateTimeOffset now)
