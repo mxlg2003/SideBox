@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release Tag (e.g. v1.0.1)'
+        required: true
+        default: 'v1.0.1'
 
 permissions:
   contents: write
@@ -29,14 +35,24 @@ jobs:
         run: .\pack\publish.ps1
 
       - name: Compile Inno Setup Installer
+        shell: pwsh
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" pack\WinDock.iss
+          $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "${{ inputs.tag }}" }
+          if (-not $tag) { $tag = "v1.0.1" }
+          $rawVer = $tag.TrimStart('v').TrimStart('V')
+          $iscc = if (Get-Command iscc -ErrorAction SilentlyContinue) { "iscc" } `
+                  elseif (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\iscc.exe") { "${env:ProgramFiles(x86)}\Inno Setup 6\iscc.exe" } `
+                  elseif (Test-Path "${env:ProgramFiles}\Inno Setup 6\iscc.exe") { "${env:ProgramFiles}\Inno Setup 6\iscc.exe" } `
+                  else { throw "iscc.exe not found" }
+          Write-Host "Using Inno Setup compiler: $iscc with version $rawVer"
+          & $iscc "/DMyAppVersion=$rawVer" pack\WinDock.iss
 
       - name: Generate Checksums & latest.json
         id: manifest
         shell: pwsh
         run: |
-          $tag = $env:GITHUB_REF_NAME
+          $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "${{ inputs.tag }}" }
+          if (-not $tag) { $tag = "v1.0.1" }
           $rawVer = $tag.TrimStart('v').TrimStart('V')
           $setupPath = "pack\output\SideBox-setup.exe"
           
@@ -66,6 +82,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          name: SideBox ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
           generate_release_notes: true
           files: |
             pack/output/SideBox-setup.exe

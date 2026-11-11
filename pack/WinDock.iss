@@ -1,5 +1,7 @@
 #define MyAppName "SideBox"
+#ifndef MyAppVersion
 #define MyAppVersion "1.0.0"
+#endif
 #define MyAppPublisher "SideBox"
 #define MyAppExeName "SideBox.exe"
 #define MyPublishDir "..\src\WinDock.App\bin\Release\net10.0-windows10.0.22621.0\win-x64\publish"
