@@ -1123,7 +1123,7 @@ public partial class SettingsWindow : Window
     {
         try
         {
-            Process.Start(new ProcessStartInfo("https://github.com") { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(ProductInfo.GitHubRepositoryUrl) { UseShellExecute = true });
         }
         catch (Exception)
         {
