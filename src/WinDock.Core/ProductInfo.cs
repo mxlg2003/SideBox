@@ -18,7 +18,7 @@ public static class ProductInfo
     public const string GitHubLatestReleaseUrl = "https://github.com/mxlg2003/SideBox/releases/latest";
     public const string GitHubLatestJsonUrl = "https://github.com/mxlg2003/SideBox/releases/latest/download/latest.json";
     public const string GitHubLatestApiUrl = "https://api.github.com/repos/mxlg2003/SideBox/releases/latest";
-    public const string DownloadMirrorPrefix = "https://ghfast.top/";
+    public const string DownloadMirrorPrefix = "https://ghproxy.net/";
 
     public static string LocalData(params string[] relative)
     {
