@@ -3,9 +3,148 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    color-scheme: light;
+    --color-paper: #f8fafc;
+    --color-ink: #0f172a;
+    --color-line: #e2e8f0;
+    --color-mute: #64748b;
+
+    --bg-page: #f8fafc;
+    --bg-radial-1: rgba(47, 111, 237, 0.08);
+    --bg-radial-2: rgba(168, 85, 247, 0.05);
+
+    --btn-primary-bg: linear-gradient(135deg, #1b5bf7 0%, #2970ff 45%, #7928ca 100%);
+    --btn-primary-text: #ffffff;
+    --btn-primary-hover: linear-gradient(135deg, #2563eb 0%, #3b82f6 45%, #8b5cf6 100%);
+    --btn-primary-shadow: 0 4px 18px rgba(37, 99, 235, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+
+    --btn-quiet-bg: rgba(0, 0, 0, 0.05);
+    --btn-quiet-text: #0f172a;
+    --btn-quiet-border: rgba(0, 0, 0, 0.08);
+    --btn-quiet-hover: rgba(0, 0, 0, 0.09);
+
+    --btn-line-border: rgba(0, 0, 0, 0.14);
+    --btn-line-text: #0f172a;
+    --btn-line-hover-border: rgba(0, 0, 0, 0.28);
+    --btn-line-hover-bg: rgba(0, 0, 0, 0.03);
+
+    --field-bg: #ffffff;
+    --field-border: rgba(0, 0, 0, 0.12);
+    --field-text: #0f172a;
+
+    --panel-bg: rgba(255, 255, 255, 0.85);
+    --panel-border: rgba(0, 0, 0, 0.08);
+    --panel-shadow: 0 12px 36px rgba(0, 0, 0, 0.06);
+
+    --feature-label-bg: rgba(0, 0, 0, 0.04);
+    --feature-label-border: rgba(0, 0, 0, 0.08);
+    --feature-label-text: #334155;
+
+    --keycap-bg: rgba(0, 0, 0, 0.05);
+    --keycap-border: rgba(0, 0, 0, 0.12);
+    --keycap-text: #1e293b;
+
+    --bento-bg: rgba(255, 255, 255, 0.85);
+    --bento-bg-hover: rgba(255, 255, 255, 0.98);
+    --bento-border: rgba(0, 0, 0, 0.08);
+    --bento-border-hover: rgba(0, 0, 0, 0.18);
+    --bento-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+    --bento-shadow-hover: 0 16px 40px rgba(0, 0, 0, 0.1);
+
+    --float-bg: rgba(255, 255, 255, 0.95);
+    --float-border: rgba(0, 0, 0, 0.08);
+    --float-shadow: 0 20px 48px rgba(0, 0, 0, 0.12);
+
+    --header-bg: rgba(255, 255, 255, 0.82);
+    --header-border: rgba(0, 0, 0, 0.06);
+
+    --footer-bg: #f1f5f9;
+    --footer-border: rgba(0, 0, 0, 0.06);
+
+    /* Island Stage in light mode */
+    --sim-taskbar-bg: rgba(255, 255, 255, 0.76);
+    --sim-taskbar-border: rgba(0, 0, 0, 0.08);
+    --material-mica-bg: rgba(255, 255, 255, 0.88);
+    --material-mica-border: rgba(0, 0, 0, 0.12);
+    --material-frosted-bg: rgba(255, 255, 255, 0.97);
+    --material-frosted-border: rgba(0, 0, 0, 0.08);
+    --material-glass-bg: rgba(255, 255, 255, 0.6);
+    --material-glass-border: rgba(255, 255, 255, 0.85);
+  }
+
+  .dark {
+    color-scheme: dark;
+    --color-paper: #0e0e11;
+    --color-ink: #f5f5f5;
+    --color-line: #232328;
+    --color-mute: #94949e;
+
+    --bg-page: #0c0c0f;
+    --bg-radial-1: rgba(47, 111, 237, 0.15);
+    --bg-radial-2: rgba(168, 85, 247, 0.08);
+
+    --btn-primary-bg: #f5f5f5;
+    --btn-primary-text: #0e0e11;
+    --btn-primary-hover: #ffffff;
+    --btn-primary-shadow: 0 4px 16px rgba(255, 255, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+
+    --btn-quiet-bg: rgba(255, 255, 255, 0.08);
+    --btn-quiet-text: #f5f5f5;
+    --btn-quiet-border: rgba(255, 255, 255, 0.1);
+    --btn-quiet-hover: rgba(255, 255, 255, 0.14);
+
+    --btn-line-border: rgba(255, 255, 255, 0.16);
+    --btn-line-text: #f5f5f5;
+    --btn-line-hover-border: rgba(255, 255, 255, 0.32);
+    --btn-line-hover-bg: rgba(255, 255, 255, 0.04);
+
+    --field-bg: #16161c;
+    --field-border: rgba(255, 255, 255, 0.1);
+    --field-text: #f5f5f5;
+
+    --panel-bg: rgba(22, 22, 28, 0.7);
+    --panel-border: rgba(255, 255, 255, 0.08);
+    --panel-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+
+    --feature-label-bg: rgba(255, 255, 255, 0.04);
+    --feature-label-border: rgba(255, 255, 255, 0.1);
+    --feature-label-text: rgba(255, 255, 255, 0.8);
+
+    --keycap-bg: rgba(255, 255, 255, 0.1);
+    --keycap-border: rgba(255, 255, 255, 0.18);
+    --keycap-text: #e5e5e5;
+
+    --bento-bg: rgba(20, 20, 26, 0.8);
+    --bento-bg-hover: rgba(24, 24, 32, 0.9);
+    --bento-border: rgba(255, 255, 255, 0.08);
+    --bento-border-hover: rgba(255, 255, 255, 0.2);
+    --bento-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    --bento-shadow-hover: 0 16px 40px rgba(0, 0, 0, 0.45);
+
+    --float-bg: rgba(24, 24, 30, 0.92);
+    --float-border: rgba(255, 255, 255, 0.1);
+    --float-shadow: 0 20px 48px rgba(0, 0, 0, 0.45);
+
+    --header-bg: rgba(12, 12, 15, 0.8);
+    --header-border: rgba(255, 255, 255, 0.06);
+
+    --footer-bg: #09090c;
+    --footer-border: rgba(255, 255, 255, 0.08);
+
+    /* Island Stage in dark mode */
+    --sim-taskbar-bg: rgba(18, 20, 29, 0.68);
+    --sim-taskbar-border: rgba(255, 255, 255, 0.08);
+    --material-mica-bg: rgba(30, 32, 44, 0.85);
+    --material-mica-border: rgba(255, 255, 255, 0.16);
+    --material-frosted-bg: rgba(22, 23, 30, 0.98);
+    --material-frosted-border: rgba(255, 255, 255, 0.1);
+    --material-glass-bg: rgba(36, 40, 60, 0.45);
+    --material-glass-border: rgba(255, 255, 255, 0.28);
+  }
+
   html {
     scroll-behavior: smooth;
-    color-scheme: dark;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -16,15 +155,16 @@
 
   body {
     margin: 0;
-    background-color: #0c0c0f;
+    background-color: var(--bg-page);
     background-image: 
-      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(47, 111, 237, 0.15), transparent 70%),
-      radial-gradient(ellipse 60% 30% at 50% 100%, rgba(168, 85, 247, 0.08), transparent 70%);
+      radial-gradient(ellipse 80% 50% at 50% -20%, var(--bg-radial-1), transparent 70%),
+      radial-gradient(ellipse 60% 30% at 50% 100%, var(--bg-radial-2), transparent 70%);
     background-attachment: fixed;
-    color: #f5f5f5;
+    color: var(--color-ink);
     font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
     text-rendering: optimizeLegibility;
     overflow-x: hidden;
+    transition: background-color 0.25s ease, color 0.25s ease;
   }
 
   ::selection {
@@ -39,13 +179,13 @@
   }
 
   .display {
-    font-family: Newsreader, "Noto Serif SC", "Songti SC", Georgia, serif;
-    font-weight: 500;
-    letter-spacing: -0.01em;
+    font-family: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.025em;
   }
 
   .btn {
-    @apply inline-flex h-10 items-center justify-center rounded-xl px-4 text-sm font-medium transition-all duration-200;
+    @apply inline-flex h-10 items-center justify-center rounded-xl px-4 text-sm font-medium transition-all duration-200 select-none;
   }
 
   .btn:disabled {
@@ -53,15 +193,15 @@
   }
 
   .btn-primary {
-    background: #f5f5f5;
-    color: #0e0e11;
-    box-shadow: 0 4px 16px rgba(255, 255, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-text) !important;
+    box-shadow: var(--btn-primary-shadow);
   }
 
   .btn-primary:hover {
-    background: #ffffff;
-    box-shadow: 0 6px 22px rgba(255, 255, 255, 0.22), inset 0 1px 0 rgba(255, 255, 255, 1);
+    background: var(--btn-primary-hover);
     transform: translateY(-1px);
+    box-shadow: 0 6px 24px rgba(37, 99, 235, 0.45);
   }
 
   .btn-primary:active {
@@ -69,29 +209,31 @@
   }
 
   .btn-quiet {
-    background: rgba(255, 255, 255, 0.08);
-    color: #f5f5f5;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--btn-quiet-bg);
+    color: var(--btn-quiet-text);
+    border: 1px solid var(--btn-quiet-border);
     backdrop-filter: blur(8px);
   }
 
   .btn-quiet:hover {
-    background: rgba(255, 255, 255, 0.14);
-    border-color: rgba(255, 255, 255, 0.2);
+    background: var(--btn-quiet-hover);
   }
 
   .btn-line {
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    color: #f5f5f5;
+    border: 1px solid var(--btn-line-border);
+    color: var(--btn-line-text);
   }
 
   .btn-line:hover {
-    border-color: rgba(255, 255, 255, 0.32);
-    background: rgba(255, 255, 255, 0.04);
+    border-color: var(--btn-line-hover-border);
+    background: var(--btn-line-hover-bg);
   }
 
   .field {
-    @apply h-11 w-full rounded-xl border border-white/10 bg-[#16161c] px-3 text-sm text-ink outline-none transition-colors;
+    @apply h-11 w-full rounded-xl px-3 text-sm outline-none transition-colors;
+    background: var(--field-bg);
+    border: 1px solid var(--field-border);
+    color: var(--field-text);
   }
 
   .field:focus {
@@ -101,26 +243,40 @@
   }
 
   .link {
+    color: #2f6fed;
+  }
+
+  .dark .link {
     color: #79a6fe;
   }
 
   .link:hover {
-    color: #9ec1ff;
     text-decoration: underline;
     text-underline-offset: 4px;
   }
 
   .panel {
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--panel-border);
     border-radius: 24px;
-    background: rgba(22, 22, 28, 0.7);
+    background: var(--panel-bg);
     backdrop-filter: blur(20px);
-    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--panel-shadow);
   }
 
   /* Editorial Feature Label (like dockset.app) */
   .feature-label {
-    @apply inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1 text-xs font-medium tracking-wide text-white/80 backdrop-blur-md;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    border: 1px solid var(--feature-label-border);
+    background: var(--feature-label-bg);
+    padding: 0.25rem 0.875rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.025em;
+    color: var(--feature-label-text);
+    backdrop-filter: blur(12px);
   }
 
   .keycap {
@@ -131,25 +287,33 @@
     height: 20px;
     padding: 0 5px;
     border-radius: 5px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+    background: var(--keycap-bg);
+    border: 1px solid var(--keycap-border);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.1);
     font-size: 11px;
     font-weight: 600;
     font-family: inherit;
-    color: #e5e5e5;
+    color: var(--keycap-text);
   }
 
   /* Bento Card with fine hairline border */
   .bento-card {
-    @apply relative overflow-hidden rounded-3xl border border-white/[0.08] bg-[#14141a]/80 p-6 backdrop-blur-xl transition-all duration-300;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    position: relative;
+    overflow: hidden;
+    border-radius: 1.5rem;
+    border: 1px solid var(--bento-border);
+    background: var(--bento-bg);
+    padding: 1.5rem;
+    backdrop-filter: blur(20px);
+    box-shadow: var(--bento-shadow);
+    transition: all 0.3s ease;
   }
 
   .bento-card:hover {
-    @apply border-white/20 bg-[#181820]/90;
+    border-color: var(--bento-border-hover);
+    background: var(--bento-bg-hover);
     transform: translateY(-2px);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+    box-shadow: var(--bento-shadow-hover);
   }
 }
 
@@ -160,11 +324,11 @@
 
 /* Float card in hero */
 .float-card {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--float-border);
   border-radius: 18px;
-  background: rgba(24, 24, 30, 0.92);
+  background: var(--float-bg);
   backdrop-filter: blur(16px);
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--float-shadow);
 }
 
 .float-card.note {
@@ -179,7 +343,7 @@
   aspect-ratio: 16 / 9.8;
   overflow: hidden;
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--bento-border);
   box-shadow: 0 25px 70px -10px rgba(0, 0, 0, 0.7);
   background-color: #0b111e;
   background-image: 
@@ -187,6 +351,17 @@
     radial-gradient(at 85% 15%, rgba(168, 85, 247, 0.32) 0px, transparent 50%),
     radial-gradient(at 50% 65%, rgba(47, 111, 237, 0.35) 0px, transparent 65%),
     linear-gradient(135deg, #0e1526 0%, #151a2e 50%, #0d121f 100%);
+  transition: all 0.4s ease;
+}
+
+.desk-simulator.desk-light {
+  background-color: #eaf1fb;
+  background-image: 
+    radial-gradient(at 10% 20%, rgba(147, 197, 253, 0.55) 0px, transparent 55%),
+    radial-gradient(at 85% 15%, rgba(216, 180, 254, 0.45) 0px, transparent 50%),
+    radial-gradient(at 50% 65%, rgba(96, 165, 250, 0.4) 0px, transparent 65%),
+    linear-gradient(135deg, #edf3fc 0%, #dce8fa 50%, #e6effc 100%);
+  box-shadow: 0 20px 60px -10px rgba(30, 58, 138, 0.12);
 }
 
 @media (max-width: 640px) {
@@ -206,10 +381,11 @@
   align-items: center;
   justify-content: center;
   padding: 0 16px;
-  background: rgba(18, 20, 29, 0.68);
+  background: var(--sim-taskbar-bg);
   backdrop-filter: blur(24px);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--sim-taskbar-border);
   z-index: 20;
+  transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 /* Sidebox Island in simulator */
@@ -222,26 +398,34 @@
   border-radius: 12px;
   z-index: 30;
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.25);
+}
+
+.dark .sim-island {
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
 }
 
 /* Materials for Island */
 .material-mica {
-  background: rgba(30, 32, 44, 0.85);
+  background: var(--material-mica-bg);
   backdrop-filter: blur(28px);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--material-mica-border);
 }
 
 .material-frosted {
-  background: rgba(22, 23, 30, 0.98);
+  background: var(--material-frosted-bg);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--material-frosted-border);
 }
 
 .material-glass {
-  background: rgba(36, 40, 60, 0.45);
+  background: var(--material-glass-bg);
   backdrop-filter: blur(36px);
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  border: 1px solid var(--material-glass-border);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.dark .material-glass {
   box-shadow: 0 14px 38px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
@@ -254,7 +438,9 @@
 }
 
 .pos-top.is-hidden {
-  top: -46px;
+  transform: translate(-50%, -130%);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .pos-left {
@@ -262,10 +448,13 @@
   left: 12px;
   transform: translateY(-50%);
   flex-direction: column;
+  width: 116px;
 }
 
 .pos-left.is-hidden {
-  left: -46px;
+  transform: translate(-130%, -50%);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .pos-right {
@@ -273,8 +462,63 @@
   right: 12px;
   transform: translateY(-50%);
   flex-direction: column;
+  width: 116px;
 }
 
 .pos-right.is-hidden {
-  right: -46px;
+  transform: translate(130%, -50%);
+  opacity: 0;
+  pointer-events: none;
 }
+
+/* Light mode adaptation for Widget Gallery Wall (#modules) */
+:root:not(.dark) #modules .text-white:not([class*="from-"]):not([class*="bg-blue"]):not([class*="bg-accent"]):not(.btn-primary) {
+  color: #0f172a;
+}
+
+:root:not(.dark) #modules [class*="from-"],
+:root:not(.dark) #modules [class*="from-"] *,
+:root:not(.dark) #modules .btn-primary,
+:root:not(.dark) #modules .btn-primary * {
+  color: #ffffff !important;
+}
+
+:root:not(.dark) #modules .text-white\/90 {
+  color: #1e293b;
+}
+
+:root:not(.dark) #modules .text-white\/80 {
+  color: #334155;
+}
+
+:root:not(.dark) #modules .text-white\/70 {
+  color: #475569;
+}
+
+:root:not(.dark) #modules .text-white\/60,
+:root:not(.dark) #modules .text-white\/50,
+:root:not(.dark) #modules .text-white\/40,
+:root:not(.dark) #modules .text-white\/30 {
+  color: #64748b;
+}
+
+:root:not(.dark) #modules .bg-\[\#16161c\]\/90 {
+  background-color: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+}
+
+:root:not(.dark) #modules .border-white\/10,
+:root:not(.dark) #modules .border-white\/5 {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+:root:not(.dark) #modules .bg-white\/10,
+:root:not(.dark) #modules .bg-white\/8,
+:root:not(.dark) #modules .bg-white\/5 {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+:root:not(.dark) #modules .hover\:border-white\/30:hover {
+  border-color: rgba(0, 0, 0, 0.2);
+}
+

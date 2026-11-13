@@ -1,13 +1,14 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: "class",
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        ink: "#f5f5f5",
-        paper: "#0e0e11",
-        line: "#232328",
-        mute: "#94949e",
+        ink: "var(--color-ink, #f5f5f5)",
+        paper: "var(--color-paper, #0e0e11)",
+        line: "var(--color-line, #232328)",
+        mute: "var(--color-mute, #94949e)",
         accent: {
           blue: "#2f6fed",
           cyan: "#38bdf8",
@@ -18,13 +19,18 @@ export default {
       },
       fontFamily: {
         sans: [
+          "Segoe UI Variable Display",
+          "Segoe UI Variable Text",
           "Segoe UI Variable",
           "Segoe UI",
-          "Microsoft YaHei UI",
+          "-apple-system",
+          "BlinkMacSystemFont",
           "PingFang SC",
+          "Hiragino Sans GB",
+          "Microsoft YaHei UI",
+          "Microsoft YaHei",
           "sans-serif",
         ],
-        serif: ["Newsreader", "Noto Serif SC", "Songti SC", "Georgia", "serif"],
       },
       maxWidth: {
         page: "1140px",

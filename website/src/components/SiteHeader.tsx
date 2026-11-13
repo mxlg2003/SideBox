@@ -1,8 +1,10 @@
 import { Link, NavLink } from "react-router-dom";
 import { useI18n } from "@/lib/i18n";
+import { useTheme } from "@/lib/theme";
 
 export function SiteHeader() {
   const { lang, toggleLang, t, l } = useI18n();
+  const { theme, toggleTheme } = useTheme();
 
   const links = [
     { to: "/#product", label: t.header.product },
@@ -13,26 +15,30 @@ export function SiteHeader() {
   ];
 
   return (
-    <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0c0c0f]/80 backdrop-blur-xl transition-all">
+    <header className="sticky top-0 z-40 border-b border-slate-200/80 dark:border-white/[0.06] bg-white/80 dark:bg-[#0c0c0f]/80 backdrop-blur-xl transition-colors duration-200">
       <div className="page flex h-16 items-center justify-between">
         {/* Brand */}
-        <Link to={l("/")} className="flex items-center gap-2.5 text-sm font-semibold tracking-tight text-white group">
+        <Link to={l("/")} className="flex items-center gap-2.5 text-sm font-semibold tracking-tight text-slate-900 dark:text-white group">
           <img src="/logo.png" alt="SideBox" className="h-7 w-7 rounded-lg object-contain shadow-sm" />
-          <span className="group-hover:text-white/90">SideBox</span>
+          <span className="group-hover:text-slate-700 dark:group-hover:text-white/90 transition-colors">SideBox</span>
         </Link>
 
         {/* Center Nav */}
-        <nav className="hidden md:flex items-center gap-6 text-sm text-mute">
+        <nav className="hidden md:flex items-center gap-6 text-sm text-slate-600 dark:text-mute">
           {links.map((link) =>
             link.to.includes("#") ? (
-              <Link key={link.to} to={l(link.to)} className="transition-colors hover:text-white">
+              <Link key={link.to} to={l(link.to)} className="transition-colors hover:text-slate-900 dark:hover:text-white">
                 {link.label}
               </Link>
             ) : (
               <NavLink
                 key={link.to}
                 to={l(link.to)}
-                className={({ isActive }) => (isActive ? "text-white font-medium" : "transition-colors hover:text-white")}
+                className={({ isActive }) =>
+                  isActive
+                    ? "text-slate-900 dark:text-white font-medium"
+                    : "transition-colors hover:text-slate-900 dark:hover:text-white"
+                }
               >
                 {link.label}
               </NavLink>
@@ -42,11 +48,36 @@ export function SiteHeader() {
 
         {/* Right Action buttons */}
         <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Theme Switcher Pill */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.04] px-2.5 py-1.5 text-xs text-slate-700 dark:text-white/80 hover:bg-black/[0.06] dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white transition-colors select-none"
+            title={`${theme === "system" ? t.header.themeSystem : theme === "light" ? t.header.themeLight : t.header.themeDark}`}
+          >
+            <span className="text-xs">
+              {theme === "system" ? "🖥️" : theme === "light" ? "☀️" : "🌙"}
+            </span>
+            <span className="font-medium text-[11px]">
+              {theme === "system"
+                ? lang === "zh"
+                  ? "系统"
+                  : "Auto"
+                : theme === "light"
+                ? lang === "zh"
+                  ? "浅色"
+                  : "Light"
+                : lang === "zh"
+                ? "深色"
+                : "Dark"}
+            </span>
+          </button>
+
           {/* Language Switcher Pill */}
           <button
             type="button"
             onClick={toggleLang}
-            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.04] px-2.5 py-1.5 text-xs text-slate-700 dark:text-white/80 hover:bg-black/[0.06] dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white transition-colors"
             title={lang === "zh" ? "Switch to English" : "切换为中文"}
           >
             <span className="text-xs">🌐</span>

@@ -1,11 +1,12 @@
 import { useEffect } from "react";
 import { Route, Routes, useLocation, Link, Navigate } from "react-router-dom";
+import { CookieConsent } from "@/components/CookieConsent";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { DownloadPage } from "@/pages/DownloadPage";
 import { HomePage } from "@/pages/HomePage";
-import { PricingPage } from "@/pages/PricingPage";
 import { I18nProvider, useI18n } from "@/lib/i18n";
+import { ThemeProvider } from "@/lib/theme";
 
 function RedirectToDownload() {
   const { l } = useI18n();
@@ -41,32 +42,35 @@ function NotFound() {
 
 export default function App() {
   return (
-    <I18nProvider>
-      <div className="flex min-h-screen flex-col">
-        <ScrollManager />
-        <SiteHeader />
-        <main className="flex-1">
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/pricing" element={<PricingPage />} />
-            <Route path="/buy" element={<RedirectToDownload />} />
-            <Route path="/pay/:orderId" element={<RedirectToDownload />} />
-            <Route path="/addon" element={<RedirectToDownload />} />
-            <Route path="/download" element={<DownloadPage />} />
+    <ThemeProvider>
+      <I18nProvider>
+        <div className="flex min-h-screen flex-col">
+          <ScrollManager />
+          <SiteHeader />
+          <main className="flex-1">
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/pricing" element={<RedirectToDownload />} />
+              <Route path="/buy" element={<RedirectToDownload />} />
+              <Route path="/pay/:orderId" element={<RedirectToDownload />} />
+              <Route path="/addon" element={<RedirectToDownload />} />
+              <Route path="/download" element={<DownloadPage />} />
 
-            {/* Localized routes */}
-            <Route path="/en" element={<HomePage />} />
-            <Route path="/en/pricing" element={<PricingPage />} />
-            <Route path="/en/buy" element={<RedirectToDownload />} />
-            <Route path="/en/pay/:orderId" element={<RedirectToDownload />} />
-            <Route path="/en/addon" element={<RedirectToDownload />} />
-            <Route path="/en/download" element={<DownloadPage />} />
+              {/* Localized routes */}
+              <Route path="/en" element={<HomePage />} />
+              <Route path="/en/pricing" element={<RedirectToDownload />} />
+              <Route path="/en/buy" element={<RedirectToDownload />} />
+              <Route path="/en/pay/:orderId" element={<RedirectToDownload />} />
+              <Route path="/en/addon" element={<RedirectToDownload />} />
+              <Route path="/en/download" element={<DownloadPage />} />
 
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </main>
-        <SiteFooter />
-      </div>
-    </I18nProvider>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </main>
+          <SiteFooter />
+          <CookieConsent />
+        </div>
+      </I18nProvider>
+    </ThemeProvider>
   );
 }

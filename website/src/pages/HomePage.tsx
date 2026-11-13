@@ -25,7 +25,7 @@ export function HomePage() {
           </div>
 
           {/* Headline */}
-          <h1 className="display mx-auto mt-6 max-w-4xl text-5xl leading-[1.12] sm:text-6xl lg:text-7xl font-normal tracking-tight text-white">
+          <h1 className="display mx-auto mt-6 max-w-4xl text-5xl leading-[1.12] sm:text-6xl lg:text-7xl font-bold tracking-tight text-slate-900 dark:text-white">
             {t.hero.titleLine1}
             <br />
             {t.hero.titleLine2}
@@ -47,7 +47,7 @@ export function HomePage() {
           </div>
 
           {/* Trust Guarantees */}
-          <p className="mt-4 text-xs text-white/50">{t.hero.guarantee}</p>
+          <p className="mt-4 text-xs text-slate-500 dark:text-white/50">{t.hero.guarantee}</p>
 
           {/* Interactive Desktop Simulator (The Core Hero Stage) */}
           <div id="product" className="mt-14 sm:mt-16 scroll-mt-20">
@@ -57,7 +57,7 @@ export function HomePage() {
       </section>
 
       {/* Dual Value Proposition Section (Coexistence with Windows) */}
-      <section className="py-20 border-t border-white/5">
+      <section className="py-20 border-t border-slate-200/80 dark:border-white/5">
         <div className="page">
           <div className="mx-auto max-w-2xl text-center mb-14">
             <span className="feature-label">
@@ -72,24 +72,24 @@ export function HomePage() {
             {/* Card 1: 屏幕边缘的 SideBox */}
             <article className="bento-card group flex flex-col justify-between">
               <div>
-                <div className="mb-6 flex h-48 items-center justify-center rounded-2xl border border-white/5 bg-black/40 p-6 overflow-hidden relative">
-                  <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-3 shadow-xl backdrop-blur-md group-hover:scale-105 transition-transform duration-300">
+                <div className="mb-6 flex h-48 items-center justify-center rounded-2xl border border-slate-200/80 dark:border-white/5 bg-slate-100/80 dark:bg-black/40 p-6 overflow-hidden relative">
+                  <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-white/15 bg-white/80 dark:bg-white/10 px-4 py-3 shadow-md dark:shadow-xl backdrop-blur-md group-hover:scale-105 transition-transform duration-300">
                     <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                    <span className="text-sm font-medium text-white">Edge</span>
-                    <span className="text-white/30">|</span>
-                    <span className="text-sm font-medium text-white">VS Code</span>
-                    <span className="text-white/30">|</span>
+                    <span className="text-sm font-medium text-slate-900 dark:text-white">Edge</span>
+                    <span className="text-slate-400 dark:text-white/30">|</span>
+                    <span className="text-sm font-medium text-slate-900 dark:text-white">VS Code</span>
+                    <span className="text-slate-400 dark:text-white/30">|</span>
                     <span className="rounded bg-[#f6e27a] px-2 py-0.5 text-xs text-[#1c1b19] font-medium">
                       {lang === "en" ? "Note" : "便笺"}
                     </span>
-                    <span className="text-white/30">|</span>
-                    <span className="text-xs text-white/80 font-mono">25:00</span>
+                    <span className="text-slate-400 dark:text-white/30">|</span>
+                    <span className="text-xs text-slate-700 dark:text-white/80 font-mono">25:00</span>
                   </div>
                 </div>
                 <span className="text-xs font-semibold uppercase tracking-wider text-accent-blue">
                   {t.values.card1Label}
                 </span>
-                <h3 className="mt-2 text-2xl font-semibold text-white">{t.values.card1Title}</h3>
+                <h3 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{t.values.card1Title}</h3>
                 <p className="mt-3 text-sm leading-7 text-mute">{t.values.card1Desc}</p>
               </div>
             </article>
@@ -97,23 +97,23 @@ export function HomePage() {
             {/* Card 2: 保持熟悉的原生任务栏 */}
             <article className="bento-card group flex flex-col justify-between">
               <div>
-                <div className="mb-6 flex h-48 items-center justify-center rounded-2xl border border-white/5 bg-black/40 p-6 overflow-hidden relative">
-                  <div className="w-full max-w-xs rounded-xl border border-white/10 bg-[#161824]/90 p-3 shadow-xl flex items-center justify-between group-hover:scale-105 transition-transform duration-300">
+                <div className="mb-6 flex h-48 items-center justify-center rounded-2xl border border-slate-200/80 dark:border-white/5 bg-slate-100/80 dark:bg-black/40 p-6 overflow-hidden relative">
+                  <div className="w-full max-w-xs rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-[#161824]/90 p-3 shadow-md dark:shadow-xl flex items-center justify-between group-hover:scale-105 transition-transform duration-300">
                     <div className="flex items-center gap-2">
                       <span className="h-4 w-4 rounded-sm bg-sky-500" />
-                      <span className="text-xs text-white/80 font-medium">
+                      <span className="text-xs text-slate-800 dark:text-white/80 font-medium">
                         {lang === "en" ? "Windows Taskbar" : "Windows 任务栏"}
                       </span>
                     </div>
-                    <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-300">
+                    <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-600 dark:text-emerald-300 font-medium">
                       {t.values.taskbarBadge}
                     </span>
                   </div>
                 </div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
+                <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                   {t.values.card2Label}
                 </span>
-                <h3 className="mt-2 text-2xl font-semibold text-white">{t.values.card2Title}</h3>
+                <h3 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{t.values.card2Title}</h3>
                 <p className="mt-3 text-sm leading-7 text-mute">{t.values.card2Desc}</p>
               </div>
             </article>
@@ -122,7 +122,7 @@ export function HomePage() {
       </section>
 
       {/* 3-Row Widget Wall Marquee */}
-      <section id="modules" className="scroll-mt-20 py-20 border-t border-white/5 overflow-hidden">
+      <section id="modules" className="scroll-mt-20 py-20 border-t border-slate-200/80 dark:border-white/5 overflow-hidden">
         <div className="page text-center">
           <span className="feature-label">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
@@ -147,7 +147,7 @@ export function HomePage() {
       <Testimonials />
 
       {/* FAQ Section */}
-      <section id="faq" className="scroll-mt-20 py-20 border-t border-white/5">
+      <section id="faq" className="scroll-mt-20 py-20 border-t border-slate-200/80 dark:border-white/5">
         <div className="page grid items-start gap-12 lg:grid-cols-[0.8fr_1.2fr]">
           <div>
             <span className="feature-label">
@@ -171,9 +171,9 @@ export function HomePage() {
       </section>
 
       {/* Final Call to Action (Download CTA) */}
-      <section id="download-cta" className="scroll-mt-20 py-24 border-t border-white/5">
+      <section id="download-cta" className="scroll-mt-20 py-24 border-t border-slate-200/80 dark:border-white/5">
         <div className="page">
-          <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-[#181924] to-[#101017] p-8 sm:p-14 text-center shadow-2xl relative overflow-hidden">
+          <div className="rounded-3xl border border-slate-200 dark:border-white/10 bg-gradient-to-b from-slate-100 to-white dark:from-[#181924] dark:to-[#101017] p-8 sm:p-14 text-center shadow-xl dark:shadow-2xl relative overflow-hidden">
             {/* Ambient background glow */}
             <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 h-64 w-96 rounded-full bg-accent-blue/15 blur-3xl" />
 
@@ -182,7 +182,7 @@ export function HomePage() {
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                 {t.pricingSection.badge}
               </span>
-              <h2 className="display mt-4 text-4xl sm:text-6xl text-white">
+              <h2 className="display mt-4 text-4xl sm:text-6xl text-slate-900 dark:text-white">
                 {t.pricingSection.title}
               </h2>
               <p className="mx-auto mt-4 max-w-md text-base text-mute">
@@ -198,7 +198,7 @@ export function HomePage() {
                 </Link>
               </div>
 
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-6 text-xs text-white/50">
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-500 dark:text-white/50">
                 <span>{t.pricingSection.tag1}</span>
                 <span>{t.pricingSection.tag2}</span>
                 <span>{t.pricingSection.tag3}</span>

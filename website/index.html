@@ -5,17 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="SideBox 位于 Windows 11 屏幕边缘。钉上程序、文件和文件夹，集成时钟、便笺与硬件监控。完全免费，下载即用。"
+      content="SideBox 位于 Windows 屏幕边缘。钉上常用程序、文件和文件夹，集成时钟、便笺与硬件监控。纯本地存储，安装即用。"
     />
-    <title>SideBox — Windows 11 屏幕边缘的 SideBox</title>
+    <title>SideBox — Windows 屏幕边缘轻量悬浮岛</title>
     <link rel="icon" href="/logo.png" type="image/png" />
     <link rel="shortcut icon" href="/favicon.ico" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500&family=Noto+Serif+SC:wght@500&display=swap"
-      rel="stylesheet"
-    />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('sidebox_theme') || 'system';
+          var isDark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.colorScheme = 'dark';
+          } else {
+            document.documentElement.classList.add('light');
+            document.documentElement.style.colorScheme = 'light';
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

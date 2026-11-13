@@ -40,67 +40,57 @@ export const widgetsEn = [
 
 export const faqZh = [
   {
-    id: "free",
-    q: "SideBox 是免费软件吗？",
-    a: "是的，SideBox 现已完全免费。所有 17 款实用模块（包括时钟、便笺、天气、股票、白噪音、硬件监控、日程倒数等）以及自定义情景均无限制开放，没有任何收费项与功能锁定。",
-  },
-  {
-    id: "account",
-    q: "需要注册账号或输入激活码吗？",
-    a: "不需要。没有账号体系，不需要激活码，也不联网校验设备。安装后打开即可直接使用全部功能。",
-  },
-  {
-    id: "device",
-    q: "可以安装在多台电脑上吗？",
-    a: "可以。您可以在您的所有 Windows 11 电脑上自由安装和使用，没有任何设备数量或台数限制。",
+    id: "system",
+    q: "支持哪些 Windows 系统版本？",
+    a: "支持 Windows 11 与 Windows 10（64 位，Build 19041 及以上版本）。自包含轻量运行库，下载后直接运行即可，无需额外安装繁琐环境。",
   },
   {
     id: "taskbar",
-    q: "会替换任务栏吗？",
-    a: "不会。SideBox 贴在屏幕上沿、左侧或右侧，默认不占主屏底部。它不接管窗口，也不替换资源管理器。",
+    q: "会替换任务栏或修改系统文件吗？",
+    a: "不会。SideBox 独立悬浮于屏幕上沿、左侧或右侧，默认不占底部任务栏。它不接管窗口，不注入 Explorer 资源管理器，不修改任何系统文件，与原生桌面完美并存。",
   },
   {
-    id: "system",
-    q: "需要什么系统？",
-    a: "Windows 11 22H2（版本 22621）或更新的 64 位系统。",
+    id: "performance",
+    q: "日常运行的系统资源占用如何？",
+    a: "基于原生 C# 与 Win32 顶层架构打造，绝非昂贵的 Electron 网页套壳。常规待机内存占用仅约 40MB，无交互时自动休眠，低 CPU 消耗，不抢占工作和游戏资源。",
+  },
+  {
+    id: "free",
+    q: "软件是否完全免费？需要注册账号吗？",
+    a: "是的，SideBox 完全免费。没有账号体系，不需要激活码，也不收集个人信息。所有内置小组件与功能全量可用，没有任何功能锁定或内购广告。",
   },
   {
     id: "data",
-    q: "数据存在哪里？",
-    a: "钉选、便笺与配置全部留在这台电脑上本地保存。没有云端同步，隐私完全属于你。",
+    q: "便笺和钉选数据保存在哪里？",
+    a: "所有配置、便笺记录与快捷方式均存储在本地电脑的 %AppData% 目录中。绝无云端上传与追踪，隐私完全属于您自己。",
   },
 ];
 
 export const faqEn = [
   {
-    id: "free",
-    q: "Is SideBox completely free?",
-    a: "Yes, SideBox is now 100% free. All 17 widgets (including Clock, Notes, Weather, Stocks, Ambient Noise, Hardware Activity, Schedule, etc.) and custom profiles are fully unlocked with zero limitations.",
-  },
-  {
-    id: "account",
-    q: "Do I need an account or license key?",
-    a: "No. There are no accounts, no license keys, and no online device verifications. Download and enjoy all features immediately upon launch.",
-  },
-  {
-    id: "device",
-    q: "Can I install it on multiple PCs?",
-    a: "Yes. You can freely install and use SideBox across all your Windows 11 machines with no device limits.",
+    id: "system",
+    q: "Which Windows versions are supported?",
+    a: "Supports Windows 11 and Windows 10 (64-bit, Build 19041 or newer). Self-contained and lightweight, ready to run directly without installing complicated runtimes.",
   },
   {
     id: "taskbar",
-    q: "Does it replace the Windows taskbar?",
-    a: "No. SideBox docks at the top, left, or right edges of your screen, leaving the bottom taskbar untouched. It never takes over windows or modifies File Explorer.",
+    q: "Does it replace the taskbar or modify system files?",
+    a: "No. SideBox floats neatly at the top, left, or right edges of your screen, leaving the taskbar untouched. It never takes over windows, never injects Explorer, and modifies zero system files.",
   },
   {
-    id: "system",
-    q: "What are the system requirements?",
-    a: "Windows 11 22H2 (Build 22621) or newer 64-bit systems.",
+    id: "performance",
+    q: "How are the system resources and memory usage?",
+    a: "Built with native C# and Win32 topmost architecture, never a bloated Electron web wrapper. Idle memory consumption is only ~40MB with minimal CPU overhead, preserving all resources for gaming and workflow.",
+  },
+  {
+    id: "free",
+    q: "Is it completely free? Do I need an account?",
+    a: "Yes, SideBox is completely free. There are no accounts, no activation keys, and no telemetry tracking. All built-in widgets and profiles are fully unlocked with zero limitations or ads.",
   },
   {
     id: "data",
     q: "Where is my data stored?",
-    a: "All pinned shortcuts, sticky notes, and configurations remain strictly on your local PC with zero cloud tracking.",
+    a: "All pinned shortcuts, sticky notes, and configurations are stored locally in your PC's %AppData% directory. No cloud sync, no tracking — your data belongs solely to you.",
   },
 ];
 
