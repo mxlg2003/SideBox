@@ -247,6 +247,23 @@ public sealed class UpdateManifestTests
         Assert.Equal(UiText.UpdateRateLimited, result.Error);
     }
 
+    [Theory]
+    [InlineData("1.0.3", "1.0.0.0", true)]
+    [InlineData("v1.0.3", "1.0.2.0", true)]
+    [InlineData("1.0.2", "1.0.2.0", false)]
+    [InlineData("v1.0.2", "1.0.2.0", false)]
+    [InlineData("1.0.2.0", "1.0.2.0", false)]
+    [InlineData("1.0.1", "1.0.2.0", false)]
+    [InlineData("1.1.0", "1.0.9.0", true)]
+    [InlineData("2.0.0", "1.9.9.0", true)]
+    [InlineData("invalid", "1.0.0.0", false)]
+    public void IsNewerVersion_AccurateAcrossDifferentPartCounts(string remote, string current, bool expected)
+    {
+        var curVer = Version.Parse(current);
+        var actual = UpdateChecker.IsNewerVersion(remote, curVer);
+        Assert.Equal(expected, actual);
+    }
+
     private sealed class MockHttpMessageHandler : HttpMessageHandler
     {
         private readonly Func<HttpRequestMessage, HttpResponseMessage> _responder;

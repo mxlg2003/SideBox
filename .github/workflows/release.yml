@@ -32,13 +32,19 @@ jobs:
         run: choco install innosetup -y --no-progress
 
       - name: Publish .NET Win-x64 Binaries
-        run: .\pack\publish.ps1
+        shell: pwsh
+        run: |
+          $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "${{ inputs.tag }}" }
+          if (-not $tag) { $tag = "v1.0.3" }
+          $rawVer = $tag.TrimStart('v').TrimStart('V')
+          Write-Host "Publishing binaries for version: $rawVer"
+          .\pack\publish.ps1 -Version $rawVer
 
       - name: Compile Inno Setup Installer
         shell: pwsh
         run: |
           $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "${{ inputs.tag }}" }
-          if (-not $tag) { $tag = "v1.0.1" }
+          if (-not $tag) { $tag = "v1.0.3" }
           $rawVer = $tag.TrimStart('v').TrimStart('V')
           $iscc = if (Get-Command iscc -ErrorAction SilentlyContinue) { "iscc" } `
                   elseif (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\iscc.exe") { "${env:ProgramFiles(x86)}\Inno Setup 6\iscc.exe" } `
@@ -52,7 +58,7 @@ jobs:
         shell: pwsh
         run: |
           $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "${{ inputs.tag }}" }
-          if (-not $tag) { $tag = "v1.0.1" }
+          if (-not $tag) { $tag = "v1.0.3" }
           $rawVer = $tag.TrimStart('v').TrimStart('V')
           $setupPath = "pack\output\SideBox-setup.exe"
           

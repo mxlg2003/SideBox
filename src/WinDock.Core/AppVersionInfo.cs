@@ -191,6 +191,34 @@ public static class UpdateChecker
         return client;
     }
 
+    public static bool IsNewerVersion(string remoteVersionStr, Version currentVersion)
+    {
+        var cleanRemote = UpdateManifestParser.CleanVersion(remoteVersionStr);
+        if (!Version.TryParse(cleanRemote, out var remoteVer))
+        {
+            return false;
+        }
+
+        var rMajor = remoteVer.Major;
+        var rMinor = Math.Max(0, remoteVer.Minor);
+        var rBuild = Math.Max(0, remoteVer.Build);
+
+        var cMajor = currentVersion.Major;
+        var cMinor = Math.Max(0, currentVersion.Minor);
+        var cBuild = Math.Max(0, currentVersion.Build);
+
+        if (rMajor != cMajor) return rMajor > cMajor;
+        if (rMinor != cMinor) return rMinor > cMinor;
+        if (rBuild != cBuild) return rBuild > cBuild;
+
+        if (remoteVer.Revision > 0 || currentVersion.Revision > 0)
+        {
+            return Math.Max(0, remoteVer.Revision) > Math.Max(0, currentVersion.Revision);
+        }
+
+        return false;
+    }
+
     public static async Task<UpdateCheckResult> CheckUpdateAsync(
         Version currentVersion,
         HttpClient? httpClient = null,
@@ -213,7 +241,7 @@ public static class UpdateChecker
                 var text = await manifestResp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 if (UpdateManifestParser.TryParseLatestJson(text, out var manifestInfo) && manifestInfo is not null)
                 {
-                    var hasUpdate = Version.TryParse(UpdateManifestParser.CleanVersion(manifestInfo.Version), out var parsedRemote) && parsedRemote > currentVersion;
+                    var hasUpdate = IsNewerVersion(manifestInfo.Version, currentVersion);
                     return new UpdateCheckResult(true, hasUpdate, manifestInfo, null);
                 }
             }
@@ -247,7 +275,7 @@ public static class UpdateChecker
                 return new UpdateCheckResult(false, false, null, UiText.UpdateCheckFailed);
             }
 
-            var hasUpdate = Version.TryParse(UpdateManifestParser.CleanVersion(apiInfo.Version), out var parsedRemote) && parsedRemote > currentVersion;
+            var hasUpdate = IsNewerVersion(apiInfo.Version, currentVersion);
             return new UpdateCheckResult(true, hasUpdate, apiInfo, null);
         }
         catch (Exception ex)

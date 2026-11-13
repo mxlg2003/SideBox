@@ -90,13 +90,24 @@ public static class UpdateService
         var psi = new ProcessStartInfo
         {
             FileName = tempPath,
-            Arguments = "/SILENT /CLOSEAPPLICATIONS",
+            Arguments = "/SILENT /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS",
             UseShellExecute = true
         };
         Process.Start(psi);
 
-        // Gracefully shut down the current application so the mutex is released
-        Application.Current.Dispatcher.Invoke(() => Application.Current.Shutdown());
+        // Gracefully shut down and exit current application so files are completely unlocked
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            try
+            {
+                Application.Current.Shutdown();
+            }
+            catch
+            {
+            }
+
+            Environment.Exit(0);
+        });
     }
 
     private static async Task DownloadToFileAsync(
