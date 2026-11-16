@@ -53,9 +53,6 @@ const zh = {
     topCenter: "上沿居中",
     leftEdge: "左侧贴边",
     rightEdge: "右侧贴边",
-    profile: "情景预设:",
-    general: "日常",
-    deepWork: "深度工作",
     material: "SideBox 材质:",
     mica: "云母",
     frosted: "磨砂",
@@ -91,16 +88,6 @@ const zh = {
     footerNote2: "同一模块可添加多份",
     footerNote3: "点击在 SideBox 旁平滑展开，不弹多余独立窗口",
   },
-  workflow: {
-    badge: "情景与工作流",
-    titleLine1: "工作状态在变，",
-    titleLine2: "边上的 SideBox 也随之切换。",
-    subtitle:
-      "日常协作和深度专注，不需要同一套图标。按一下快捷键或者在托盘点击，SideBox 秒切为对应的高效工作台。",
-    triggerHint: "触发方式: 快捷键切换",
-    activeBadge: "● 已激活",
-    undoNote: "误按切换？随时按下撤销返回上个情景",
-  },
   bento: {
     badge: "Windows 原生级设计",
     title: "细节，处处到位。",
@@ -109,12 +96,10 @@ const zh = {
     card1Desc:
       "从资源管理器直接拖入程序、文件或文件夹。点击已在运行的程序直接切到现有窗口，绝不重复多开。",
     card1Action: "切到现有窗口",
-    card2Title: "一套快捷键，随叫随到。",
+    card2Title: "全局快捷键，随叫随到。",
     card2Desc:
-      "无需打开设置，用全局快捷键秒切工作流或唤出隐藏的 SideBox。误触切换还可按快捷键一键撤销。",
-    hotkeySwitch: "切换情景:",
-    hotkeySummon: "呼出 SideBox:",
-    hotkeyUndo: "一键撤销:",
+      "无需寻找窗口，按下全局快捷键即可即时呼出或收起 SideBox。支持在设置中自定义录制快捷键。",
+    hotkeySummon: "全局唤出 / 收起 SideBox",
     card3Title: "上、左、右停靠，空闲自动隐藏。",
     card3Desc:
       "自由停靠在屏幕上沿、左侧或右侧，默认不占底部任务栏。空闲 800ms 自动缩进为 4px 细条，鼠标贴边即滑出。",
@@ -127,7 +112,7 @@ const zh = {
     card4Point3: "不要求管理员权限常驻",
     card5Title: "便笺与钉选，留在你电脑上。",
     card5Desc:
-      "不需要注册 SideBox 账号。你的所有便笺内容、钉选清单与情景配置均保存在本机，隐私完全属于你。",
+      "不需要注册 SideBox 账号。你的所有便笺内容、钉选清单与个性偏好均保存在本机，隐私完全属于你。",
     card5Note: "数据永驻本地 · 纯净零上传",
     card6Title: "轻快敏捷，低能耗静默驻留。",
     card6Desc:
@@ -250,9 +235,6 @@ const en: typeof zh = {
     topCenter: "Top Center",
     leftEdge: "Left Edge",
     rightEdge: "Right Edge",
-    profile: "Profile:",
-    general: "General",
-    deepWork: "Deep Work",
     material: "Material:",
     mica: "Mica",
     frosted: "Frosted",
@@ -288,16 +270,6 @@ const en: typeof zh = {
     footerNote2: "Add multiple copies of any widget",
     footerNote3: "Expands smoothly beside SideBox without standalone popup clutter",
   },
-  workflow: {
-    badge: "Profiles & Workflows",
-    titleLine1: "Your workday changes,",
-    titleLine2: "SideBox changes with you.",
-    subtitle:
-      "Collaboration and deep focus require different tools. Switch profiles instantly with a hotkey or tray click to adapt your workspace in seconds.",
-    triggerHint: "Trigger: Global Shortcut",
-    activeBadge: "● Active",
-    undoNote: "Accidental switch? Press Win + Shift + Z anytime to undo.",
-  },
   bento: {
     badge: "Windows Native Architecture",
     title: "The little things, taken care of.",
@@ -306,12 +278,10 @@ const en: typeof zh = {
     card1Desc:
       "Drag & drop apps, files, or folders directly from File Explorer. Clicking a running app switches to its existing window — no redundant duplicates.",
     card1Action: "Switch to existing window",
-    card2Title: "A shortcut away, whenever you need it.",
+    card2Title: "Global shortcut, always at hand.",
     card2Desc:
-      "No need to open settings. Use global hotkeys to switch profiles or summon a hidden SideBox. Undo mistaken triggers with a single keypress.",
-    hotkeySwitch: "Switch profile:",
-    hotkeySummon: "Summon SideBox:",
-    hotkeyUndo: "Quick Undo:",
+      "No need to search for windows. Press the global shortcut to summon or hide SideBox instantly. Freely customizable in Settings.",
+    hotkeySummon: "Global Reveal / Hide SideBox",
     card3Title: "Dock anywhere, auto-hide when idle.",
     card3Desc:
       "Freely dock to top, left, or right edges without crowding the taskbar. Auto-hides to a subtle 4px hairline after 800ms of inactivity; slides out when touched.",
@@ -324,7 +294,7 @@ const en: typeof zh = {
     card4Point3: "Never requires administrator privileges",
     card5Title: "Notes and pins stay on your machine.",
     card5Desc:
-      "No SideBox account required. All notes, pinned shortcuts, and profile configurations remain 100% on your local disk — zero cloud leaks.",
+      "No SideBox account required. All notes, pinned shortcuts, and local configurations remain 100% on your local disk — zero cloud leaks.",
     card5Note: "100% local storage · Zero cloud telemetry",
     card6Title: "Ultra-lightweight & efficient.",
     card6Desc:

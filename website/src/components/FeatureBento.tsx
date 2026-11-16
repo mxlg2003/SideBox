@@ -4,7 +4,7 @@ export function FeatureBento() {
   const { t } = useI18n();
 
   return (
-    <section id="features" className="scroll-mt-20 py-20">
+    <section id="features" className="scroll-mt-20 py-20 border-t border-slate-200/80 dark:border-white/5">
       <div className="page">
         {/* Section header */}
         <div className="mx-auto max-w-2xl text-center">
@@ -38,29 +38,19 @@ export function FeatureBento() {
             </div>
           </article>
 
-          {/* Card 2: 快捷键随时切换与唤出 */}
+          {/* Card 2: 全局快捷键随时唤出与收起 */}
           <article className="bento-card group flex flex-col justify-between">
             <div>
               <div className="mb-6 flex h-36 items-center justify-center rounded-2xl border border-slate-200/80 dark:border-white/5 bg-slate-100/80 dark:bg-black/40 p-4">
-                <div className="flex flex-col gap-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-mute">{t.bento.hotkeySwitch}</span>
-                    <span className="keycap">Win</span>
-                    <span className="keycap">Shift</span>
-                    <span className="keycap">D</span>
+                <div className="flex flex-col items-center gap-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="keycap h-7 px-2.5 text-xs font-semibold">Win</span>
+                    <span className="text-slate-400 dark:text-white/40 text-xs">+</span>
+                    <span className="keycap h-7 px-2.5 text-xs font-semibold">Shift</span>
+                    <span className="text-slate-400 dark:text-white/40 text-xs">+</span>
+                    <span className="keycap h-7 px-2.5 text-xs font-semibold">A</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-mute">{t.bento.hotkeySummon}</span>
-                    <span className="keycap">Win</span>
-                    <span className="keycap">Shift</span>
-                    <span className="keycap">A</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-mute">{t.bento.hotkeyUndo}</span>
-                    <span className="keycap">Win</span>
-                    <span className="keycap">Shift</span>
-                    <span className="keycap">Z</span>
-                  </div>
+                  <span className="text-xs text-mute">{t.bento.hotkeySummon}</span>
                 </div>
               </div>
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{t.bento.card2Title}</h3>

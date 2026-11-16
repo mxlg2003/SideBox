@@ -4,7 +4,6 @@ import { FeatureBento } from "@/components/FeatureBento";
 import { IslandStage } from "@/components/IslandStage";
 import { Testimonials } from "@/components/Testimonials";
 import { WidgetGallery } from "@/components/WidgetGallery";
-import { WorkflowShowcase } from "@/components/WorkflowShowcase";
 import { getFaq } from "@/content";
 import { useI18n } from "@/lib/i18n";
 
@@ -136,9 +135,6 @@ export function HomePage() {
           <WidgetGallery />
         </div>
       </section>
-
-      {/* Scenario / Workflow Showcase */}
-      <WorkflowShowcase />
 
       {/* Feature Bento Grid (6 cards) */}
       <FeatureBento />

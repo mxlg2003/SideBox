@@ -20,7 +20,7 @@ export function Testimonials() {
     },
     {
       content:
-        "“轻巧且纯粹！内存占用才 40MB 出头，没有烦人的广告和强制登录，数据完全留在本地。Win + Shift + D 秒切日常和专注模式，把常用应用和便笺放在屏幕边缘，生产力直接拉满。”",
+        "“轻巧且纯粹！内存占用才 40MB 出头，没有烦人的广告和强制登录，数据完全留在本地。Win + Shift + A 一键呼出收起，把常用应用和便笺放在屏幕边缘，生产力直接拉满。”",
       author: "David C.",
       role: "独立软件创作者",
       tag: "验证用户",
@@ -44,7 +44,7 @@ export function Testimonials() {
     },
     {
       content:
-        "“Incredibly lightweight and clean! Idles at only ~40MB RAM with zero ads or forced accounts. Win + Shift + D instantly toggles profiles — putting essentials at the screen edge maximizes productivity.”",
+        "“Incredibly lightweight and clean! Idles at only ~40MB RAM with zero ads or forced accounts. Win + Shift + A instantly summons or hides — putting essentials at the screen edge maximizes productivity.”",
       author: "David C.",
       role: "Indie Software Creator",
       tag: "Verified User",

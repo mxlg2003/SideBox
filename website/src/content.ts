@@ -85,7 +85,7 @@ export const faqEn = [
   {
     id: "free",
     q: "Is it completely free? Do I need an account?",
-    a: "Yes, SideBox is completely free. There are no accounts, no activation keys, and no telemetry tracking. All built-in widgets and profiles are fully unlocked with zero limitations or ads.",
+    a: "Yes, SideBox is completely free. There are no accounts, no activation keys, and no telemetry tracking. All built-in widgets and features are fully unlocked with zero limitations or ads.",
   },
   {
     id: "data",
