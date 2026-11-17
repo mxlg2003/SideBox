@@ -116,8 +116,20 @@ public sealed class DockSession : IDisposable
         _dock.WindowActivateRequested += (_, hwnd) => Hub.Shell.ActivateWindow(hwnd);
         _dock.WindowCloseRequested += (_, hwnd) => Hub.Shell.CloseWindow(hwnd);
         _dock.SettingsRequested += (_, _) => ShowSettings();
+        _dock.SettingsPageRequested += (_, page) => ShowSettings(page);
         _dock.ExitRequested += (_, _) => RequestExit();
         _dock.ProfileSwitchRequested += (_, profileId) => SwitchProfile(profileId);
+        _dock.EdgeChangeRequested += (_, edge) => SetDockEdge(edge);
+        _dock.AutoHideToggleRequested += (_, _) => SetAutoHide(!CurrentDiff.Dock.AutoHide);
+        _dock.AvoidFullscreenToggleRequested += (_, _) => SetAvoidFullscreen(!Settings.Ui.AvoidFullscreen);
+        _dock.ThemeChangeRequested += (_, theme) => SetTheme(theme);
+        _dock.BackdropChangeRequested += (_, backdrop) => SetBackdrop(backdrop);
+        _dock.RunAtStartupToggleRequested += (_, _) =>
+        {
+            var next = !RunAtStartup.IsEnabled();
+            RunAtStartup.SetEnabled(next);
+            Apply(Settings);
+        };
         _dock.IslandLengthChanged += (_, length) =>
         {
             if (_options.SafeMode || CurrentDiff is null)
@@ -167,6 +179,7 @@ public sealed class DockSession : IDisposable
         _dock.PinActivateRequested += (_, itemId) => ActivatePin(itemId);
         _dock.PinStackToggleRequested += (_, request) => TogglePinStack(request);
         _dock.PinLaunchRequested += (_, itemId) => LaunchPin(itemId);
+        _dock.PinLaunchAdminRequested += (_, itemId) => LaunchPinAsAdmin(itemId);
         _dock.PinAddRequested += (_, kind) => PickPin(kind);
         _dock.PinsDropped += (_, drop) => AddDroppedPins(drop);
         _dock.IslandMonitorRequested += (_, monitor) => SetDockMonitor(monitor);
@@ -242,7 +255,7 @@ public sealed class DockSession : IDisposable
         ShowSettings();
     }
 
-    public void ShowSettings()
+    public void ShowSettings(string? page = null)
     {
         if (_options.SafeMode)
         {
@@ -263,6 +276,10 @@ public sealed class DockSession : IDisposable
         }
 
         _settings.Reload();
+        if (!string.IsNullOrWhiteSpace(page))
+        {
+            _settings.ShowPage(page);
+        }
         _settings.Show();
         _settings.Activate();
         PulseZorder();
@@ -303,6 +320,26 @@ public sealed class DockSession : IDisposable
         _pendingTransparency = transparency;
         _transparencyDebounce.Stop();
         _transparencyDebounce.Start();
+    }
+
+    public void SetDockMode(DockMode mode)
+    {
+        if (Settings.Ui.DockMode == mode)
+        {
+            return;
+        }
+
+        Commit(SettingsEditor.WithDockMode(Settings, mode));
+    }
+
+    public void SetAvoidFullscreen(bool avoidFullscreen)
+    {
+        if (Settings.Ui.AvoidFullscreen == avoidFullscreen)
+        {
+            return;
+        }
+
+        Commit(SettingsEditor.WithAvoidFullscreen(Settings, avoidFullscreen));
     }
 
     public void SetDockEdge(DockEdge edge)
@@ -1047,9 +1084,19 @@ public sealed class DockSession : IDisposable
             RelayoutIsland(monitor, thickness);
             _dock.ApplyTheme(isLight, Settings.Ui.Backdrop, Settings.Ui.IslandTransparency);
             _stackFlyout.ApplyTheme(isLight, Settings.Ui.Backdrop);
+            var quickSettings = new DockQuickSettings
+            {
+                Edge = CurrentDiff.Dock.Edge,
+                AutoHide = CurrentDiff.Dock.AutoHide,
+                AvoidFullscreen = Settings.Ui.AvoidFullscreen,
+                Theme = Settings.Ui.Theme,
+                Backdrop = Settings.Ui.Backdrop,
+                RunAtStartup = RunAtStartup.IsEnabled()
+            };
             _dock.ApplyProfileMenu(
                 ProductFeatures.ProfilesEnabled ? Settings.Profiles : [],
-                CurrentDiff.ProfileId);
+                CurrentDiff.ProfileId,
+                quickSettings);
             if (announceProfileId is not null)
             {
                 var profile = Settings.Profiles.FirstOrDefault(item => item.Id == announceProfileId);
@@ -1464,6 +1511,23 @@ public sealed class DockSession : IDisposable
         ThreadPool.QueueUserWorkItem(_ => SampleRunning());
     }
 
+    private void LaunchPinAsAdmin(string itemId)
+    {
+        if (_options.SafeMode || CurrentDiff is null)
+        {
+            return;
+        }
+
+        var item = CurrentDiff.Dock.Items.FirstOrDefault(entry => itemId == entry.Id);
+        if (item is null || !DockPins.IsPin(item.Type))
+        {
+            return;
+        }
+
+        Hub.Shell.TryLaunchAsAdmin(item);
+        ThreadPool.QueueUserWorkItem(_ => SampleRunning());
+    }
+
     private void SyncRunningSampler()
     {
         if (_trackedNames.Count == 0)
@@ -1584,6 +1648,7 @@ public sealed class DockSession : IDisposable
             AutoHide = CurrentDiff.Dock.AutoHide,
             PeekOnPointer = peek,
             IsPresentationOrFullscreen = UserNotificationState.IsPresentationOrFullscreen(_dock.Handle),
+            AvoidFullscreen = Settings.Ui.AvoidFullscreen,
             PointerInDock = inDock,
             PointerInHotzone = pointerInHot,
             KeepVisible = keepVisible,
@@ -1668,24 +1733,22 @@ public sealed class DockSession : IDisposable
 
     private void WakeDock()
     {
-        if (CurrentDiff is null || !CurrentDiff.Dock.AutoHide || !CurrentDiff.Dock.RevealHotkey)
-        {
-            return;
-        }
-
         RevealDock();
     }
 
     private void RevealDock()
     {
-        if (CurrentDiff is null || !CurrentDiff.Dock.AutoHide)
+        if (CurrentDiff is null)
         {
             return;
         }
 
-        _wakeUntil = DateTimeOffset.UtcNow.AddMilliseconds(DockTokens.WakeHoldMs);
-        _leftHostAt = null;
-        PulseZorder();
+        if (CurrentDiff.Dock.AutoHide)
+        {
+            _wakeUntil = DateTimeOffset.UtcNow.AddMilliseconds(DockTokens.WakeHoldMs);
+            _leftHostAt = null;
+            PulseZorder();
+        }
     }
 
     private void FlushTransparency()

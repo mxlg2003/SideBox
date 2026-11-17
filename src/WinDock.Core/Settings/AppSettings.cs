@@ -40,6 +40,8 @@ public sealed record UiSettings
     public int IslandTransparency { get; init; } = DockLayoutConstants.DefaultIslandTransparency;
 
     public DockMode DockMode { get; init; } = DockMode.Overlay;
+
+    public bool AvoidFullscreen { get; init; } = true;
 }
 
 public sealed record LicenseSettings

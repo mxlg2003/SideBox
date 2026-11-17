@@ -425,6 +425,46 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Section: 停靠模式与防遮挡 -->
+                        <TextBlock Text="停靠模式与防遮挡" Style="{StaticResource Settings.SectionTitle}"/>
+                        <Border Style="{StaticResource Settings.CardGroup}">
+                            <StackPanel>
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="停靠工作模式" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock Style="{StaticResource Settings.RowDesc}"
+                                                   Text="悬浮岛模式自由浮动于窗口上方；屏幕保留区模式下，普通窗口最大化时将自动避开 Dock，杜绝重叠与遮挡。"/>
+                                    </StackPanel>
+                                    <ComboBox x:Name="DockModeBox" Grid.Column="1" MinWidth="180" VerticalAlignment="Center"
+                                              SelectionChanged="DockModeBox_OnSelectionChanged">
+                                        <ComboBoxItem x:Name="DockModeOverlay" Content="悬浮岛 (Overlay)" Tag="Overlay"/>
+                                        <ComboBoxItem x:Name="DockModeAppBar" Content="屏幕保留区 (AppBar)" Tag="AppBar"/>
+                                    </ComboBox>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource Settings.Stroke}"/>
+
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="全屏应用时自动避让" Style="{StaticResource Settings.RowTitle}"/>
+                                        <TextBlock Style="{StaticResource Settings.RowDesc}"
+                                                   Text="在运行游戏、播放全屏视频或放映 PPT 时自动隐藏 Dock。多显示器下仅避让同屏全屏应用。"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="AvoidFullscreenCheck" Grid.Column="1" Style="{StaticResource Settings.Toggle}"
+                                              VerticalAlignment="Center" AutomationProperties.Name="全屏避让"
+                                              Click="AvoidFullscreen_OnClick"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
                         <TextBlock x:Name="LayoutHelp" Style="{StaticResource Settings.Help}" Margin="0,8,0,0"
                                    Text="SideBox 默认为贴边居中的悬浮岛，在全屏应用或演示模式下会自动避让。可拖动两端调整宽度，双击边缘可恢复根据内容自适应。在多显示器间拖拽 Dock 会自动同步此处的显示器设置。"/>
                     </StackPanel>

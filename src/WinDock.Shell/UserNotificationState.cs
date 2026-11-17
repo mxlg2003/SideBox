@@ -32,7 +32,20 @@ public static class UserNotificationState
         {
             if (SHQueryUserNotificationState(out var state) == 0)
             {
-                return state is QunsD3dFullscreen or QunsPresentation;
+                if (state is QunsD3dFullscreen or QunsPresentation)
+                {
+                    if (selfHwnd != nint.Zero && foreground != nint.Zero)
+                    {
+                        var dockMonitor = MonitorFromWindow(selfHwnd, 2);
+                        var windowMonitor = MonitorFromWindow(foreground, 2);
+                        if (dockMonitor != nint.Zero && windowMonitor != nint.Zero && dockMonitor != windowMonitor)
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
             }
         }
         catch (Exception)

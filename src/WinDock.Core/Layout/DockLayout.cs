@@ -117,7 +117,7 @@ public sealed class DefaultZorderPolicy : IZorderPolicy
 {
     public DockZorderState Evaluate(DockHostContext context)
     {
-        if (context.IsPresentationOrFullscreen)
+        if (context.AvoidFullscreen && context.IsPresentationOrFullscreen)
         {
             return DockZorderState.FullscreenYield;
         }

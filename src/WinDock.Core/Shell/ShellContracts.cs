@@ -35,11 +35,15 @@ public interface IDockSurface : IDisposable
 
     void ApplyProfileMenu(IReadOnlyList<Profile> profiles, string activeProfileId, bool canUndo = false);
 
+    void ApplyProfileMenu(IReadOnlyList<Profile> profiles, string activeProfileId, DockQuickSettings? quickSettings, bool canUndo = false);
+
     void Show();
 
     void Hide();
 
     event EventHandler? SettingsRequested;
+
+    event EventHandler<string?>? SettingsPageRequested;
 
     event EventHandler? ExitRequested;
 

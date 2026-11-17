@@ -16,18 +16,21 @@ public static class PopupTopmost
 
     public static void TryElevate(Popup popup)
     {
+        if (popup.Child is Visual child)
+        {
+            TryElevate(child);
+        }
+    }
+
+    public static void TryElevate(Visual visual)
+    {
         try
         {
-            if (popup.Child is not Visual child)
-            {
-                return;
-            }
-
-            _ = child.Dispatcher.BeginInvoke(() =>
+            _ = visual.Dispatcher.BeginInvoke(() =>
             {
                 try
                 {
-                    if (PresentationSource.FromVisual(child) is not HwndSource source || source.Handle == IntPtr.Zero)
+                    if (PresentationSource.FromVisual(visual) is not HwndSource source || source.Handle == IntPtr.Zero)
                     {
                         return;
                     }

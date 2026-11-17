@@ -28,6 +28,12 @@ public class MonitorWidgetTests
         Assert.Equal("—", DiskFormat.DockValue(visible, settings));
         Assert.Equal("70%", DiskFormat.DockValue(volumes, DiskWidgetSettings.Default));
         Assert.Equal("C: · Windows", DiskFormat.VolumeTitle(volumes[0]));
+
+        var targetSettings = new DiskWidgetSettings
+        {
+            TargetVolumeId = @"C:\"
+        };
+        Assert.Equal("C: 60%", DiskFormat.DockValue(volumes, targetSettings));
     }
 
     [Fact]

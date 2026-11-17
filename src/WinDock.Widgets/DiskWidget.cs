@@ -21,6 +21,7 @@ public sealed class DiskWidget : UserControl, IWidgetOpenable, IWidgetCustomizab
     private readonly TextBlock _value = WidgetCopy.Primary();
     private readonly StackPanel _volumes = new();
     private readonly ComboBox _mainBox = new();
+    private readonly ComboBox _targetBox = new();
     private readonly StackPanel _volumeChecks = new();
     private readonly Border _tile;
     private readonly Border _panel;
@@ -31,6 +32,7 @@ public sealed class DiskWidget : UserControl, IWidgetOpenable, IWidgetCustomizab
     private TextBlock _customizeTitle = null!;
     private TextBlock _backLabel = null!;
     private TextBlock _mainCaption = null!;
+    private TextBlock _targetCaption = null!;
     private DiskWidgetSettings _settings = DiskWidgetSettings.Default;
     private IReadOnlyList<DiskVolumeSnapshot> _all = [];
     private bool _applying;
@@ -138,7 +140,9 @@ public sealed class DiskWidget : UserControl, IWidgetOpenable, IWidgetCustomizab
         _customizeTitle.Text = UiText.Customize;
         _backLabel.Text = UiText.Back;
         _mainCaption.Text = UiText.Display;
+        _targetCaption.Text = UiText.DiskTargetDrive;
         FillMainBox();
+        FillTargetBox();
         _applying = false;
         Render(_disk.Current);
     }
@@ -231,6 +235,7 @@ public sealed class DiskWidget : UserControl, IWidgetOpenable, IWidgetCustomizab
         PaintVolumes(visible);
         if (_customizePage.Visibility == Visibility.Visible)
         {
+            FillTargetBox();
             PaintVolumeChecks();
         }
     }
@@ -344,6 +349,30 @@ public sealed class DiskWidget : UserControl, IWidgetOpenable, IWidgetCustomizab
             Render(_disk.Current);
         };
 
+        _targetCaption = HeaderLabel(UiText.DiskTargetDrive);
+        _targetCaption.Opacity = 0.62;
+        _targetCaption.Margin = new Thickness(0, 8, 0, 8);
+        WidgetChrome.PaintCombo(_targetBox, true);
+        FillTargetBox();
+        _targetBox.SelectionChanged += (_, _) =>
+        {
+            if (_applying || _targetBox.SelectedItem is not ComboChoice choice)
+            {
+                return;
+            }
+
+            var nextTarget = string.IsNullOrEmpty(choice.Id) ? null : choice.Id;
+            if (_settings.TargetVolumeId == nextTarget)
+            {
+                return;
+            }
+
+            _settings = _settings with { TargetVolumeId = nextTarget };
+            Persist();
+            RebuildTile();
+            Render(_disk.Current);
+        };
+
         var dockCaption = HeaderLabel(UiText.ShowOnDock);
         dockCaption.Opacity = 0.62;
         dockCaption.Margin = new Thickness(0, 8, 0, 8);
@@ -356,7 +385,7 @@ public sealed class DiskWidget : UserControl, IWidgetOpenable, IWidgetCustomizab
         WidgetChrome.PaintScrollViewer(checks, true);
         var page = new StackPanel
         {
-            Children = { header, _mainCaption, _mainBox, dockCaption, checks }
+            Children = { header, _mainCaption, _mainBox, _targetCaption, _targetBox, dockCaption, checks }
         };
         var grid = new Grid();
         grid.Children.Add(page);
@@ -375,9 +404,23 @@ public sealed class DiskWidget : UserControl, IWidgetOpenable, IWidgetCustomizab
         WidgetChrome.SelectChoice(_mainBox, selected);
     }
 
+    private void FillTargetBox()
+    {
+        var selected = _settings.TargetVolumeId ?? "";
+        _targetBox.Items.Clear();
+        _targetBox.Items.Add(new ComboChoice("", UiText.DiskAllDrives));
+        foreach (var volume in _all)
+        {
+            _targetBox.Items.Add(new ComboChoice(volume.Id, DiskFormat.VolumeTitle(volume)));
+        }
+
+        WidgetChrome.SelectChoice(_targetBox, selected);
+    }
+
     private void PaintCustomize()
     {
         WidgetChrome.SelectChoice(_mainBox, _settings.Main);
+        FillTargetBox();
         PaintVolumeChecks(true);
     }
 

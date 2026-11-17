@@ -62,7 +62,7 @@ public static class DockTokens
     public const int WakeHoldMs = 2000;
     public const double FlyoutOffset = 8;
     /// <summary>Extra pixels around the island when testing pointer approach into the hotzone.</summary>
-    public const int TrapezoidBuffer = 8;
+    public const int TrapezoidBuffer = 24;
     public const int DefaultIslandTransparency = 50;
     public const int FrostedIslandTransparency = 0;
     public const int GlassIslandTransparency = 80;

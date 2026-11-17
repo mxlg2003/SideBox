@@ -53,6 +53,8 @@ public sealed record DiskWidgetSettings
 {
     public string Main { get; init; } = DiskMains.UsedPercent;
 
+    public string? TargetVolumeId { get; init; }
+
     public IReadOnlyList<string> HiddenVolumeIds { get; init; } = [];
 
     public static DiskWidgetSettings Default { get; } = new();
@@ -67,6 +69,7 @@ public sealed record DiskWidgetSettings
         return value with
         {
             Main = DiskMains.Normalize(value.Main),
+            TargetVolumeId = string.IsNullOrWhiteSpace(value.TargetVolumeId) ? null : value.TargetVolumeId.Trim(),
             HiddenVolumeIds = hidden
         };
     }
@@ -103,6 +106,19 @@ public static class DiskFormat
         if (volumes.Count == 0)
         {
             return "—";
+        }
+
+        if (!string.IsNullOrWhiteSpace(settings.TargetVolumeId))
+        {
+            var target = volumes.FirstOrDefault(v => string.Equals(v.Id, settings.TargetVolumeId, StringComparison.OrdinalIgnoreCase));
+            if (target is not null)
+            {
+                var driveName = target.Name.TrimEnd('\\');
+                var val = DiskMains.Normalize(settings.Main) == DiskMains.Free
+                    ? Size(target.FreeBytes)
+                    : SysActivityFormat.Percent(target.UsedPercent, true);
+                return $"{driveName} {val}";
+            }
         }
 
         var total = volumes.Aggregate(0UL, (sum, volume) => sum + volume.TotalBytes);

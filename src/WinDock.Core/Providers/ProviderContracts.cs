@@ -373,6 +373,8 @@ public interface IShellLaunch
 
     bool TryLaunch(DockItem item);
 
+    bool TryLaunchAsAdmin(DockItem item);
+
     bool TryActivate(DockItem item);
 
     IReadOnlyList<DockWindowEntry> GetWindows(DockItem item);

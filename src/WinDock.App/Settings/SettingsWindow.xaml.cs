@@ -150,6 +150,8 @@ public partial class SettingsWindow : Window
         BingAutoDailyCheck.IsChecked = _session.Hub.Bing.AutoApplyDaily;
         AutoHideCheck.IsChecked = diff.Dock.AutoHide;
         PeekCheck.IsChecked = diff.Dock.PeekOnPointer;
+        SelectTag(DockModeBox, settings.Ui.DockMode.ToString());
+        AvoidFullscreenCheck.IsChecked = settings.Ui.AvoidFullscreen;
         RevealHotkeyCheck.IsChecked = diff.Dock.RevealHotkey;
         CollapseAppsCheck.IsChecked = diff.Dock.CollapseApps;
         CollapseFoldersCheck.IsChecked = diff.Dock.CollapseFolders;
@@ -601,7 +603,7 @@ public partial class SettingsWindow : Window
         ShowPage(id);
     }
 
-    private void ShowPage(string id)
+    public void ShowPage(string id)
     {
         if (!ProductFeatures.ProfilesEnabled && id == "profiles")
         {
@@ -609,6 +611,15 @@ public partial class SettingsWindow : Window
         }
 
         _page = id;
+        NavGeneral.IsChecked = id == "general";
+        NavLayout.IsChecked = id == "layout";
+        NavAppearance.IsChecked = id == "appearance";
+        NavModules.IsChecked = id == "modules";
+        NavProfiles.IsChecked = id == "profiles";
+        NavHotkeys.IsChecked = id == "hotkeys";
+        NavPrivacy.IsChecked = id == "privacy";
+        NavAbout.IsChecked = id == "about";
+
         PageGeneral.Visibility = VisibleIf(id == "general");
         PageLayout.Visibility = VisibleIf(id == "layout");
         PageAppearance.Visibility = VisibleIf(id == "appearance");
@@ -735,6 +746,29 @@ public partial class SettingsWindow : Window
         }
 
         _session.SetBingWallpaperAutoApply(BingAutoDailyCheck.IsChecked == true);
+    }
+
+    private void DockModeBox_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppress)
+        {
+            return;
+        }
+
+        if (DockModeBox.SelectedItem is ComboBoxItem { Tag: string tag } && Enum.TryParse<DockMode>(tag, out var mode))
+        {
+            _session.SetDockMode(mode);
+        }
+    }
+
+    private void AvoidFullscreen_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_suppress)
+        {
+            return;
+        }
+
+        _session.SetAvoidFullscreen(AvoidFullscreenCheck.IsChecked == true);
     }
 
     private void AutoHide_OnClick(object sender, RoutedEventArgs e)

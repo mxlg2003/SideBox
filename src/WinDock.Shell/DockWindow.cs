@@ -69,6 +69,7 @@ public sealed class DockWindow : Window, IDockSurface
     private bool _islandDragCaptured;
     private Point _islandDragOrigin;
     private readonly Border _insertionCaret;
+    private DockQuickSettings _quickSettings = new();
 
     public DockWindow()
     {
@@ -211,7 +212,10 @@ public sealed class DockWindow : Window, IDockSurface
                 CancelIslandMonitorDrag();
             }
         };
-        MouseRightButtonUp += OnDockRightClick;
+        AddHandler(MouseRightButtonUpEvent, new MouseButtonEventHandler(OnDockRightClick), handledEventsToo: true);
+        _island.AddHandler(MouseRightButtonUpEvent, new MouseButtonEventHandler(OnDockRightClick), handledEventsToo: true);
+        ContextMenuOpening += OnDockContextMenuOpening;
+        _island.ContextMenuOpening += OnDockContextMenuOpening;
         AllowDrop = true;
         DragOver += OnFileDragOver;
         DragLeave += OnFileDragLeave;
@@ -226,6 +230,20 @@ public sealed class DockWindow : Window, IDockSurface
     public event EventHandler<nint>? WindowCloseRequested;
 
     public event EventHandler? SettingsRequested;
+
+    public event EventHandler<string?>? SettingsPageRequested;
+
+    public event EventHandler<DockEdge>? EdgeChangeRequested;
+
+    public event EventHandler? AutoHideToggleRequested;
+
+    public event EventHandler? AvoidFullscreenToggleRequested;
+
+    public event EventHandler<ThemePreference>? ThemeChangeRequested;
+
+    public event EventHandler<DockBackdrop>? BackdropChangeRequested;
+
+    public event EventHandler? RunAtStartupToggleRequested;
 
     public event EventHandler? ExitRequested;
 
@@ -246,6 +264,8 @@ public sealed class DockWindow : Window, IDockSurface
     public event EventHandler<WidgetCreateFailedEventArgs>? WidgetCreateFailed;
 
     public event EventHandler<string>? PinLaunchRequested;
+
+    public event EventHandler<string>? PinLaunchAdminRequested;
 
     public event EventHandler<string>? PinActivateRequested;
 
@@ -332,6 +352,33 @@ public sealed class DockWindow : Window, IDockSurface
                 Topmost = true;
                 Show();
                 break;
+        }
+    }
+
+    private static readonly IntPtr HwndTopmost = new(-1);
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoActivate = 0x0010;
+
+    public void EnsureTopmost()
+    {
+        if (HasOpenMenu())
+        {
+            return;
+        }
+
+        var hwnd = Handle;
+        if (hwnd == IntPtr.Zero || !IsVisible || _stripMode)
+        {
+            return;
+        }
+
+        try
+        {
+            SetWindowPos(hwnd, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+        }
+        catch (Exception)
+        {
         }
     }
 
@@ -537,6 +584,11 @@ public sealed class DockWindow : Window, IDockSurface
             return true;
         }
 
+        if (_island.ContextMenu?.IsOpen == true)
+        {
+            return true;
+        }
+
         foreach (UIElement child in _itemsHost.Children)
         {
             if (child is FrameworkElement element && element.ContextMenu?.IsOpen == true)
@@ -722,18 +774,54 @@ public sealed class DockWindow : Window, IDockSurface
         }
     }
 
-    public void ApplyProfileMenu(IReadOnlyList<Profile> profiles, string activeProfileId, bool canUndo = false)
+    public void ApplyProfileMenu(IReadOnlyList<Profile> profiles, string activeProfileId, bool canUndo = false) =>
+        ApplyProfileMenu(profiles, activeProfileId, null, canUndo);
+
+    public void ApplyProfileMenu(
+        IReadOnlyList<Profile> profiles,
+        string activeProfileId,
+        DockQuickSettings? quickSettings,
+        bool canUndo = false)
     {
+        _quickSettings = quickSettings ?? new DockQuickSettings
+        {
+            Edge = _edge,
+            AutoHide = false,
+            AvoidFullscreen = true,
+            Theme = _isLight ? ThemePreference.Light : ThemePreference.Dark,
+            Backdrop = _backdrop,
+            RunAtStartup = false
+        };
+
         ContextMenu = DockContextMenuBuilder.BuildProfileMenu(
             profiles,
             activeProfileId,
             _isLight,
             _backdrop,
             _backdropOk,
+            _quickSettings,
             kind => PinAddRequested?.Invoke(this, kind),
-            () => SettingsRequested?.Invoke(this, EventArgs.Empty),
+            page =>
+            {
+                if (string.IsNullOrWhiteSpace(page))
+                {
+                    SettingsRequested?.Invoke(this, EventArgs.Empty);
+                }
+                else
+                {
+                    SettingsPageRequested?.Invoke(this, page);
+                }
+            },
             id => ProfileSwitchRequested?.Invoke(this, id),
+            edge => EdgeChangeRequested?.Invoke(this, edge),
+            () => AutoHideToggleRequested?.Invoke(this, EventArgs.Empty),
+            () => AvoidFullscreenToggleRequested?.Invoke(this, EventArgs.Empty),
+            theme => ThemeChangeRequested?.Invoke(this, theme),
+            backdrop => BackdropChangeRequested?.Invoke(this, backdrop),
+            () => RunAtStartupToggleRequested?.Invoke(this, EventArgs.Empty),
             () => ExitRequested?.Invoke(this, EventArgs.Empty));
+
+        _island.ContextMenu = ContextMenu;
     }
 
     public void ShowStatus(string text)
@@ -753,24 +841,36 @@ public sealed class DockWindow : Window, IDockSurface
         _statusTimer.Start();
     }
 
-    private void OnDockMenuOpening(object sender, ContextMenuEventArgs e)
+    private void OnDockContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         if (FindSlot(e.OriginalSource as DependencyObject) is not null)
         {
+            e.Handled = true;
+            return;
+        }
+
+        if (ContextMenu is not null)
+        {
+            ContextMenu.PlacementTarget = _island;
+            ContextMenu.Placement = PlacementMode.MousePoint;
+            ContextMenu.IsOpen = true;
             e.Handled = true;
         }
     }
 
     private void OnDockRightClick(object sender, MouseButtonEventArgs e)
     {
-        if (e.Handled || FindSlot(e.OriginalSource as DependencyObject) is not null)
+        if (FindSlot(e.OriginalSource as DependencyObject) is not null)
         {
             return;
         }
 
         if (ContextMenu is not null)
         {
+            ContextMenu.PlacementTarget = _island;
+            ContextMenu.Placement = PlacementMode.MousePoint;
             ContextMenu.IsOpen = true;
+            e.Handled = true;
         }
     }
 
@@ -886,6 +986,7 @@ public sealed class DockWindow : Window, IDockSurface
             id => WidgetRemoveRequested?.Invoke(this, id));
 
         slot.ContextMenu = menu;
+        menu.PlacementTarget = slot;
         menu.IsOpen = true;
     }
 
@@ -904,9 +1005,11 @@ public sealed class DockWindow : Window, IDockSurface
             () => ExitRequested?.Invoke(this, EventArgs.Empty),
             windows,
             hwnd => WindowActivateRequested?.Invoke(this, hwnd),
-            hwnd => WindowCloseRequested?.Invoke(this, hwnd));
+            hwnd => WindowCloseRequested?.Invoke(this, hwnd),
+            id => PinLaunchAdminRequested?.Invoke(this, id));
 
         slot.ContextMenu = menu;
+        menu.PlacementTarget = slot;
         menu.IsOpen = true;
     }
 
@@ -2616,6 +2719,10 @@ public sealed class DockWindow : Window, IDockSurface
                 break;
         }
     }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

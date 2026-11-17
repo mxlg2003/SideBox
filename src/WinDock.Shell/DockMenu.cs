@@ -39,13 +39,15 @@ internal static class DockMenu
                 </ControlTemplate>
                 """)
         };
-        menu.Resources[typeof(MenuItem)] = ItemStyle(text, hover);
+        menu.Resources[typeof(MenuItem)] = ItemStyle(text, hover, fill, stroke);
         menu.Opened += (_, _) =>
         {
             if (VisualTreeHelper.GetParent(menu) is Popup popup)
             {
                 popup.AllowsTransparency = true;
             }
+
+            PopupTopmost.TryElevate(menu);
         };
         return menu;
     }
@@ -56,6 +58,12 @@ internal static class DockMenu
         IsCheckable = checkable,
         IsChecked = isChecked,
         StaysOpenOnClick = false,
+        Cursor = Cursors.Hand
+    };
+
+    public static MenuItem SubMenuItem(string header) => new()
+    {
+        Header = header,
         Cursor = Cursors.Hand
     };
 
@@ -80,33 +88,64 @@ internal static class DockMenu
         };
     }
 
-    private static Style ItemStyle(uint text, uint hover)
+    private static Style ItemStyle(uint text, uint hover, uint fill, uint stroke)
     {
         PhosphorIcon.TryGet(PhosphorIcon.Check, out var checkPath);
+        PhosphorIcon.TryGet(PhosphorIcon.CaretRight, out var caretPath);
         var style = new Style(typeof(MenuItem));
         style.Setters.Add(new Setter(Control.ForegroundProperty, TokenBrushes.From(text)));
         style.Setters.Add(new Setter(Control.BackgroundProperty, Brushes.Transparent));
         style.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0)));
         style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0)));
         style.Setters.Add(new Setter(Control.FontSizeProperty, 13.0));
-        style.Setters.Add(new Setter(Control.TemplateProperty, Parse($"""
+        style.Setters.Add(new EventSetter(MenuItem.SubmenuOpenedEvent, new RoutedEventHandler((sender, _) =>
+        {
+            if (sender is MenuItem mi && mi.Template?.FindName("SubMenuPopup", mi) is Popup subPopup)
+            {
+                PopupTopmost.TryElevate(subPopup);
+            }
+        })));
+        style.Setters.Add(new Setter(Control.TemplateProperty, Parse($$"""
             <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                              TargetType="MenuItem">
-              <Border x:Name="Bd" Background="Transparent" CornerRadius="{DockTokens.TileCornerRadius}" Padding="10,7" SnapsToDevicePixels="True">
-                <Grid>
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="22"/>
-                    <ColumnDefinition Width="*"/>
-                  </Grid.ColumnDefinitions>
-                  <Path x:Name="Check" Grid.Column="0" Data="F1 {checkPath}" Fill="{Hex(text)}"
-                        Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed"/>
-                  <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="True"/>
-                </Grid>
-              </Border>
+              <Grid SnapsToDevicePixels="True">
+                <Border x:Name="Bd" Background="Transparent" CornerRadius="{{DockTokens.TileCornerRadius}}" Padding="10,7" SnapsToDevicePixels="True">
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="22"/>
+                      <ColumnDefinition Width="*"/>
+                      <ColumnDefinition Width="Auto" MinWidth="16"/>
+                    </Grid.ColumnDefinitions>
+                    <Path x:Name="Check" Grid.Column="0" Data="F1 {{checkPath}}" Fill="{{Hex(text)}}"
+                          Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed"/>
+                    <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                    <Path x:Name="Arrow" Grid.Column="2" Data="F1 {{caretPath}}" Fill="{{Hex(text)}}"
+                          Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="8,0,0,0" Visibility="Collapsed"/>
+                  </Grid>
+                </Border>
+                <Popup x:Name="SubMenuPopup" AllowsTransparency="True" Focusable="False"
+                       IsOpen="{TemplateBinding IsSubmenuOpen}"
+                       Placement="Right" PopupAnimation="Fade" VerticalOffset="-6" HorizontalOffset="-2">
+                  <Border Background="{{Hex(fill)}}" BorderBrush="{{Hex(stroke)}}" BorderThickness="1"
+                          CornerRadius="{{DockTokens.IslandCornerRadius}}" Padding="6" MinWidth="150"
+                          SnapsToDevicePixels="True" UseLayoutRounding="True">
+                    <Border.Effect>
+                      <DropShadowEffect BlurRadius="12" ShadowDepth="3" Direction="270" Opacity="0.3" Color="Black"/>
+                    </Border.Effect>
+                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                  </Border>
+                </Popup>
+              </Grid>
               <ControlTemplate.Triggers>
+                <Trigger Property="HasItems" Value="True">
+                  <Setter TargetName="Arrow" Property="Visibility" Value="Visible"/>
+                </Trigger>
                 <Trigger Property="IsHighlighted" Value="True">
-                  <Setter TargetName="Bd" Property="Background" Value="{Hex(hover)}"/>
+                  <Setter TargetName="Bd" Property="Background" Value="{{Hex(hover)}}"/>
+                </Trigger>
+                <Trigger Property="IsSubmenuOpen" Value="True">
+                  <Setter TargetName="Bd" Property="Background" Value="{{Hex(hover)}}"/>
                 </Trigger>
                 <Trigger Property="IsChecked" Value="True">
                   <Setter TargetName="Check" Property="Visibility" Value="Visible"/>

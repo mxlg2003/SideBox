@@ -98,6 +98,41 @@ public sealed class DockLayoutTests
         Assert.False(DockLayoutCalculator.SameMonitor(topology, @"\\?\DISPLAY#PHL", @"\\?\DISPLAY#KOS"));
     }
 
+    [Fact]
+    public void Zorder_policy_respects_avoid_fullscreen_setting()
+    {
+        var policy = new DefaultZorderPolicy();
+
+        var yieldingContext = new DockHostContext
+        {
+            IsPresentationOrFullscreen = true,
+            AvoidFullscreen = true
+        };
+        Assert.Equal(DockZorderState.FullscreenYield, policy.Evaluate(yieldingContext));
+
+        var ignoringContext = new DockHostContext
+        {
+            IsPresentationOrFullscreen = true,
+            AvoidFullscreen = false
+        };
+        Assert.Equal(DockZorderState.OverlayTopmost, policy.Evaluate(ignoringContext));
+    }
+
+    [Fact]
+    public void Settings_editor_updates_dock_mode_and_avoid_fullscreen()
+    {
+        var settings = new AppSettings();
+        Assert.Equal(DockMode.Overlay, settings.Ui.DockMode);
+        Assert.True(settings.Ui.AvoidFullscreen);
+
+        var updated = SettingsEditor.WithDockMode(settings, DockMode.AppBar);
+        Assert.Equal(DockMode.AppBar, updated.Ui.DockMode);
+
+        var updatedAvoid = SettingsEditor.WithAvoidFullscreen(updated, false);
+        Assert.False(updatedAvoid.Ui.AvoidFullscreen);
+        Assert.Equal(DockMode.AppBar, updatedAvoid.Ui.DockMode);
+    }
+
     private static MonitorInfo Monitor(double width, double height) => new()
     {
         Id = "primary",

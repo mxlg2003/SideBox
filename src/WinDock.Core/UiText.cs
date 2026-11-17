@@ -8,6 +8,7 @@ public static class UiText
     public static string T(string zh, string en) => UiLocale.T(zh, en);
 
     public static string Settings => T("设置", "Settings");
+    public static string MoreSettings => T("更多设置", "More Settings");
     public static string Exit => T("退出", "Exit");
     public static string ExitWinDock => T($"退出 {ProductInfo.Name}", $"Exit {ProductInfo.Name}");
     public static string CloseWindow => T("关闭窗口", "Close window");
@@ -119,6 +120,12 @@ public static class UiText
     public static string EdgeTop => T("上", "Top");
     public static string EdgeLeft => T("左", "Left");
     public static string EdgeRight => T("右", "Right");
+    public static string DockPosition => T("停靠位置", "Dock position");
+    public static string PositionTop => T("顶部", "Top");
+    public static string PositionBottom => T("底部", "Bottom");
+    public static string PositionLeft => T("左侧", "Left");
+    public static string PositionRight => T("右侧", "Right");
+    public static string AvoidFullscreen => T("全屏时自动避让", "Avoid fullscreen apps");
     public static string Monitor => T("显示器", "Display");
     public static string AutoHide => T("自动隐藏", "Auto-hide");
     public static string AutoHideHelp => T("无交互时自动收起至屏幕边缘，避免遮挡最大化窗口。", "Automatically tucks into the screen edge when idle to avoid obscuring maximized windows.");
@@ -214,6 +221,7 @@ public static class UiText
     public static string AddApp => T("添加程序…", "Add app…");
     public static string AddShortcut => T("添加快捷方式…", "Add shortcut…");
     public static string AddFolder => T("添加文件夹…", "Add folder…");
+    public static string AddWidget => T("添加模块…", "Add widget…");
     public static string AddFolderTitle => T("添加文件夹", "Add folder");
     public static string AddShortcutTitle => T("添加快捷方式", "Add shortcut");
     public static string AddAppTitle => T("从开始菜单选择程序", "Add app");
@@ -328,6 +336,8 @@ public static class UiText
     public static string WifiSignal => T("Wi-Fi 信号", "Wi-Fi signal");
     public static string DiskFree => T("剩余空间", "Free space");
     public static string DiskUsedPercent => T("已用百分比", "Used percent");
+    public static string DiskTargetDrive => T("监控目标", "Monitor target");
+    public static string DiskAllDrives => T("全部驱动器 (合计)", "All drives (Combined)");
     public static string GpuVram => T("专用显存", "Dedicated VRAM");
     public static string GpuEngines => T("引擎拆分", "Engine breakdown");
     public static string GpuUnsupported => T("此电脑不支持 GPU 计数器", "GPU counters are not available on this PC");

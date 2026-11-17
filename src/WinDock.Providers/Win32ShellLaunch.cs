@@ -126,6 +126,37 @@ public sealed class Win32ShellLaunch : IShellLaunch
         }
     }
 
+    public bool TryLaunchAsAdmin(DockItem item)
+    {
+        if (!DockPins.IsPin(item.Type))
+        {
+            return false;
+        }
+
+        var target = !string.IsNullOrWhiteSpace(item.ShortcutPath) && File.Exists(item.ShortcutPath)
+            ? item.ShortcutPath
+            : item.Path;
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            return false;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = target,
+                UseShellExecute = true,
+                Verb = "runas"
+            });
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     public bool TryActivate(DockItem item) => Win32WindowSwitch.TryActivate(item);
 
     public IReadOnlyList<DockWindowEntry> GetWindows(DockItem item) => Win32WindowSwitch.GetWindows(item);

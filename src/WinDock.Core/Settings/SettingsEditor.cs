@@ -21,6 +21,12 @@ public static class SettingsEditor
     public static AppSettings WithIslandTransparency(AppSettings settings, int transparency) =>
         settings with { Ui = settings.Ui with { IslandTransparency = Math.Clamp(transparency, 0, 100) } };
 
+    public static AppSettings WithDockMode(AppSettings settings, DockMode dockMode) =>
+        settings with { Ui = settings.Ui with { DockMode = dockMode } };
+
+    public static AppSettings WithAvoidFullscreen(AppSettings settings, bool avoidFullscreen) =>
+        settings with { Ui = settings.Ui with { AvoidFullscreen = avoidFullscreen } };
+
     public static AppSettings WithPrivacy(AppSettings settings, PrivacySettings privacy) =>
         settings with { Privacy = privacy };
 

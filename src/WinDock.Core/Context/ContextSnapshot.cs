@@ -149,4 +149,6 @@ public sealed record DockHostContext
     public bool KeepVisible { get; init; }
 
     public bool IsPresentationOrFullscreen { get; init; }
+
+    public bool AvoidFullscreen { get; init; } = true;
 }
